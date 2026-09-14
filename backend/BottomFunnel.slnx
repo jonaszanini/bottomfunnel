@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BottomFunnel.Api/BottomFunnel.Api.csproj" />
+    <Project Path="src/BottomFunnel.Application/BottomFunnel.Application.csproj" />
+    <Project Path="src/BottomFunnel.Contracts/BottomFunnel.Contracts.csproj" />
+    <Project Path="src/BottomFunnel.Domain/BottomFunnel.Domain.csproj" />
+    <Project Path="src/BottomFunnel.Infrastructure/BottomFunnel.Infrastructure.csproj" />
+    <Project Path="src/BottomFunnel.Workers/BottomFunnel.Workers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BottomFunnel.IntegrationTests/BottomFunnel.IntegrationTests.csproj" />
+    <Project Path="tests/BottomFunnel.UnitTests/BottomFunnel.UnitTests.csproj" />
+  </Folder>
+</Solution>
