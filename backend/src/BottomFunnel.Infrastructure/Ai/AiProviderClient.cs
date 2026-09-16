@@ -27,6 +27,7 @@ internal static class AiProviderClient
             "Reply with the single word ok.",
             "You only reply with the word ok.",
             maxTokens: 8,
+            jsonObject: false,
             ct);
         if (!ok)
             throw new InvalidOperationException(TrimError(provider, body));
@@ -39,9 +40,31 @@ internal static class AiProviderClient
         string model,
         string systemPrompt,
         string userPrompt,
+        CancellationToken ct) =>
+        await CompleteAsync(http, provider, apiKey, model, systemPrompt, userPrompt, maxTokens: 800, jsonObject: false, ct);
+
+    public static async Task<string> CompleteJsonAsync(
+        IHttpClientFactory http,
+        string provider,
+        string apiKey,
+        string model,
+        string systemPrompt,
+        string userPrompt,
+        CancellationToken ct) =>
+        await CompleteAsync(http, provider, apiKey, model, systemPrompt, userPrompt, maxTokens: 2500, jsonObject: true, ct);
+
+    private static async Task<string> CompleteAsync(
+        IHttpClientFactory http,
+        string provider,
+        string apiKey,
+        string model,
+        string systemPrompt,
+        string userPrompt,
+        int maxTokens,
+        bool jsonObject,
         CancellationToken ct)
     {
-        var (ok, body) = await SendAsync(http, provider, apiKey, model, userPrompt, systemPrompt, maxTokens: 800, ct);
+        var (ok, body) = await SendAsync(http, provider, apiKey, model, userPrompt, systemPrompt, maxTokens, jsonObject, ct);
         if (!ok)
             throw new InvalidOperationException(TrimError(provider, body));
         return ReadText(provider, body);
@@ -55,13 +78,14 @@ internal static class AiProviderClient
         string userPrompt,
         string systemPrompt,
         int maxTokens,
+        bool jsonObject,
         CancellationToken ct)
     {
         using var request = provider switch
         {
             "Anthropic" => AnthropicRequest(apiKey, model, systemPrompt, userPrompt, maxTokens),
-            "Gemini" => GeminiRequest(apiKey, model, $"{systemPrompt}\n\n{userPrompt}"),
-            _ => OpenAiRequest(apiKey, model, systemPrompt, userPrompt, maxTokens)
+            "Gemini" => GeminiRequest(apiKey, model, $"{systemPrompt}\n\n{userPrompt}", jsonObject),
+            _ => OpenAiRequest(apiKey, model, systemPrompt, userPrompt, maxTokens, jsonObject)
         };
         var clientName = provider switch
         {
@@ -75,20 +99,33 @@ internal static class AiProviderClient
         return (response.IsSuccessStatusCode, body);
     }
 
-    private static HttpRequestMessage OpenAiRequest(string apiKey, string model, string systemPrompt, string userPrompt, int maxTokens)
+    private static HttpRequestMessage OpenAiRequest(string apiKey, string model, string systemPrompt, string userPrompt, int maxTokens, bool jsonObject)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
-        request.Content = JsonContent.Create(new
-        {
-            model,
-            max_tokens = maxTokens,
-            messages = new[]
+        object payload = jsonObject
+            ? new
             {
-                new { role = "system", content = systemPrompt },
-                new { role = "user", content = userPrompt }
+                model,
+                max_tokens = maxTokens,
+                response_format = new { type = "json_object" },
+                messages = new[]
+                {
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = userPrompt }
+                }
             }
-        });
+            : new
+            {
+                model,
+                max_tokens = maxTokens,
+                messages = new[]
+                {
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = userPrompt }
+                }
+            };
+        request.Content = JsonContent.Create(payload);
         return request;
     }
 
@@ -107,17 +144,21 @@ internal static class AiProviderClient
         return request;
     }
 
-    private static HttpRequestMessage GeminiRequest(string apiKey, string model, string prompt)
+    private static HttpRequestMessage GeminiRequest(string apiKey, string model, string prompt, bool jsonObject)
     {
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(model)}:generateContent?key={Uri.EscapeDataString(apiKey)}";
         var request = new HttpRequestMessage(HttpMethod.Post, url);
-        request.Content = JsonContent.Create(new
-        {
-            contents = new[]
+        object payload = jsonObject
+            ? new
             {
-                new { parts = new[] { new { text = prompt } } }
+                contents = new[] { new { parts = new[] { new { text = prompt } } } },
+                generationConfig = new { responseMimeType = "application/json" }
             }
-        });
+            : new
+            {
+                contents = new[] { new { parts = new[] { new { text = prompt } } } }
+            };
+        request.Content = JsonContent.Create(payload);
         return request;
     }
 

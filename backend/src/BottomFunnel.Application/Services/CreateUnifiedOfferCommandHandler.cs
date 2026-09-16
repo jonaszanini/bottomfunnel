@@ -64,7 +64,10 @@ public sealed class CreateUnifiedOfferCommandHandler
                 ExternalVendorId = providerKey == "clickbank" ? merchantName : null,
                 BrandBiddingAllowed = request.BrandBiddingAllowed,
                 DirectLinkingAllowed = request.DirectLinkingAllowed,
-                PpcAllowed = request.PpcAllowed
+                PpcAllowed = request.PpcAllowed,
+                TrafficRestrictions = string.IsNullOrWhiteSpace(request.TrafficRestrictions)
+                    ? null
+                    : request.TrafficRestrictions.Trim()
             };
             _db.Offers.Add(offer);
             await _db.SaveChangesAsync(ct);

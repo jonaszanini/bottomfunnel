@@ -106,6 +106,7 @@ public class Offer : OrgEntity
     public string? AdRestrictions { get; set; }
     public string? LandingPageRestrictions { get; set; }
     public string? PolicyNotes { get; set; }
+    public string? TrafficRestrictions { get; set; }
     public OfferStatus Status { get; set; } = OfferStatus.Active;
     public string ProviderKey { get; set; } = "manual";
     public string? ExternalProductId { get; set; }
@@ -115,6 +116,17 @@ public class Offer : OrgEntity
     public Merchant? Merchant { get; set; }
     public AffiliateNetwork? AffiliateNetwork { get; set; }
     public ICollection<ComplianceRestriction> Restrictions { get; set; } = new List<ComplianceRestriction>();
+    public ICollection<OfferAudit> Audits { get; set; } = new List<OfferAudit>();
+}
+
+public class OfferAudit : OrgEntity
+{
+    public Guid OfferId { get; set; }
+    public int RiskScore { get; set; }
+    public string OverallRisk { get; set; } = "Moderate";
+    public bool AllowsBrandBidding { get; set; }
+    public string ResultJson { get; set; } = "{}";
+    public Offer? Offer { get; set; }
 }
 
 public class ComplianceRestriction : OrgEntity

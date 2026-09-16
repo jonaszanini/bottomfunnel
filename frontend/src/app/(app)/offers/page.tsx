@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { Offer, Product, Merchant } from "@/lib/types";
+import { Offer, OfferPolicyAuditResult, Product, Merchant } from "@/lib/types";
 import { RestrictionForm, RestrictionList } from "@/lib/compliance";
 import { Button, Checkbox, Field, Input, Select, Table, Td, Textarea, Th, money, PageHeader } from "@/lib/ui";
 
@@ -34,6 +34,7 @@ const emptyForm = {
   commissionType: "OneTime",
   affiliateUrl: "",
   affiliatePageUrl: "",
+  trafficRestrictions: "",
 };
 
 function clickbankHop(vendor: string) {
@@ -101,6 +102,11 @@ export default function OffersPage() {
     use: false, ppcAllowed: true, brandBiddingAllowed: false, brandPlusModifierAllowed: false,
     couponBiddingAllowed: false, directLinkingAllowed: false, policyNotes: "",
   });
+  const [audit, setAudit] = useState<OfferPolicyAuditResult | null>(null);
+  const [auditing, setAuditing] = useState(false);
+  const [addingNegatives, setAddingNegatives] = useState(false);
+  const [auditError, setAuditError] = useState("");
+  const [auditOpen, setAuditOpen] = useState(true);
 
   async function load() {
     const [o, p, m] = await Promise.all([
@@ -112,6 +118,18 @@ export default function OffersPage() {
     if (!selected && o[0]) setSelected(o[0].id);
   }
   useEffect(() => { load().catch(console.error); }, []);
+
+  useEffect(() => {
+    if (!selected) {
+      setAudit(null);
+      setAuditError("");
+      return;
+    }
+    setAuditError("");
+    api<OfferPolicyAuditResult | undefined>(`/offers/${selected}/audit`)
+      .then((result) => setAudit(result ?? null))
+      .catch(() => setAudit(null));
+  }, [selected]);
 
   useEffect(() => {
     if (!open || form.currency === "CAD") {
@@ -149,6 +167,7 @@ export default function OffersPage() {
           baseAffiliateUrl: form.affiliateUrl || null,
           affiliatePageUrl: form.affiliatePageUrl || null,
           providerKey: form.providerKey,
+          trafficRestrictions: form.trafficRestrictions.trim() || null,
         }),
       });
       setCreated(result);
@@ -236,6 +255,39 @@ export default function OffersPage() {
     await load();
   }
 
+  async function runAudit() {
+    if (!offer) return;
+    setAuditing(true);
+    setAuditError("");
+    try {
+      const result = await api<OfferPolicyAuditResult>(`/offers/${offer.id}/audit`, { method: "POST" });
+      setAudit(result);
+      setAuditOpen(true);
+      await load();
+    } catch (err) {
+      setAuditError(err instanceof Error ? err.message : "Policy audit failed.");
+    } finally {
+      setAuditing(false);
+    }
+  }
+
+  async function addNegatives() {
+    if (!offer || !audit?.mandatoryNegativeKeywords.length) return;
+    setAddingNegatives(true);
+    setAuditError("");
+    try {
+      await api(`/offers/${offer.id}/audit/negatives`, {
+        method: "POST",
+        body: JSON.stringify({ phrases: audit.mandatoryNegativeKeywords }),
+      });
+      await load();
+    } catch (err) {
+      setAuditError(err instanceof Error ? err.message : "Could not add negative keywords.");
+    } finally {
+      setAddingNegatives(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -247,7 +299,7 @@ export default function OffersPage() {
         actions={<Button type="button" onClick={() => { setCreated(null); setOpen(true); }}>New Offer</Button>}
       />
       <Table>
-        <thead><tr><Th>Offer</Th><Th>Product</Th><Th>Merchant</Th><Th>Payout</Th><Th>CAD$</Th><Th>Compliance</Th><Th>Status</Th></tr></thead>
+        <thead><tr><Th>Offer</Th><Th>Product</Th><Th>Merchant</Th><Th>Payout</Th><Th>CAD$</Th><Th>Policy</Th><Th>Compliance</Th><Th>Status</Th></tr></thead>
         <tbody>
           {offers.map((o) => (
             <tr key={o.id} onClick={() => setSelected(o.id)} className={selected === o.id ? "bg-zinc-900" : "cursor-pointer"}>
@@ -256,6 +308,7 @@ export default function OffersPage() {
               <Td>{o.merchantName ?? "—"}</Td>
               <Td>{money(o.commission, o.currency || "USD")}</Td>
               <Td>{money(o.payoutAmountCad, "CAD")}</Td>
+              <Td><PolicyRiskBadge score={o.latestAudit?.riskScore} level={o.latestAudit?.overallRisk} /></Td>
               <Td className={o.overallCompliance === "Prohibited" ? "text-red-400" : ""}>{o.overallCompliance}</Td>
               <Td>{o.status}</Td>
             </tr>
@@ -286,6 +339,81 @@ export default function OffersPage() {
           ) : null}
           <Field label="Policy notes"><Textarea rows={2} value={override.policyNotes} onChange={(e) => setOverride({ ...override, policyNotes: e.target.value })} /></Field>
           <Button type="button" onClick={saveOverride}>Save offer policy</Button>
+          <div className="space-y-3 rounded border border-zinc-800 p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="button" onClick={runAudit} disabled={auditing}>
+                {auditing ? "Auditing…" : "AI Policy Audit"}
+              </Button>
+              {audit ? <PolicyRiskBadge score={audit.riskScore} level={audit.overallRisk} /> : null}
+              {audit ? (
+                <button type="button" className="text-sm text-zinc-400 hover:text-zinc-200" onClick={() => setAuditOpen((v) => !v)}>
+                  {auditOpen ? "Hide details" : "Show details"}
+                </button>
+              ) : null}
+            </div>
+            {auditing ? <p className="text-sm text-zinc-400">Reading the sales page and scoring Google Ads policy risk…</p> : null}
+            {auditError ? <p className="text-sm text-red-400">{auditError}</p> : null}
+            {audit && auditOpen ? (
+              <div className="space-y-3 text-sm">
+                <p className="text-zinc-300">{audit.executiveSummary}</p>
+                <p className="text-zinc-500">
+                  Risk score {audit.riskScore}/100. Brand bidding {audit.allowsBrandBidding ? "allowed" : "not allowed"} per vendor rules.
+                </p>
+                <div>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-medium text-zinc-200">Mandatory negative keywords</h3>
+                    <Button
+                      type="button"
+                      onClick={addNegatives}
+                      disabled={addingNegatives || audit.mandatoryNegativeKeywords.length === 0}
+                    >
+                      {addingNegatives ? "Adding…" : "Add to Negative Lists"}
+                    </Button>
+                  </div>
+                  {audit.mandatoryNegativeKeywords.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {audit.mandatoryNegativeKeywords.map((phrase) => (
+                        <span key={phrase} className="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-200">{phrase}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-zinc-500">No required negatives found in the affiliate terms.</p>
+                  )}
+                </div>
+                <div>
+                  <h3 className="mb-2 font-medium text-zinc-200">Flagged policy violations</h3>
+                  {audit.violations.length ? (
+                    <ul className="space-y-2">
+                      {audit.violations.map((v, i) => (
+                        <li key={`${v.triggerPhrase}-${i}`} className="rounded border border-zinc-800 bg-zinc-900 p-2">
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            <span className="text-red-400">{v.severity}</span>
+                            <span className="text-zinc-400">{v.policyCategory}</span>
+                          </div>
+                          {v.triggerPhrase ? <p className="mt-1 font-medium text-zinc-100">“{v.triggerPhrase}”</p> : null}
+                          <p className="mt-1 text-zinc-400">{v.explanation}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-zinc-500">No policy violations flagged.</p>
+                  )}
+                </div>
+                {audit.approvedAngles.length ? (
+                  <div>
+                    <h3 className="mb-1 font-medium text-zinc-200">Approved angles</h3>
+                    <ul className="list-disc pl-5 text-zinc-400">{audit.approvedAngles.map((a) => <li key={a}>{a}</li>)}</ul>
+                  </div>
+                ) : null}
+                {audit.disallowedAngles.length ? (
+                  <div>
+                    <h3 className="mb-1 font-medium text-zinc-200">Disallowed angles</h3>
+                    <ul className="list-disc pl-5 text-red-300">{audit.disallowedAngles.map((a) => <li key={a}>{a}</li>)}</ul>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
           <RestrictionList items={offer.restrictions ?? []} onChanged={load} />
           <RestrictionForm path={`/offers/${offer.id}/restrictions`} onSaved={load} />
         </section>
@@ -378,6 +506,17 @@ export default function OffersPage() {
                 <Field label="Affiliate Support URL" hint="Check this page to verify if the vendor prohibits trademark bidding on Google search.">
                   <Input value={form.affiliatePageUrl} onChange={(e) => setForm({ ...form, affiliatePageUrl: e.target.value })} placeholder="https://" />
                 </Field>
+                <Field
+                  label="Traffic Restrictions & Affiliate Rules (Optional)"
+                  hint="Paste the vendor's traffic guidelines so the AI can automatically extract negative keywords, check brand bidding rules, and verify Google Ads safety."
+                >
+                  <Textarea
+                    rows={5}
+                    value={form.trafficRestrictions}
+                    onChange={(e) => setForm({ ...form, trafficRestrictions: e.target.value })}
+                    placeholder="Paste vendor rules, PPC restrictions, negative keywords, or forbidden angles here..."
+                  />
+                </Field>
                 {error ? <p className="text-sm text-red-400">{error}</p> : null}
                 <div className="flex justify-end gap-2">
                   <button type="button" className="rounded px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200" onClick={closeModal}>Cancel</button>
@@ -394,4 +533,27 @@ export default function OffersPage() {
 
 function yesNo(v: boolean) {
   return v ? "yes" : "no";
+}
+
+function PolicyRiskBadge({ score, level }: { score?: number; level?: string }) {
+  if (score == null) {
+    return <span className="text-zinc-500">—</span>;
+  }
+  const tone = score < 30
+    ? "bg-emerald-500/15 text-emerald-400"
+    : score < 60
+      ? "bg-amber-400/15 text-amber-300"
+      : "bg-red-500/15 text-red-400";
+  return (
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${tone}`}>
+      {level ?? riskLabel(score)} · {score}
+    </span>
+  );
+}
+
+function riskLabel(score: number) {
+  if (score < 30) return "Low";
+  if (score < 60) return "Moderate";
+  if (score < 85) return "Severe";
+  return "Critical";
 }

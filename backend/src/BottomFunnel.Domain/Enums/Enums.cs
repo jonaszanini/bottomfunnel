@@ -80,7 +80,8 @@ public enum KeywordTemplateKind
     Buy = 5,
     Official = 6,
     Alternative = 7,
-    Versus = 8
+    Versus = 8,
+    Negative = 9
 }
 
 public enum OrganizationRole

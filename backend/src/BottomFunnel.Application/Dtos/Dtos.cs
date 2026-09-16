@@ -110,9 +110,16 @@ public sealed record OfferDto(
     string? AdRestrictions,
     string? LandingPageRestrictions,
     string? PolicyNotes,
+    string? TrafficRestrictions,
     PolicyFlagsDto ResolvedPolicy,
     ComplianceState OverallCompliance,
-    IReadOnlyList<ComplianceRestrictionDto> Restrictions);
+    IReadOnlyList<ComplianceRestrictionDto> Restrictions,
+    OfferAuditSummaryDto? LatestAudit);
+
+public sealed record OfferAuditSummaryDto(
+    string OverallRisk,
+    int RiskScore,
+    DateTimeOffset AuditedAt);
 
 public sealed record UpsertOfferRequest(
     Guid ProductId,
@@ -137,7 +144,8 @@ public sealed record UpsertOfferRequest(
     string? TrademarkNotes = null,
     string? AdRestrictions = null,
     string? LandingPageRestrictions = null,
-    string? PolicyNotes = null);
+    string? PolicyNotes = null,
+    string? TrafficRestrictions = null);
 
 public sealed record CreateUnifiedOfferRequest(
     string ProductName,
@@ -153,7 +161,8 @@ public sealed record CreateUnifiedOfferRequest(
     string? AffiliateUrl = null,
     string? BaseAffiliateUrl = null,
     string? AffiliatePageUrl = null,
-    string? ProviderKey = null);
+    string? ProviderKey = null,
+    string? TrafficRestrictions = null);
 
 public sealed record CreateUnifiedOfferResponse(
     Guid OfferId,

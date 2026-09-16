@@ -1057,6 +1057,9 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                     b.Property<string>("TrademarkNotes")
                         .HasColumnType("text");
 
+                    b.Property<string>("TrafficRestrictions")
+                        .HasColumnType("text");
+
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -1071,6 +1074,48 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "ProviderKey", "ExternalProductId");
 
                     b.ToTable("Offers");
+                });
+
+            modelBuilder.Entity("BottomFunnel.Domain.Entities.OfferAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("AllowsBrandBidding")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OfferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("OverallRisk")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ResultJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("RiskScore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OfferId");
+
+                    b.HasIndex("OrganizationId", "OfferId", "CreatedAt");
+
+                    b.ToTable("OfferAudits", (string)null);
                 });
 
             modelBuilder.Entity("BottomFunnel.Domain.Entities.Organization", b =>
@@ -1727,6 +1772,17 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("BottomFunnel.Domain.Entities.OfferAudit", b =>
+                {
+                    b.HasOne("BottomFunnel.Domain.Entities.Offer", "Offer")
+                        .WithMany("Audits")
+                        .HasForeignKey("OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Offer");
+                });
+
             modelBuilder.Entity("BottomFunnel.Domain.Entities.OrganizationAiSetting", b =>
                 {
                     b.HasOne("BottomFunnel.Domain.Entities.Organization", "Organization")
@@ -1841,6 +1897,8 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BottomFunnel.Domain.Entities.Offer", b =>
                 {
+                    b.Navigation("Audits");
+
                     b.Navigation("Restrictions");
                 });
 

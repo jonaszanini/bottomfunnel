@@ -1,4 +1,6 @@
 using BottomFunnel.Application.Abstractions;
+using BottomFunnel.Application.Offers;
+using BottomFunnel.Application.Offers.Models;
 
 namespace BottomFunnel.Infrastructure.Ai;
 
@@ -28,5 +30,29 @@ public sealed class OrganizationAiService : IAiService
             systemPrompt,
             userPrompt,
             cancellationToken);
+    }
+
+    public async Task<OfferPolicyAuditResult> AuditOfferSalesPageAsync(
+        string productName,
+        string salesPageTextOrHtml,
+        string? affiliateTermsText,
+        string? trafficRestrictionsText = null,
+        CancellationToken ct = default)
+    {
+        var active = await _settings.GetActiveAsync(ct)
+                     ?? throw new InvalidOperationException("AI is not configured.");
+        var page = HtmlContentSanitizer.ToPlainText(salesPageTextOrHtml);
+        var terms = HtmlContentSanitizer.ToPlainText(affiliateTermsText ?? "");
+        var rules = trafficRestrictionsText?.Trim();
+        var user = OfferPolicyAuditPrompt.BuildUserMessage(productName, page, terms, rules);
+        var json = await AiProviderClient.CompleteJsonAsync(
+            _http,
+            active.Provider,
+            active.ApiKey,
+            active.Model,
+            OfferPolicyAuditPrompt.System,
+            user,
+            ct);
+        return OfferPolicyAuditParser.Parse(json);
     }
 }

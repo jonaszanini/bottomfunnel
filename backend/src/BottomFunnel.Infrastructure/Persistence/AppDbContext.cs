@@ -19,6 +19,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
     public DbSet<StoreConnection> StoreConnections => Set<StoreConnection>();
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Offer> Offers => Set<Offer>();
+    public DbSet<OfferAudit> OfferAudits => Set<OfferAudit>();
     public DbSet<ComplianceRestriction> ComplianceRestrictions => Set<ComplianceRestriction>();
     public DbSet<Keyword> Keywords => Set<Keyword>();
     public DbSet<KeywordMetric> KeywordMetrics => Set<KeywordMetric>();
@@ -60,6 +61,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
         builder.Entity<Merchant>().HasIndex(x => new { x.OrganizationId, x.Name });
         builder.Entity<Product>().HasIndex(x => new { x.OrganizationId, x.ProviderKey, x.ExternalProductId });
         builder.Entity<Offer>().HasIndex(x => new { x.OrganizationId, x.ProviderKey, x.ExternalProductId });
+        builder.Entity<Offer>().Property(x => x.TrafficRestrictions).HasColumnType("text");
         builder.Entity<Offer>()
             .HasOne(x => x.Product)
             .WithMany(x => x.Offers)
@@ -127,6 +129,16 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
             .HasOne(x => x.Organization)
             .WithMany(x => x.AiSettings)
             .HasForeignKey(x => x.OrganizationId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<OfferAudit>().ToTable("OfferAudits");
+        builder.Entity<OfferAudit>().Property(x => x.ResultJson).HasColumnType("jsonb").IsRequired();
+        builder.Entity<OfferAudit>().Property(x => x.OverallRisk).HasMaxLength(32).IsRequired();
+        builder.Entity<OfferAudit>().HasIndex(x => new { x.OrganizationId, x.OfferId, x.CreatedAt });
+        builder.Entity<OfferAudit>()
+            .HasOne(x => x.Offer)
+            .WithMany(x => x.Audits)
+            .HasForeignKey(x => x.OfferId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

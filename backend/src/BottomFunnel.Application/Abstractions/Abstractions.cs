@@ -1,4 +1,5 @@
 using BottomFunnel.Application.Dtos;
+using BottomFunnel.Application.Offers.Models;
 
 namespace BottomFunnel.Application.Abstractions;
 
@@ -6,6 +7,12 @@ public interface IAiService
 {
     Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default);
     Task<string> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default);
+    Task<OfferPolicyAuditResult> AuditOfferSalesPageAsync(
+        string productName,
+        string salesPageTextOrHtml,
+        string? affiliateTermsText,
+        string? trafficRestrictionsText = null,
+        CancellationToken ct = default);
 }
 
 public interface IAiConfigurationService

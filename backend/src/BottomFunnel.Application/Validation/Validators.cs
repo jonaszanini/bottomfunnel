@@ -11,6 +11,7 @@ public sealed class UpsertOfferRequestValidator : AbstractValidator<UpsertOfferR
         RuleFor(x => x.ProductId).NotEmpty();
         RuleFor(x => x.Commission).GreaterThanOrEqualTo(0);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
+        RuleFor(x => x.TrafficRestrictions).MaximumLength(50_000);
     }
 }
 
@@ -22,6 +23,7 @@ public sealed class CreateUnifiedOfferRequestValidator : AbstractValidator<Creat
         RuleFor(x => x.MerchantName).NotEmpty().MaximumLength(200);
         RuleFor(x => x.PayoutAmount).GreaterThanOrEqualTo(0);
         RuleFor(x => x.Currency).NotEmpty().Length(3);
+        RuleFor(x => x.TrafficRestrictions).MaximumLength(50_000);
     }
 }
 

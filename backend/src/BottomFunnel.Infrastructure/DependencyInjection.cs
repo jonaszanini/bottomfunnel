@@ -53,14 +53,22 @@ public static class DependencyInjection
         {
             client.BaseAddress = new Uri("https://www.digistore24.com/api/call/");
         });
-        services.AddHttpClient("openai");
+        services.AddHttpClient("openai", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(90);
+        });
         services.AddHttpClient("anthropic", client =>
         {
-            client.Timeout = TimeSpan.FromSeconds(20);
+            client.Timeout = TimeSpan.FromSeconds(90);
         });
         services.AddHttpClient("gemini", client =>
         {
-            client.Timeout = TimeSpan.FromSeconds(20);
+            client.Timeout = TimeSpan.FromSeconds(90);
+        });
+        services.AddHttpClient("webpage", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(25);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BottomFunnelPolicyAudit/1.0");
         });
 
         services.AddSingleton<IStoreConnector, ClickBankConnector>();

@@ -1,5 +1,7 @@
 using BottomFunnel.Application.Abstractions;
 using BottomFunnel.Application.Dtos;
+using BottomFunnel.Application.Offers;
+using BottomFunnel.Application.Offers.Models;
 using BottomFunnel.Application.Services;
 using BottomFunnel.Application.Stores;
 using BottomFunnel.Contracts.Auth;
@@ -86,6 +88,7 @@ public class ProductsController : ControllerBase
 [ApiController]
 [Authorize]
 [Route("offers")]
+[Route("api/offers")]
 public class OffersController : ControllerBase
 {
     private readonly CatalogService _catalog;
@@ -102,6 +105,28 @@ public class OffersController : ControllerBase
     [HttpPost("{id:guid}/restrictions")]
     public Task<ComplianceRestrictionDto> Restriction(Guid id, UpsertRestrictionRequest request, CancellationToken ct, [FromServices] ComplianceService compliance) =>
         compliance.UpsertOfferRestrictionAsync(id, request, ct);
+
+    [HttpPost("{id:guid}/audit")]
+    public Task<OfferPolicyAuditResult> Audit(Guid id, CancellationToken ct, [FromServices] AuditOfferCommandHandler handler) =>
+        handler.HandleAsync(new AuditOfferCommand(id), ct);
+
+    [HttpGet("{id:guid}/audit")]
+    public async Task<ActionResult<OfferPolicyAuditResult>> LatestAudit(Guid id, CancellationToken ct, [FromServices] AuditOfferCommandHandler handler)
+    {
+        var result = await handler.GetLatestAsync(id, ct);
+        return result is null ? NoContent() : Ok(result);
+    }
+
+    [HttpPost("{id:guid}/audit/negatives")]
+    public async Task<ActionResult<object>> AddAuditNegatives(
+        Guid id,
+        AddAuditNegativesRequest request,
+        CancellationToken ct,
+        [FromServices] AuditOfferCommandHandler handler)
+    {
+        var added = await handler.AddNegativesAsync(new AddAuditNegativesCommand(id, request.Phrases ?? []), ct);
+        return Ok(new { added });
+    }
 }
 
 [ApiController]

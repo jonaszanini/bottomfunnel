@@ -157,7 +157,8 @@ public class CatalogService
         _db.Offers
             .Include(x => x.Product)
             .Include(x => x.Merchant).ThenInclude(m => m!.Restrictions)
-            .Include(x => x.Restrictions);
+            .Include(x => x.Restrictions)
+            .Include(x => x.Audits);
 
     private async Task<Merchant> LoadMerchant(Guid id, CancellationToken ct) =>
         await _db.Merchants.Include(x => x.Restrictions)
@@ -191,10 +192,19 @@ public class CatalogService
             x.CommissionType, x.RecurringCommission, x.AverageOrderValue, x.Currency, x.Country, x.Category, x.Status,
             x.ProviderKey, x.ExternalProductId,
             x.PpcAllowed, x.BrandBiddingAllowed, x.BrandPlusModifierAllowed, x.CouponBiddingAllowed, x.DirectLinkingAllowed,
-            x.TrademarkNotes, x.AdRestrictions, x.LandingPageRestrictions, x.PolicyNotes,
+            x.TrademarkNotes, x.AdRestrictions, x.LandingPageRestrictions, x.PolicyNotes, x.TrafficRestrictions,
             new PolicyFlagsDto(policy.PpcAllowed, policy.BrandBiddingAllowed, policy.BrandPlusModifierAllowed, policy.CouponBiddingAllowed, policy.DirectLinkingAllowed),
             OfferPolicyResolver.WorstState(restrictions),
-            restrictions.Select(ComplianceMapper.ToDto).ToList());
+            restrictions.Select(ComplianceMapper.ToDto).ToList(),
+            LatestAudit(x));
+    }
+
+    private static OfferAuditSummaryDto? LatestAudit(Offer offer)
+    {
+        var audit = offer.Audits?.OrderByDescending(x => x.CreatedAt).FirstOrDefault();
+        return audit is null
+            ? null
+            : new OfferAuditSummaryDto(audit.OverallRisk, audit.RiskScore, audit.CreatedAt);
     }
 
     private static void MapMerchant(Merchant entity, UpsertMerchantRequest request)
@@ -238,6 +248,9 @@ public class CatalogService
         entity.AdRestrictions = request.AdRestrictions;
         entity.LandingPageRestrictions = request.LandingPageRestrictions;
         entity.PolicyNotes = request.PolicyNotes;
+        entity.TrafficRestrictions = string.IsNullOrWhiteSpace(request.TrafficRestrictions)
+            ? null
+            : request.TrafficRestrictions.Trim();
         return entity;
     }
 

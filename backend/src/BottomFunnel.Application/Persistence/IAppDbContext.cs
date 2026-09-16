@@ -13,6 +13,7 @@ public interface IAppDbContext
     DbSet<StoreConnection> StoreConnections { get; }
     DbSet<Product> Products { get; }
     DbSet<Offer> Offers { get; }
+    DbSet<OfferAudit> OfferAudits { get; }
     DbSet<ComplianceRestriction> ComplianceRestrictions { get; }
     DbSet<Keyword> Keywords { get; }
     DbSet<KeywordMetric> KeywordMetrics { get; }

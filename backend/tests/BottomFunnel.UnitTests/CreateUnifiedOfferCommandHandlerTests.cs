@@ -67,6 +67,25 @@ public class CreateUnifiedOfferCommandHandlerTests
     }
 
     [Fact]
+    public async Task Persists_pasted_traffic_restrictions()
+    {
+        var (handler, db, _) = Create();
+        await handler.HandleAsync(new CreateUnifiedOfferRequest(
+            "ProDentim",
+            "Health",
+            "prodentim",
+            PayoutAmount: 165.68m,
+            Currency: "USD",
+            ProviderKey: "clickbank",
+            TrafficRestrictions: "Rule 4. You may not bid on the brand name ProDentim. Negative keywords: scam, fake, reviews."),
+            CancellationToken.None);
+
+        var offer = await db.Offers.SingleAsync();
+        offer.TrafficRestrictions.Should().Contain("may not bid on the brand name");
+        offer.TrafficRestrictions.Should().Contain("scam, fake, reviews");
+    }
+
+    [Fact]
     public async Task Reuses_merchant_and_product_by_name()
     {
         var (handler, db, _) = Create();

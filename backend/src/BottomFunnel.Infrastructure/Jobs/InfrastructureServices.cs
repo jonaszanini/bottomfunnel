@@ -1,5 +1,7 @@
 using System.Net.Http.Json;
 using BottomFunnel.Application.Abstractions;
+using BottomFunnel.Application.Offers;
+using BottomFunnel.Application.Offers.Models;
 using BottomFunnel.Application.Persistence;
 using BottomFunnel.Domain.Entities;
 using BottomFunnel.Domain.Enums;
@@ -105,5 +107,42 @@ public sealed class OpenAiCompatibleService : IAiService
         using var doc = System.Text.Json.JsonDocument.Parse(json);
         return doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
                ?? string.Empty;
+    }
+
+    public async Task<OfferPolicyAuditResult> AuditOfferSalesPageAsync(
+        string productName,
+        string salesPageTextOrHtml,
+        string? affiliateTermsText,
+        string? trafficRestrictionsText = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(_apiKey))
+            throw new InvalidOperationException("AI is not configured.");
+
+        var page = HtmlContentSanitizer.ToPlainText(salesPageTextOrHtml);
+        var terms = HtmlContentSanitizer.ToPlainText(affiliateTermsText ?? "");
+        var user = OfferPolicyAuditPrompt.BuildUserMessage(productName, page, terms, trafficRestrictionsText);
+        var client = _httpClientFactory.CreateClient("openai");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/chat/completions");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+        request.Content = JsonContent.Create(new
+        {
+            model = _model,
+            max_tokens = 2500,
+            response_format = new { type = "json_object" },
+            messages = new[]
+            {
+                new { role = "system", content = OfferPolicyAuditPrompt.System },
+                new { role = "user", content = user }
+            }
+        });
+        using var response = await client.SendAsync(request, ct);
+        var json = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"AI provider error: {json}");
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()
+                      ?? throw new InvalidOperationException("AI returned no audit JSON.");
+        return OfferPolicyAuditParser.Parse(content);
     }
 }

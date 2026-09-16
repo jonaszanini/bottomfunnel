@@ -41,7 +41,33 @@ export type Offer = {
   ppcAllowed?: boolean | null; brandBiddingAllowed?: boolean | null; brandPlusModifierAllowed?: boolean | null;
   couponBiddingAllowed?: boolean | null; directLinkingAllowed?: boolean | null;
   trademarkNotes?: string; adRestrictions?: string; landingPageRestrictions?: string; policyNotes?: string;
+  trafficRestrictions?: string | null;
   resolvedPolicy: PolicyFlags; overallCompliance: string; restrictions: ComplianceRestriction[];
+  latestAudit?: OfferAuditSummary | null;
+};
+
+export type OfferAuditSummary = {
+  overallRisk: string;
+  riskScore: number;
+  auditedAt: string;
+};
+
+export type PolicyViolation = {
+  policyCategory: string;
+  triggerPhrase: string;
+  explanation: string;
+  severity: string;
+};
+
+export type OfferPolicyAuditResult = {
+  overallRisk: "Low" | "Moderate" | "Severe" | "Critical";
+  riskScore: number;
+  allowsBrandBidding: boolean;
+  mandatoryNegativeKeywords: string[];
+  violations: PolicyViolation[];
+  approvedAngles: string[];
+  disallowedAngles: string[];
+  executiveSummary: string;
 };
 
 export type Keyword = {
