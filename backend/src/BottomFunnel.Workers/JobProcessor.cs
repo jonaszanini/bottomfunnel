@@ -68,6 +68,9 @@ public sealed class JobProcessor : BackgroundService
             job.Status = job.Attempts >= 5 ? JobStatus.Failed : JobStatus.Pending;
             job.LastError = ex.Message;
             _logger.LogError(ex, "Job {JobType} {JobId} failed", job.JobType, job.Id);
+            if (job.JobType == "sync-store" && Guid.TryParse(job.PayloadJson.Trim('"'), out var failedConnectionId))
+                await scope.ServiceProvider.GetRequiredService<StoreConnectionService>()
+                    .RecordSyncFailureAsync(failedConnectionId, ex.Message, ct);
         }
         finally
         {
@@ -86,7 +89,14 @@ public sealed class JobProcessor : BackgroundService
             return;
         }
 
-        if (job.JobType == "sync-store" && Guid.TryParse(job.PayloadJson.Trim('"'), out var connectionId))
+        if (job.JobType == "sync-store")
+        {
+            if (!Guid.TryParse(job.PayloadJson.Trim('"'), out var connectionId))
+                throw new InvalidOperationException($"Invalid sync-store payload: {job.PayloadJson}");
             await services.GetRequiredService<StoreConnectionService>().SyncNowAsync(connectionId, ct);
+            return;
+        }
+
+        throw new InvalidOperationException($"Unknown job type '{job.JobType}'.");
     }
 }

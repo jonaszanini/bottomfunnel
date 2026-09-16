@@ -200,7 +200,7 @@ public class StoreConnectionsController : ControllerBase
     [HttpGet] public Task<IReadOnlyList<StoreConnectionDto>> List(CancellationToken ct) => _stores.ListAsync(ct);
     [HttpPost] public Task<StoreConnectionDto> Save(SaveStoreConnectionRequest request, CancellationToken ct) => _stores.SaveAsync(request, ct);
     [HttpPost("{id:guid}/test")] public async Task<IActionResult> Test(Guid id, CancellationToken ct) { await _stores.TestAsync(id, ct); return NoContent(); }
-    [HttpPost("{id:guid}/sync")] public async Task<IActionResult> Sync(Guid id, CancellationToken ct) { await _stores.SyncAsync(id, ct); return Accepted(); }
+    [HttpPost("{id:guid}/sync")] public async Task<IActionResult> Sync(Guid id, CancellationToken ct) { await _stores.SyncAsync(id, ct); return NoContent(); }
 }
 
 [ApiController]

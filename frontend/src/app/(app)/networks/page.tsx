@@ -40,8 +40,14 @@ export default function NetworksPage() {
   }
 
   async function sync(id: string) {
-    await api(`/store-connections/${id}/sync`, { method: "POST" });
-    setMessage("Sync queued.");
+    setMessage("Syncing…");
+    try {
+      await api(`/store-connections/${id}/sync`, { method: "POST" });
+      setMessage("Sync finished. Check Products and Offers.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Sync failed");
+    }
+    await load();
   }
 
   return (
@@ -78,17 +84,18 @@ export default function NetworksPage() {
           ))}
           {selected.credentialSchema.length === 0 ? <p className="text-sm text-zinc-500">No credentials required for manual URLs.</p> : null}
           <Button type="submit">Save connection</Button>
-          {message ? <p className="text-sm text-zinc-400">{message}</p> : null}
         </form>
       ) : null}
+      {message ? <p className="text-sm text-zinc-400">{message}</p> : null}
       <Table>
-        <thead><tr><Th>Provider</Th><Th>Status</Th><Th>Last sync</Th><Th></Th></tr></thead>
+        <thead><tr><Th>Provider</Th><Th>Status</Th><Th>Last sync</Th><Th>Error</Th><Th></Th></tr></thead>
         <tbody>
           {connections.map((c) => (
             <tr key={c.id}>
               <Td>{c.displayName}</Td>
               <Td>{c.status}</Td>
               <Td>{c.lastSyncedAt ? new Date(c.lastSyncedAt).toLocaleString() : "—"}</Td>
+              <Td className="max-w-md text-red-400">{c.lastError ?? "—"}</Td>
               <Td><Button type="button" onClick={() => sync(c.id)}>Sync products</Button></Td>
             </tr>
           ))}

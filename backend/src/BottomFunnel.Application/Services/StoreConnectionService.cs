@@ -88,7 +88,26 @@ public class StoreConnectionService
 
     public async Task SyncAsync(Guid id, CancellationToken ct)
     {
-        await _jobs.EnqueueAsync("sync-store", id.ToString(), OrgId, ct);
+        try
+        {
+            await SyncNowAsync(id, ct);
+        }
+        catch (Exception ex)
+        {
+            await RecordSyncFailureAsync(id, ex.Message, ct);
+            throw;
+        }
+    }
+
+    public async Task RecordSyncFailureAsync(Guid connectionId, string error, CancellationToken ct)
+    {
+        var connection = await _db.StoreConnections.FirstOrDefaultAsync(x => x.Id == connectionId, ct);
+        if (connection is null)
+            return;
+        connection.Status = StoreConnectionStatus.Error;
+        connection.LastError = error;
+        connection.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(ct);
     }
 
     public async Task SyncNowAsync(Guid connectionId, CancellationToken ct)
