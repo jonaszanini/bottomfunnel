@@ -44,6 +44,24 @@ export type Offer = {
   trafficRestrictions?: string | null;
   resolvedPolicy: PolicyFlags; overallCompliance: string; restrictions: ComplianceRestriction[];
   latestAudit?: OfferAuditSummary | null;
+  searchTrend?: OfferSearchTrend | null;
+  reputation?: OfferReputation | null;
+};
+
+export type OfferSearchTrend = {
+  direction: string;
+  ninetyDayChangePercent: number;
+  currentMonthlyVolume: number;
+  lastRefreshedAt: string;
+};
+
+export type OfferReputation = {
+  trustpilotRating?: number | null;
+  totalReviewsCount: number;
+  refundRisk: string;
+  trustpilotUrl?: string | null;
+  recurringComplaints: string[];
+  sentimentSummary?: string | null;
 };
 
 export type OfferAuditSummary = {

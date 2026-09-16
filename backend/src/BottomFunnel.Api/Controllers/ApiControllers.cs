@@ -127,6 +127,13 @@ public class OffersController : ControllerBase
         var added = await handler.AddNegativesAsync(new AddAuditNegativesCommand(id, request.Phrases ?? []), ct);
         return Ok(new { added });
     }
+
+    [HttpPost("{id:guid}/market-signals")]
+    public async Task<OfferDto> RefreshMarketSignals(Guid id, CancellationToken ct, [FromServices] OfferMarketSignalsService signals)
+    {
+        await signals.RefreshAsync(id, ct);
+        return await _catalog.GetOfferAsync(id, ct);
+    }
 }
 
 [ApiController]

@@ -114,7 +114,23 @@ public sealed record OfferDto(
     PolicyFlagsDto ResolvedPolicy,
     ComplianceState OverallCompliance,
     IReadOnlyList<ComplianceRestrictionDto> Restrictions,
-    OfferAuditSummaryDto? LatestAudit);
+    OfferAuditSummaryDto? LatestAudit,
+    OfferSearchTrendDto? SearchTrend,
+    OfferReputationDto? Reputation);
+
+public sealed record OfferSearchTrendDto(
+    string Direction,
+    decimal NinetyDayChangePercent,
+    int CurrentMonthlyVolume,
+    DateTimeOffset LastRefreshedAt);
+
+public sealed record OfferReputationDto(
+    decimal? TrustpilotRating,
+    int TotalReviewsCount,
+    string RefundRisk,
+    string? TrustpilotUrl,
+    IReadOnlyList<string> RecurringComplaints,
+    string? SentimentSummary);
 
 public sealed record OfferAuditSummaryDto(
     string OverallRisk,

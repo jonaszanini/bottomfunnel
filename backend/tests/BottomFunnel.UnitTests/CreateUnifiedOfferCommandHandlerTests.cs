@@ -100,6 +100,23 @@ public class CreateUnifiedOfferCommandHandlerTests
         (await db.Offers.CountAsync()).Should().Be(2);
     }
 
+    [Fact]
+    public async Task Enqueues_offer_market_signals_job()
+    {
+        var orgId = Guid.NewGuid();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options;
+        var db = new AppDbContext(options);
+        var jobs = new FakeJobQueue();
+        var handler = new CreateUnifiedOfferCommandHandler(db, new FakeCurrentUser(orgId), new StubFx(1.38m), jobs);
+
+        var result = await handler.HandleAsync(NewRequest("Alpha Formula", "Vendor Co"), CancellationToken.None);
+
+        jobs.Items.Should().ContainSingle(x => x.Type == "offer-market-signals" && x.Payload == result.OfferId.ToString());
+    }
+
     private static CreateUnifiedOfferRequest NewRequest(string product, string merchant) =>
         new(product, "Health", merchant, PayoutAmount: 50, Currency: "USD");
 
@@ -111,7 +128,7 @@ public class CreateUnifiedOfferCommandHandlerTests
             .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
         var db = new AppDbContext(options);
-        var handler = new CreateUnifiedOfferCommandHandler(db, new FakeCurrentUser(orgId), new StubFx(1.38m));
+        var handler = new CreateUnifiedOfferCommandHandler(db, new FakeCurrentUser(orgId), new StubFx(1.38m), new FakeJobQueue());
         return (handler, db, orgId);
     }
 }
@@ -121,6 +138,17 @@ file sealed class FakeCurrentUser : ICurrentUser
     public FakeCurrentUser(Guid organizationId) => User = new CurrentUser("u1", "admin@local", organizationId, "Owner");
     public CurrentUser User { get; }
     public Guid OrganizationId => User.OrganizationId;
+}
+
+file sealed class FakeJobQueue : IJobQueue
+{
+    public List<(string Type, string Payload, Guid? Org)> Items { get; } = [];
+
+    public Task EnqueueAsync(string jobType, string payloadJson, Guid? organizationId = null, CancellationToken cancellationToken = default)
+    {
+        Items.Add((jobType, payloadJson, organizationId));
+        return Task.CompletedTask;
+    }
 }
 
 file sealed class StubFx : ICurrencyExchangeService

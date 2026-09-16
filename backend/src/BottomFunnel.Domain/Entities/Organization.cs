@@ -117,6 +117,8 @@ public class Offer : OrgEntity
     public AffiliateNetwork? AffiliateNetwork { get; set; }
     public ICollection<ComplianceRestriction> Restrictions { get; set; } = new List<ComplianceRestriction>();
     public ICollection<OfferAudit> Audits { get; set; } = new List<OfferAudit>();
+    public OfferSearchTrend? SearchTrend { get; set; }
+    public OfferReputation? Reputation { get; set; }
 }
 
 public class OfferAudit : OrgEntity
@@ -127,6 +129,30 @@ public class OfferAudit : OrgEntity
     public bool AllowsBrandBidding { get; set; }
     public string ResultJson { get; set; } = "{}";
     public Offer? Offer { get; set; }
+}
+
+public class OfferSearchTrend : OrgEntity
+{
+    public Guid OfferId { get; set; }
+    public Offer? Offer { get; set; }
+    public int CurrentMonthlyVolume { get; set; }
+    public decimal NinetyDayChangePercent { get; set; }
+    public SearchTrendDirection Direction { get; set; } = SearchTrendDirection.Unknown;
+    public string VolumeHistoryJson { get; set; } = "[]";
+    public DateTimeOffset LastRefreshedAt { get; set; }
+}
+
+public class OfferReputation : OrgEntity
+{
+    public Guid OfferId { get; set; }
+    public Offer? Offer { get; set; }
+    public decimal? TrustpilotRating { get; set; }
+    public int TotalReviewsCount { get; set; }
+    public string? TrustpilotUrl { get; set; }
+    public RefundRiskLevel CalculatedRefundRisk { get; set; } = RefundRiskLevel.Low;
+    public string RecurringComplaintsJson { get; set; } = "[]";
+    public string? SentimentSummary { get; set; }
+    public DateTimeOffset LastAuditedAt { get; set; }
 }
 
 public class ComplianceRestriction : OrgEntity

@@ -109,6 +109,22 @@ public enum ComplianceState
     Prohibited = 4
 }
 
+public enum SearchTrendDirection
+{
+    Unknown = 0,
+    Rising = 1,
+    Stable = 2,
+    Declining = 3
+}
+
+public enum RefundRiskLevel
+{
+    Low = 0,
+    Moderate = 1,
+    High = 2,
+    Extreme = 3
+}
+
 public enum RestrictionKind
 {
     Ppc = 0,

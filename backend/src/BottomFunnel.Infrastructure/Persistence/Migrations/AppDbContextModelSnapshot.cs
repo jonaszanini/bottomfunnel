@@ -1118,6 +1118,104 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                     b.ToTable("OfferAudits", (string)null);
                 });
 
+            modelBuilder.Entity("BottomFunnel.Domain.Entities.OfferReputation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CalculatedRefundRisk")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastAuditedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OfferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RecurringComplaintsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("SentimentSummary")
+                        .HasColumnType("text");
+
+                    b.Property<int>("TotalReviewsCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal?>("TrustpilotRating")
+                        .HasPrecision(3, 1)
+                        .HasColumnType("numeric(3,1)");
+
+                    b.Property<string>("TrustpilotUrl")
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OfferId")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "OfferId")
+                        .IsUnique();
+
+                    b.ToTable("OfferReputations", (string)null);
+                });
+
+            modelBuilder.Entity("BottomFunnel.Domain.Entities.OfferSearchTrend", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CurrentMonthlyVolume")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Direction")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("LastRefreshedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("NinetyDayChangePercent")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid>("OfferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VolumeHistoryJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OfferId")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "OfferId")
+                        .IsUnique();
+
+                    b.ToTable("OfferSearchTrends", (string)null);
+                });
+
             modelBuilder.Entity("BottomFunnel.Domain.Entities.Organization", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1783,6 +1881,28 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                     b.Navigation("Offer");
                 });
 
+            modelBuilder.Entity("BottomFunnel.Domain.Entities.OfferReputation", b =>
+                {
+                    b.HasOne("BottomFunnel.Domain.Entities.Offer", "Offer")
+                        .WithOne("Reputation")
+                        .HasForeignKey("BottomFunnel.Domain.Entities.OfferReputation", "OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Offer");
+                });
+
+            modelBuilder.Entity("BottomFunnel.Domain.Entities.OfferSearchTrend", b =>
+                {
+                    b.HasOne("BottomFunnel.Domain.Entities.Offer", "Offer")
+                        .WithOne("SearchTrend")
+                        .HasForeignKey("BottomFunnel.Domain.Entities.OfferSearchTrend", "OfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Offer");
+                });
+
             modelBuilder.Entity("BottomFunnel.Domain.Entities.OrganizationAiSetting", b =>
                 {
                     b.HasOne("BottomFunnel.Domain.Entities.Organization", "Organization")
@@ -1899,7 +2019,11 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("Audits");
 
+                    b.Navigation("Reputation");
+
                     b.Navigation("Restrictions");
+
+                    b.Navigation("SearchTrend");
                 });
 
             modelBuilder.Entity("BottomFunnel.Domain.Entities.Organization", b =>

@@ -88,10 +88,22 @@ public class AiOrchestrator
 
         if (request.SubjectType.Equals("landing-page", StringComparison.OrdinalIgnoreCase))
         {
-            var page = await _db.LandingPages.FirstOrDefaultAsync(x => x.Id == request.SubjectId && x.OrganizationId == _current.OrganizationId, ct)
+            var page = await _db.LandingPages
+                           .Include(x => x.Offer).ThenInclude(o => o!.Reputation)
+                           .FirstOrDefaultAsync(x => x.Id == request.SubjectId && x.OrganizationId == _current.OrganizationId, ct)
                        ?? throw new KeyNotFoundException("Landing page not found.");
-            var user = $"Write improved headline, 5 benefits, CTA, and 3 FAQs for landing page '{page.Name}' currently titled '{page.Headline}'. Keep claims conservative.";
-            return ("You write bottom-of-funnel landing page copy. No medical or income claims.", user);
+            var complaints = OfferMarketSignalsService.Complaints(page.Offer?.Reputation);
+            var complaintBlock = complaints.Count == 0
+                ? ""
+                : $"""
+
+                Recurring Trustpilot buyer complaints (turn these into proactive reassurance, not scare copy):
+                {string.Join("\n", complaints.Select(c => $"- {c}"))}
+
+                Write a "How we verified the guarantee" section that addresses each complaint without medical or income claims. Confirm return-address and refund steps where relevant.
+                """;
+            var user = $"Write improved headline, 5 benefits, CTA, and 3 FAQs for landing page '{page.Name}' currently titled '{page.Headline}'. Keep claims conservative.{complaintBlock}";
+            return ("You write bottom-of-funnel landing page copy for ConsumerHealthCompass-style presells. No medical or income claims. Use Trustpilot complaints only as buyer-reassurance angles.", user);
         }
 
         return ("You help with affiliate opportunity analysis.", $"{request.Kind} for {request.SubjectType} {request.SubjectId}");

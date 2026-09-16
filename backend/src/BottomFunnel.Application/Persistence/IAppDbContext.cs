@@ -14,6 +14,8 @@ public interface IAppDbContext
     DbSet<Product> Products { get; }
     DbSet<Offer> Offers { get; }
     DbSet<OfferAudit> OfferAudits { get; }
+    DbSet<OfferSearchTrend> OfferSearchTrends { get; }
+    DbSet<OfferReputation> OfferReputations { get; }
     DbSet<ComplianceRestriction> ComplianceRestrictions { get; }
     DbSet<Keyword> Keywords { get; }
     DbSet<KeywordMetric> KeywordMetrics { get; }

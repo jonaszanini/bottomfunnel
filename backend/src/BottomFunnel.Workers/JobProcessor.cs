@@ -97,6 +97,12 @@ public sealed class JobProcessor : BackgroundService
             return;
         }
 
+        if (job.JobType == "offer-market-signals" && Guid.TryParse(job.PayloadJson.Trim('"'), out var offerId))
+        {
+            await services.GetRequiredService<OfferMarketSignalsService>().RefreshAsync(offerId, ct);
+            return;
+        }
+
         throw new InvalidOperationException($"Unknown job type '{job.JobType}'.");
     }
 }

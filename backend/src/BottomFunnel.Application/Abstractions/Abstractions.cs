@@ -1,5 +1,6 @@
 using BottomFunnel.Application.Dtos;
 using BottomFunnel.Application.Offers.Models;
+using BottomFunnel.Domain.Entities;
 
 namespace BottomFunnel.Application.Abstractions;
 
@@ -42,6 +43,16 @@ public interface IGoogleAdsClient
 public interface ICurrencyExchangeService
 {
     Task<decimal> GetExchangeRateAsync(string fromCurrency, string toCurrency, CancellationToken ct = default);
+}
+
+public interface ISearchVolumeService
+{
+    Task<OfferSearchTrend> FetchNinetyDayTrendAsync(string keyword, CancellationToken ct = default);
+}
+
+public interface IReputationAuditService
+{
+    Task<OfferReputation> AuditTrustpilotAsync(string domainOrBrand, CancellationToken ct = default);
 }
 
 public sealed record CurrentUser(string UserId, string Email, Guid OrganizationId, string Role);

@@ -107,6 +107,7 @@ export default function OffersPage() {
   const [addingNegatives, setAddingNegatives] = useState(false);
   const [auditError, setAuditError] = useState("");
   const [auditOpen, setAuditOpen] = useState(true);
+  const [refreshingSignals, setRefreshingSignals] = useState(false);
 
   async function load() {
     const [o, p, m] = await Promise.all([
@@ -271,6 +272,20 @@ export default function OffersPage() {
     }
   }
 
+  async function refreshMarketSignals() {
+    if (!offer) return;
+    setRefreshingSignals(true);
+    setAuditError("");
+    try {
+      await api<Offer>(`/offers/${offer.id}/market-signals`, { method: "POST" });
+      await load();
+    } catch (err) {
+      setAuditError(err instanceof Error ? err.message : "Market signals refresh failed.");
+    } finally {
+      setRefreshingSignals(false);
+    }
+  }
+
   async function addNegatives() {
     if (!offer || !audit?.mandatoryNegativeKeywords.length) return;
     setAddingNegatives(true);
@@ -299,7 +314,7 @@ export default function OffersPage() {
         actions={<Button type="button" onClick={() => { setCreated(null); setOpen(true); }}>New Offer</Button>}
       />
       <Table>
-        <thead><tr><Th>Offer</Th><Th>Product</Th><Th>Merchant</Th><Th>Payout</Th><Th>CAD$</Th><Th>Policy</Th><Th>Compliance</Th><Th>Status</Th></tr></thead>
+        <thead><tr><Th>Offer</Th><Th>Product</Th><Th>Merchant</Th><Th>Payout</Th><Th>CAD$</Th><Th>Momentum</Th><Th>TrustScore</Th><Th>Policy</Th><Th>Compliance</Th><Th>Status</Th></tr></thead>
         <tbody>
           {offers.map((o) => (
             <tr key={o.id} onClick={() => setSelected(o.id)} className={selected === o.id ? "bg-zinc-900" : "cursor-pointer"}>
@@ -308,6 +323,8 @@ export default function OffersPage() {
               <Td>{o.merchantName ?? "—"}</Td>
               <Td>{money(o.commission, o.currency || "USD")}</Td>
               <Td>{money(o.payoutAmountCad, "CAD")}</Td>
+              <Td><MomentumBadge direction={o.searchTrend?.direction} change={o.searchTrend?.ninetyDayChangePercent} /></Td>
+              <Td><TrustScorePill rating={o.reputation?.trustpilotRating} reviews={o.reputation?.totalReviewsCount} risk={o.reputation?.refundRisk} /></Td>
               <Td><PolicyRiskBadge score={o.latestAudit?.riskScore} level={o.latestAudit?.overallRisk} /></Td>
               <Td className={o.overallCompliance === "Prohibited" ? "text-red-400" : ""}>{o.overallCompliance}</Td>
               <Td>{o.status}</Td>
@@ -317,7 +334,17 @@ export default function OffersPage() {
       </Table>
       {offer ? (
         <section className="space-y-4 rounded border border-zinc-800 p-4">
-          <h2 className="text-lg font-medium">Compliance — {offer.name}</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-medium">Compliance — {offer.name}</h2>
+            <Button type="button" onClick={refreshMarketSignals} disabled={refreshingSignals}>
+              {refreshingSignals ? "Refreshing…" : "Refresh market signals"}
+            </Button>
+          </div>
+          {offer.reputation?.recurringComplaints?.length ? (
+            <p className="text-sm text-zinc-400">
+              Trustpilot complaints: {offer.reputation.recurringComplaints.join(" · ")}
+            </p>
+          ) : null}
           <p className="text-sm text-zinc-400">
             Resolved policy: PPC {yesNo(offer.resolvedPolicy.ppcAllowed)}, brand {yesNo(offer.resolvedPolicy.brandBiddingAllowed)},
             coupon {yesNo(offer.resolvedPolicy.couponBiddingAllowed)}, direct link {yesNo(offer.resolvedPolicy.directLinkingAllowed)}.
@@ -556,4 +583,40 @@ function riskLabel(score: number) {
   if (score < 60) return "Moderate";
   if (score < 85) return "Severe";
   return "Critical";
+}
+
+function MomentumBadge({ direction, change }: { direction?: string; change?: number }) {
+  if (!direction || direction === "Unknown") {
+    return <span className="text-zinc-500">—</span>;
+  }
+  const tone = direction === "Rising"
+    ? "bg-emerald-500/15 text-emerald-400"
+    : direction === "Declining"
+      ? "bg-red-500/15 text-red-400"
+      : "bg-zinc-700/40 text-zinc-300";
+  const label = change == null ? direction : `${direction} ${change > 0 ? "+" : ""}${change.toFixed(0)}%`;
+  return (
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${tone}`} title="90-day search volume momentum">
+      {label}
+    </span>
+  );
+}
+
+function TrustScorePill({ rating, reviews, risk }: { rating?: number | null; reviews?: number; risk?: string }) {
+  if (rating == null) {
+    return <span className="text-zinc-500">—</span>;
+  }
+  const tone = rating >= 4
+    ? "bg-emerald-500/15 text-emerald-400"
+    : rating >= 2.5
+      ? "bg-amber-400/15 text-amber-300"
+      : "bg-red-500/15 text-red-400";
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}
+      title={risk ? `Trustpilot refund risk: ${risk}` : "Trustpilot rating"}
+    >
+      {rating.toFixed(1)}{reviews ? ` · ${reviews}` : ""}
+    </span>
+  );
 }

@@ -13,12 +13,14 @@ public sealed class CreateUnifiedOfferCommandHandler
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
     private readonly ICurrencyExchangeService _fx;
+    private readonly IJobQueue _jobs;
 
-    public CreateUnifiedOfferCommandHandler(IAppDbContext db, ICurrentUser current, ICurrencyExchangeService fx)
+    public CreateUnifiedOfferCommandHandler(IAppDbContext db, ICurrentUser current, ICurrencyExchangeService fx, IJobQueue jobs)
     {
         _db = db;
         _current = current;
         _fx = fx;
+        _jobs = jobs;
     }
 
     public async Task<CreateUnifiedOfferResponse> HandleAsync(CreateUnifiedOfferRequest request, CancellationToken ct)
@@ -72,6 +74,7 @@ public sealed class CreateUnifiedOfferCommandHandler
             _db.Offers.Add(offer);
             await _db.SaveChangesAsync(ct);
             await tx.CommitAsync(ct);
+            await _jobs.EnqueueAsync("offer-market-signals", offer.Id.ToString(), orgId, ct);
 
             return new CreateUnifiedOfferResponse(
                 offer.Id,

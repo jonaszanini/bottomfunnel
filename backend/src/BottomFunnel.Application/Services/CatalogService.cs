@@ -158,7 +158,9 @@ public class CatalogService
             .Include(x => x.Product)
             .Include(x => x.Merchant).ThenInclude(m => m!.Restrictions)
             .Include(x => x.Restrictions)
-            .Include(x => x.Audits);
+            .Include(x => x.Audits)
+            .Include(x => x.SearchTrend)
+            .Include(x => x.Reputation);
 
     private async Task<Merchant> LoadMerchant(Guid id, CancellationToken ct) =>
         await _db.Merchants.Include(x => x.Restrictions)
@@ -196,7 +198,19 @@ public class CatalogService
             new PolicyFlagsDto(policy.PpcAllowed, policy.BrandBiddingAllowed, policy.BrandPlusModifierAllowed, policy.CouponBiddingAllowed, policy.DirectLinkingAllowed),
             OfferPolicyResolver.WorstState(restrictions),
             restrictions.Select(ComplianceMapper.ToDto).ToList(),
-            LatestAudit(x));
+            LatestAudit(x),
+            x.SearchTrend is null ? null : new OfferSearchTrendDto(
+                x.SearchTrend.Direction.ToString(),
+                x.SearchTrend.NinetyDayChangePercent,
+                x.SearchTrend.CurrentMonthlyVolume,
+                x.SearchTrend.LastRefreshedAt),
+            x.Reputation is null ? null : new OfferReputationDto(
+                x.Reputation.TrustpilotRating,
+                x.Reputation.TotalReviewsCount,
+                x.Reputation.CalculatedRefundRisk.ToString(),
+                x.Reputation.TrustpilotUrl,
+                OfferMarketSignalsService.Complaints(x.Reputation),
+                x.Reputation.SentimentSummary));
     }
 
     private static OfferAuditSummaryDto? LatestAudit(Offer offer)

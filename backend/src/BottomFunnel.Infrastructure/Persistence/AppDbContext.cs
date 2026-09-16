@@ -20,6 +20,8 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
     public DbSet<Product> Products => Set<Product>();
     public DbSet<Offer> Offers => Set<Offer>();
     public DbSet<OfferAudit> OfferAudits => Set<OfferAudit>();
+    public DbSet<OfferSearchTrend> OfferSearchTrends => Set<OfferSearchTrend>();
+    public DbSet<OfferReputation> OfferReputations => Set<OfferReputation>();
     public DbSet<ComplianceRestriction> ComplianceRestrictions => Set<ComplianceRestriction>();
     public DbSet<Keyword> Keywords => Set<Keyword>();
     public DbSet<KeywordMetric> KeywordMetrics => Set<KeywordMetric>();
@@ -140,5 +142,31 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
             .WithMany(x => x.Audits)
             .HasForeignKey(x => x.OfferId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<OfferSearchTrend>(b =>
+        {
+            b.ToTable("OfferSearchTrends");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.NinetyDayChangePercent).HasPrecision(18, 4);
+            b.Property(x => x.VolumeHistoryJson).HasColumnType("jsonb");
+            b.HasIndex(x => new { x.OrganizationId, x.OfferId }).IsUnique();
+            b.HasOne(x => x.Offer)
+                .WithOne(x => x.SearchTrend)
+                .HasForeignKey<OfferSearchTrend>(x => x.OfferId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<OfferReputation>(b =>
+        {
+            b.ToTable("OfferReputations");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.TrustpilotRating).HasPrecision(3, 1);
+            b.Property(x => x.RecurringComplaintsJson).HasColumnType("jsonb");
+            b.HasIndex(x => new { x.OrganizationId, x.OfferId }).IsUnique();
+            b.HasOne(x => x.Offer)
+                .WithOne(x => x.Reputation)
+                .HasForeignKey<OfferReputation>(x => x.OfferId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

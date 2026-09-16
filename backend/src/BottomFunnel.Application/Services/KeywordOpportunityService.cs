@@ -138,6 +138,8 @@ public class KeywordOpportunityService
             .Include(x => x.Keywords).ThenInclude(x => x.Metric)
             .Include(x => x.Offers).ThenInclude(o => o.Merchant).ThenInclude(m => m!.Restrictions)
             .Include(x => x.Offers).ThenInclude(o => o.Restrictions)
+            .Include(x => x.Offers).ThenInclude(o => o.SearchTrend)
+            .Include(x => x.Offers).ThenInclude(o => o.Reputation)
             .FirstOrDefaultAsync(x => x.Id == productId && x.OrganizationId == OrgId, ct)
             ?? throw new KeyNotFoundException("Product not found.");
 
@@ -182,7 +184,9 @@ public class KeywordOpportunityService
                     volumeRisk,
                     gate.ComplianceStatus,
                     gate.Blocked,
-                    DataConfidence.Low));
+                    DataConfidence.Low),
+                    offer.SearchTrend,
+                    offer.Reputation);
 
                 var row = existing.FirstOrDefault(x => x.KeywordId == keyword.Id && x.OfferId == offer.Id);
                 if (row is null)

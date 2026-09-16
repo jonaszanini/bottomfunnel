@@ -5,6 +5,7 @@ using BottomFunnel.Application.Stores;
 using BottomFunnel.Infrastructure.Currency;
 using BottomFunnel.Infrastructure.Identity;
 using BottomFunnel.Infrastructure.Jobs;
+using BottomFunnel.Infrastructure.MarketSignals;
 using BottomFunnel.Infrastructure.Persistence;
 using BottomFunnel.Infrastructure.Security;
 using BottomFunnel.Infrastructure.Stores;
@@ -70,6 +71,19 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(25);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("BottomFunnelPolicyAudit/1.0");
         });
+        services.AddHttpClient("googleads", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(25);
+        });
+        services.AddHttpClient("dataforseo", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(25);
+        });
+        services.AddHttpClient("trustpilot", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(25);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; BottomFunnel/1.0; +https://bottomfunnel.local)");
+        });
 
         services.AddSingleton<IStoreConnector, ClickBankConnector>();
         services.AddSingleton<IStoreConnector, Digistore24Connector>();
@@ -85,6 +99,8 @@ public static class DependencyInjection
         services.AddScoped<AiConfigurationService>();
         services.AddScoped<IAiConfigurationService>(sp => sp.GetRequiredService<AiConfigurationService>());
         services.AddScoped<IAiService, OrganizationAiService>();
+        services.AddScoped<ISearchVolumeService, SearchVolumeService>();
+        services.AddScoped<IReputationAuditService, TrustpilotReputationService>();
 
         return services;
     }
