@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useId, useState } from "react";
 import { clearToken, getToken } from "./api";
 
 const NAV = [
@@ -56,6 +56,67 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </button>
       </aside>
       <main className="flex-1 overflow-auto p-8">{children}</main>
+    </div>
+  );
+}
+
+export function PageHeader({
+  title,
+  summary,
+  purpose,
+  does,
+  flow,
+  actions,
+}: {
+  title: string;
+  summary?: string;
+  purpose: string;
+  does: string;
+  flow: string;
+  actions?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const panelId = useId();
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={panelId}
+              aria-label={`About ${title}`}
+              onClick={() => setOpen((v) => !v)}
+              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${open ? "border-emerald-500 bg-emerald-500 text-zinc-950" : "border-zinc-600 text-zinc-400 hover:border-emerald-500 hover:text-emerald-400"}`}
+            >
+              i
+            </button>
+            <h1 className="text-2xl font-semibold">{title}</h1>
+          </div>
+          {summary ? <p className="mt-1 pl-8 text-sm text-zinc-500">{summary}</p> : null}
+        </div>
+        {actions ? <div className="shrink-0">{actions}</div> : null}
+      </div>
+      {open ? (
+        <div id={panelId} className="rounded border border-zinc-800 bg-zinc-900 p-4 text-sm">
+          <dl className="grid gap-3 md:grid-cols-3">
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-emerald-400">What this page is for</dt>
+              <dd className="mt-1 text-zinc-300">{purpose}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-emerald-400">What you do here</dt>
+              <dd className="mt-1 text-zinc-300">{does}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-emerald-400">Place in the flow</dt>
+              <dd className="mt-1 text-zinc-300">{flow}</dd>
+            </div>
+          </dl>
+        </div>
+      ) : null}
     </div>
   );
 }

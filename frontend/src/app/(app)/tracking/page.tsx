@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Campaign } from "@/lib/types";
-import { Button, Field, Input, Select, Table, Td, Th, money } from "@/lib/ui";
+import { Button, Field, Input, Select, Table, Td, Th, money, PageHeader } from "@/lib/ui";
 
 type Click = { id: string; campaignId: string; trackingCode: string; destinationUrl: string; occurredAt: string };
 type Conversion = { id: string; clickId?: string; campaignId?: string; providerKey: string; eventType: string; provenance?: string; amount: number; commission: number; occurredAt: string };
@@ -45,7 +45,13 @@ export default function TrackingPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-semibold">Tracking</h1>
+      <PageHeader
+        title="Tracking"
+        summary="Clicks, conversions, and ad spend for live campaigns — the evidence behind dashboard ROAS."
+        purpose="Record what happened after traffic ran: hops, commissions (including ClickBank INS), and what you spent."
+        does="Review clicks and conversions, add spend, and enter a manual conversion if a network postback is missing."
+        flow="After campaigns are live. This data is what the Dashboard uses for observed vs reported ROAS. Do not skip it if you want kill/scale decisions."
+      />
       <div className="grid gap-4 md:grid-cols-2">
         <form onSubmit={addCost} className="space-y-3 rounded border border-zinc-800 p-4">
           <h2 className="font-medium">Add ad spend</h2>

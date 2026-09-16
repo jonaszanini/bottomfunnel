@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Product } from "@/lib/types";
-import { Button, Field, Input, Table, Td, Th } from "@/lib/ui";
+import { Button, Field, Input, Table, Td, Th, PageHeader } from "@/lib/ui";
 
 export default function ProductsPage() {
   const [items, setItems] = useState<Product[]>([]);
@@ -34,8 +34,13 @@ export default function ProductsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Products</h1>
-      <p className="text-sm text-zinc-500">Keywords are generated only after an active offer exists, using that offer&apos;s PPC/brand/coupon policy.</p>
+      <PageHeader
+        title="Products"
+        summary="Keywords are generated only after an active offer exists, using that offer's PPC/brand/coupon policy."
+        purpose="The catalog of things you promote. Each product is the parent for keywords and landing pages."
+        does="Add or review products, then generate keywords once an active offer is attached. Prefer New Offer on Offers unless you need a product-only record."
+        flow="Usually created from Offers. Next: generate keywords, then score opportunities."
+      />
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
       <form onSubmit={onSubmit} className="flex gap-3">
         <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>

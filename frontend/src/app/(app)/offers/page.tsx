@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Offer, Product, Merchant } from "@/lib/types";
 import { RestrictionForm, RestrictionList } from "@/lib/compliance";
-import { Button, Checkbox, Field, Input, Select, Table, Td, Textarea, Th, money } from "@/lib/ui";
+import { Button, Checkbox, Field, Input, Select, Table, Td, Textarea, Th, money, PageHeader } from "@/lib/ui";
 
 const CATEGORIES = ["Health", "Software", "Education", "Finance", "Home", "Fitness", "Business", "Other"];
 
@@ -161,13 +161,14 @@ export default function OffersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Offers</h1>
-          <p className="text-sm text-zinc-500">Create product, merchant, and payout in one step. Economics are scored in CAD$.</p>
-        </div>
-        <Button type="button" onClick={() => { setCreated(null); setOpen(true); }}>New Offer</Button>
-      </div>
+      <PageHeader
+        title="Offers"
+        summary="Create product, merchant, and payout in one step. Economics are scored in CAD$."
+        purpose="This is the main onboarding screen: one affiliate offer you might promote, with payout converted to CAD$."
+        does="Click New Offer to add product name, merchant, payout, currency, and hop link. After save, generate keywords and score without leaving the page."
+        flow="Start here (or after connecting a network). Offers feed keywords, opportunities, landing pages, and campaigns."
+        actions={<Button type="button" onClick={() => { setCreated(null); setOpen(true); }}>New Offer</Button>}
+      />
       <Table>
         <thead><tr><Th>Offer</Th><Th>Product</Th><Th>Merchant</Th><Th>Payout</Th><Th>CAD$</Th><Th>Compliance</Th><Th>Status</Th></tr></thead>
         <tbody>

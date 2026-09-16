@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { StoreConnection, StoreProvider } from "@/lib/types";
-import { Button, Field, Input, Table, Td, Th } from "@/lib/ui";
+import { Button, Field, Input, Table, Td, Th, PageHeader } from "@/lib/ui";
 
 export default function NetworksPage() {
   const [providers, setProviders] = useState<StoreProvider[]>([]);
@@ -52,11 +52,13 @@ export default function NetworksPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Networks</h1>
-      <p className="text-sm text-zinc-500">
-        Connect your account here (API key + your nickname). Vendor/site nicknames are per product — paste each hop link on Offers.
-        ClickBank &quot;Seller site nickname&quot; is only if you sell on ClickBank and want to sync your own catalog.
-      </p>
+      <PageHeader
+        title="Networks"
+        summary="Connect ClickBank or Digistore24 for webhooks and identity. Affiliates paste hop links on Offers — Sync products is seller-catalog only."
+        purpose="Store your network account (API key, affiliate nickname, INS secret) so conversions can post back and hop links can use your id."
+        does="Save ClickBank/Digistore24 credentials. Leave seller site nickname blank unless you sell on ClickBank. Do not expect Sync to import the marketplace."
+        flow="Optional first step. Connecting is not required to create an offer. Hop links still belong on Offers, per product."
+      />
       <div className="flex gap-2">
         {providers.map((p) => (
           <button

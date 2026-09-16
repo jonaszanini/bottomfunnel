@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Campaign, Offer, Keyword, LandingPage } from "@/lib/types";
-import { Button, Field, Input, Select, Table, Td, Th } from "@/lib/ui";
+import { Button, Field, Input, Select, Table, Td, Th, PageHeader } from "@/lib/ui";
 
 export default function CampaignsPage() {
   const [items, setItems] = useState<Campaign[]>([]);
@@ -91,8 +91,13 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Campaigns</h1>
-      <p className="text-sm text-zinc-500">Google Ads final URL is the published landing page. The `/t/` hop is only the on-page CTA after the visitor is already on your domain.</p>
+      <PageHeader
+        title="Campaigns"
+        summary="Google Ads final URL is the published landing page. The /t/ hop is only the on-page CTA after the visitor is already on your domain."
+        purpose="Package a Test opportunity into something you can run: offer + landing page + ads + tracking code."
+        does="Create a campaign, attach a published landing page, add ads, then set it live. Copy the Google final URL from the landing page, not the raw hop."
+        flow="After a Test opportunity and a published landing page. Live campaigns send clicks to Tracking, which the Dashboard reads."
+      />
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
       <form onSubmit={onSubmit} className="grid gap-3 rounded border border-zinc-800 p-4 md:grid-cols-3">
         <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>

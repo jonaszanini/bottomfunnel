@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { LandingPage, Offer } from "@/lib/types";
-import { Button, Field, Input, Select, Table, Td, Textarea, Th } from "@/lib/ui";
+import { Button, Field, Input, Select, Table, Td, Textarea, Th, PageHeader } from "@/lib/ui";
 
 export default function LandingPagesPage() {
   const [items, setItems] = useState<LandingPage[]>([]);
@@ -69,8 +69,13 @@ export default function LandingPagesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Landing pages</h1>
-      <p className="text-sm text-zinc-500">Google Ads must land here. Publish requires an affiliate disclosure, original evaluation, and at least one non-CTA section.</p>
+      <PageHeader
+        title="Landing pages"
+        summary="Google Ads must land here. Publish requires an affiliate disclosure, original evaluation, and at least one non-CTA section."
+        purpose="Your owned page between the ad click and the merchant hop — disclosure, evaluation, then CTA."
+        does="Write the page, attach an offer, publish when disclosure + body + a non-CTA section exist. Use the public /p/slug URL as the Google Ads final URL."
+        flow="After you pick a Test opportunity. Publish before a campaign goes live. The on-page CTA uses tracking, not the ad URL."
+      />
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
       <form onSubmit={onSubmit} className="grid gap-3 rounded border border-zinc-800 p-4 md:grid-cols-2">
         <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Opportunity } from "@/lib/types";
-import { Button, money, Table, Td, Th } from "@/lib/ui";
+import { Button, money, PageHeader, Table, Td, Th } from "@/lib/ui";
 
 export default function OpportunitiesPage() {
   const [items, setItems] = useState<Opportunity[]>([]);
@@ -24,8 +24,13 @@ export default function OpportunitiesPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Opportunities</h1>
-      <p className="text-sm text-zinc-500">Commercial value is not enough. TEST requires viability, verified compliance, and enough search volume.</p>
+      <PageHeader
+        title="Opportunities"
+        summary="Commercial value is not enough. TEST requires viability, verified compliance, and enough search volume."
+        purpose="Rank keyword × offer combinations so you only buy traffic that can pay back in CAD$."
+        does="Review Test / Investigate / Skip, profit range, and compliance. Open Why to see the scoring rationale before you launch a campaign."
+        flow="After an offer exists and keywords are generated. Pick a Test row, then build a landing page and campaign for that keyword."
+      />
       <Table>
         <thead>
           <tr>

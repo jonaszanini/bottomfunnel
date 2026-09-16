@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { Merchant } from "@/lib/types";
 import { RestrictionForm, RestrictionList } from "@/lib/compliance";
-import { Button, Checkbox, Field, Input, Table, Td, Textarea, Th } from "@/lib/ui";
+import { Button, Checkbox, Field, Input, Table, Td, Textarea, Th, PageHeader } from "@/lib/ui";
 
 const emptyPolicy = {
   ppcAllowed: true,
@@ -71,7 +71,13 @@ export default function MerchantsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Merchants</h1>
+      <PageHeader
+        title="Merchants"
+        summary="Vendors whose policy (PPC, brand, coupon, direct link) gates which keywords you are allowed to buy."
+        purpose="Store the seller behind an offer and their advertising rules so scoring does not recommend banned keywords."
+        does="Add a merchant or click a row to edit PPC/brand/coupon/direct-link policy and restrictions. New Offer can create a merchant for you."
+        flow="Created with an offer, or maintained here. Policy flows into keyword generation and opportunity Test/Skip."
+      />
       <form onSubmit={onSubmit} className="flex gap-3">
         <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} required /></Field>
         <Field label="Website"><Input value={website} onChange={(e) => setWebsite(e.target.value)} /></Field>
