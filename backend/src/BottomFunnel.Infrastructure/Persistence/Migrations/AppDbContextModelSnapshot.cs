@@ -1095,6 +1095,46 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                     b.ToTable("Organizations");
                 });
 
+            modelBuilder.Entity("BottomFunnel.Domain.Entities.OrganizationAiSetting", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DefaultModel")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("EncryptedApiKey")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "Provider")
+                        .IsUnique();
+
+                    b.ToTable("OrganizationAiSettings", (string)null);
+                });
+
             modelBuilder.Entity("BottomFunnel.Domain.Entities.OrganizationMember", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1687,6 +1727,17 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("BottomFunnel.Domain.Entities.OrganizationAiSetting", b =>
+                {
+                    b.HasOne("BottomFunnel.Domain.Entities.Organization", "Organization")
+                        .WithMany("AiSettings")
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Organization");
+                });
+
             modelBuilder.Entity("BottomFunnel.Domain.Entities.OrganizationMember", b =>
                 {
                     b.HasOne("BottomFunnel.Domain.Entities.Organization", "Organization")
@@ -1795,6 +1846,8 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("BottomFunnel.Domain.Entities.Organization", b =>
                 {
+                    b.Navigation("AiSettings");
+
                     b.Navigation("Members");
                 });
 

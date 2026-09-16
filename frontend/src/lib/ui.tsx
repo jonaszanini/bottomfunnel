@@ -2,20 +2,22 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useId, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useId, useRef, useState } from "react";
 import { clearToken, getToken } from "./api";
 
 const NAV = [
-  ["/", "Dashboard"],
-  ["/opportunities", "Opportunities"],
-  ["/offers", "Offers"],
-  ["/products", "Products"],
-  ["/merchants", "Merchants"],
-  ["/keywords", "Keywords"],
-  ["/campaigns", "Campaigns"],
-  ["/landing-pages", "Landing pages"],
-  ["/tracking", "Tracking"],
+  ["/guide", "How it works"],
   ["/networks", "Networks"],
+  ["/offers", "Offers"],
+  ["/keywords", "Keywords"],
+  ["/opportunities", "Opportunities"],
+  ["/landing-pages", "Landing pages"],
+  ["/campaigns", "Campaigns"],
+  ["/tracking", "Tracking"],
+  ["/", "Dashboard"],
+  ["/merchants", "Merchants"],
+  ["/products", "Products"],
   ["/settings", "Settings"],
 ];
 
@@ -166,10 +168,67 @@ export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   );
 }
 
-export function Field({ label, children }: { label: string; children: React.ReactNode }) {
+export function InfoTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const tooltipId = useId();
+
+  function show() {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) {
+      const width = 256;
+      const left = Math.min(Math.max(8, rect.left - width / 2 + rect.width / 2), window.innerWidth - width - 8);
+      setPos({ top: rect.bottom + 6, left });
+    }
+    setOpen(true);
+  }
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        aria-label={text}
+        aria-expanded={open}
+        aria-describedby={open ? tooltipId : undefined}
+        onMouseDown={(e) => e.preventDefault()}
+        onMouseEnter={show}
+        onMouseLeave={() => setOpen(false)}
+        onFocus={show}
+        onBlur={() => setOpen(false)}
+        onClick={(e) => {
+          e.preventDefault();
+          show();
+        }}
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-zinc-600 text-[10px] leading-none text-zinc-400 hover:border-emerald-500 hover:text-emerald-400 focus:border-emerald-500 focus:text-emerald-400 focus:outline-none"
+      >
+        ?
+      </button>
+      {open
+        ? createPortal(
+            <span
+              id={tooltipId}
+              role="tooltip"
+              style={{ top: pos.top, left: pos.left }}
+              className="pointer-events-none fixed z-[80] w-64 rounded border border-zinc-700 bg-zinc-900 p-2 text-left text-xs font-normal leading-relaxed text-zinc-300 shadow-lg"
+            >
+              {text}
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+export function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block text-xs text-zinc-400">
-      <span className="mb-1 block">{label}</span>
+      <span className="mb-1 flex items-center gap-1.5">
+        <span>{label}</span>
+        {hint ? <InfoTip text={hint} /> : null}
+      </span>
       {children}
     </label>
   );

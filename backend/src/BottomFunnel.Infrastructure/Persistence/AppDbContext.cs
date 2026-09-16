@@ -33,6 +33,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
     public DbSet<CommissionLedger> CommissionLedgers => Set<CommissionLedger>();
     public DbSet<Experiment> Experiments => Set<Experiment>();
     public DbSet<AiAnalysis> AiAnalyses => Set<AiAnalysis>();
+    public DbSet<OrganizationAiSetting> OrganizationAiSettings => Set<OrganizationAiSetting>();
     public DbSet<BackgroundJob> BackgroundJobs => Set<BackgroundJob>();
     public DbSet<VisitorSession> VisitorSessions => Set<VisitorSession>();
     public DbSet<Visit> Visits => Set<Visit>();
@@ -116,5 +117,16 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
         builder.Entity<Click>().HasIndex(x => x.TrackingCode);
         builder.Entity<StoreConnection>().HasIndex(x => new { x.OrganizationId, x.ProviderKey }).IsUnique();
         builder.Entity<BackgroundJob>().HasIndex(x => new { x.Status, x.CreatedAt });
+
+        builder.Entity<OrganizationAiSetting>().ToTable("OrganizationAiSettings");
+        builder.Entity<OrganizationAiSetting>().Property(x => x.Provider).HasMaxLength(50).IsRequired();
+        builder.Entity<OrganizationAiSetting>().Property(x => x.EncryptedApiKey).IsRequired();
+        builder.Entity<OrganizationAiSetting>().Property(x => x.DefaultModel).HasMaxLength(120).IsRequired();
+        builder.Entity<OrganizationAiSetting>().HasIndex(x => new { x.OrganizationId, x.Provider }).IsUnique();
+        builder.Entity<OrganizationAiSetting>()
+            .HasOne(x => x.Organization)
+            .WithMany(x => x.AiSettings)
+            .HasForeignKey(x => x.OrganizationId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

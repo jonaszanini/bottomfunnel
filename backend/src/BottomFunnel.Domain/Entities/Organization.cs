@@ -7,6 +7,16 @@ public class Organization : Entity
 {
     public string Name { get; set; } = string.Empty;
     public ICollection<OrganizationMember> Members { get; set; } = new List<OrganizationMember>();
+    public ICollection<OrganizationAiSetting> AiSettings { get; set; } = new List<OrganizationAiSetting>();
+}
+
+public class OrganizationAiSetting : OrgEntity
+{
+    public string Provider { get; set; } = "OpenAI";
+    public string EncryptedApiKey { get; set; } = string.Empty;
+    public string DefaultModel { get; set; } = "gpt-4o-mini";
+    public bool IsActive { get; set; }
+    public Organization? Organization { get; set; }
 }
 
 public class OrganizationMember : Entity

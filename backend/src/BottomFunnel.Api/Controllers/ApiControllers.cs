@@ -249,7 +249,7 @@ public class AiController : ControllerBase
 {
     private readonly AiOrchestrator _ai;
     public AiController(AiOrchestrator ai) => _ai = ai;
-    [HttpGet("status")] public object Status() => new { configured = _ai.IsConfigured };
+    [HttpGet("status")] public async Task<object> Status(CancellationToken ct) => new { configured = await _ai.IsConfiguredAsync(ct) };
     [HttpPost("analyze")] public Task<AiAnalyzeResponse> Analyze(AiAnalyzeRequest request, CancellationToken ct) => _ai.AnalyzeAsync(request, ct);
 }
 
@@ -368,5 +368,31 @@ public class CurrencyController : ControllerBase
     {
         var rate = await _fx.GetExchangeRateAsync(from, to, ct);
         return new CurrencyRateDto(from.ToUpperInvariant(), to.ToUpperInvariant(), rate);
+    }
+}
+
+[ApiController]
+[Authorize]
+[Route("api/settings/ai")]
+public class AiSettingsController : ControllerBase
+{
+    private readonly IAiConfigurationService _ai;
+    public AiSettingsController(IAiConfigurationService ai) => _ai = ai;
+
+    [HttpGet]
+    public Task<IReadOnlyList<AiProviderStatusDto>> List(CancellationToken ct) => _ai.ListAsync(ct);
+
+    [HttpPost]
+    public async Task<IReadOnlyList<AiProviderStatusDto>> Save(SaveAiProviderRequest request, CancellationToken ct)
+    {
+        await _ai.SaveApiKeyAsync(request.Provider, request.ApiKey, request.DefaultModel, ct);
+        return await _ai.ListAsync(ct);
+    }
+
+    [HttpPost("test")]
+    public async Task<AiConnectionTestDto> Test(TestAiProviderRequest request, CancellationToken ct)
+    {
+        await _ai.TestConnectionAsync(request.Provider, request.ApiKey, ct);
+        return new AiConnectionTestDto(true, "Connection succeeded.");
     }
 }

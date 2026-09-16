@@ -43,6 +43,8 @@ public sealed class CreateUnifiedOfferCommandHandler
                 ? Math.Round(request.ExchangeRateOverride.Value, 4, MidpointRounding.AwayFromZero)
                 : await _fx.GetExchangeRateAsync(currency, "CAD", ct);
             var payoutCad = ProfitabilityCalculator.RoundMoney(request.PayoutAmount * rate);
+            var providerKey = NormalizeProviderKey(request.ProviderKey);
+            var hop = FirstValue(request.AffiliateUrl, request.BaseAffiliateUrl);
 
             var offer = new Offer
             {
@@ -50,7 +52,7 @@ public sealed class CreateUnifiedOfferCommandHandler
                 ProductId = product.Id,
                 MerchantId = merchant.Id,
                 Name = productName,
-                AffiliateUrl = string.IsNullOrWhiteSpace(request.AffiliateUrl) ? null : request.AffiliateUrl.Trim(),
+                AffiliateUrl = hop,
                 Commission = request.PayoutAmount,
                 PayoutAmountCad = payoutCad,
                 ExchangeRateUsed = rate,
@@ -58,7 +60,8 @@ public sealed class CreateUnifiedOfferCommandHandler
                 Currency = currency,
                 Category = request.Category,
                 Status = OfferStatus.Active,
-                ProviderKey = "manual",
+                ProviderKey = providerKey,
+                ExternalVendorId = providerKey == "clickbank" ? merchantName : null,
                 BrandBiddingAllowed = request.BrandBiddingAllowed,
                 DirectLinkingAllowed = request.DirectLinkingAllowed,
                 PpcAllowed = request.PpcAllowed
@@ -87,19 +90,44 @@ public sealed class CreateUnifiedOfferCommandHandler
     {
         var existing = await _db.Merchants.FirstOrDefaultAsync(
             x => x.OrganizationId == orgId && x.Name.ToLower() == name.ToLower(), ct);
+        var pageUrl = string.IsNullOrWhiteSpace(request.AffiliatePageUrl) ? null : request.AffiliatePageUrl.Trim();
+        var providerKey = NormalizeProviderKey(request.ProviderKey);
         if (existing is not null)
+        {
+            if (pageUrl is not null)
+                existing.Website = pageUrl;
+            existing.ProviderKey ??= providerKey;
             return existing;
+        }
 
         var merchant = new Merchant
         {
             OrganizationId = orgId,
             Name = name,
+            Website = pageUrl,
+            ProviderKey = providerKey,
             PpcAllowed = request.PpcAllowed,
             BrandBiddingAllowed = request.BrandBiddingAllowed,
             DirectLinkingAllowed = request.DirectLinkingAllowed
         };
         _db.Merchants.Add(merchant);
         return merchant;
+    }
+
+    private static string NormalizeProviderKey(string? value)
+    {
+        var key = (value ?? "manual").Trim().ToLowerInvariant();
+        return key is "clickbank" or "digistore24" or "manual" ? key : "manual";
+    }
+
+    private static string? FirstValue(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+        return null;
     }
 
     private async Task<Product> ResolveProductAsync(Guid orgId, string name, string? category, string currency, CancellationToken ct)

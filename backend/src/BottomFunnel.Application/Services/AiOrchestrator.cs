@@ -19,13 +19,14 @@ public class AiOrchestrator
         _current = current;
     }
 
-    public bool IsConfigured => _ai.IsConfigured;
+    public async Task<bool> IsConfiguredAsync(CancellationToken ct = default) =>
+        await _ai.IsConfiguredAsync(ct);
 
     public async Task<AiAnalyzeResponse> AnalyzeAsync(AiAnalyzeRequest request, CancellationToken ct)
     {
         var (system, user) = await BuildPrompt(request, ct);
         string result;
-        var usedAi = _ai.IsConfigured;
+        var usedAi = await _ai.IsConfiguredAsync(ct);
         if (usedAi)
             result = await _ai.CompleteAsync(system, user, ct);
         else

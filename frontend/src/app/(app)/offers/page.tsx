@@ -18,19 +18,73 @@ type UnifiedCreated = {
   currency: string;
 };
 
+const CLICKBANK_AFFILIATE = "jzanini";
+
 const emptyForm = {
+  providerKey: "clickbank",
   productName: "",
   category: "Health",
   merchantName: "",
   brandBiddingAllowed: false,
   directLinkingAllowed: false,
-  payoutAmount: "75",
+  payoutAmount: "",
   currency: "USD",
   exchangeRateOverride: "",
   overrideRate: false,
   commissionType: "OneTime",
   affiliateUrl: "",
+  affiliatePageUrl: "",
 };
+
+function clickbankHop(vendor: string) {
+  const nickname = vendor.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  return nickname ? `https://${nickname}.${CLICKBANK_AFFILIATE}.hop.clickbank.net/` : "";
+}
+
+function clickbankHopPreview(vendor: string) {
+  const nickname = vendor.trim().toLowerCase().replace(/[^a-z0-9]/g, "") || "{vendor}";
+  return `https://${nickname}.${CLICKBANK_AFFILIATE}.hop.clickbank.net/?tid={click_id}`;
+}
+
+function networkCopy(providerKey: string) {
+  if (providerKey === "clickbank") {
+    return {
+      payoutLabel: "Average Payout (USD)",
+      payoutPlaceholder: "e.g. 165.68",
+      payoutHint: "Enter the 'Avg $ Per Conv Total' from the bottom left of the marketplace card.",
+      merchantLabel: "Vendor Nickname",
+      merchantPlaceholder: "e.g. prodentim",
+      merchantHint: "Use the vendor nickname from the marketplace card — the first hop subdomain, e.g. prodentim.",
+      urlLabel: "HopLink Generator",
+      urlPlaceholder: "https://prodentim.jzanini.hop.clickbank.net/",
+      urlHint: "Paste the hop, or we build https://{vendor}.jzanini.hop.clickbank.net/?tid={click_id} from the vendor nickname.",
+    };
+  }
+  if (providerKey === "digistore24") {
+    return {
+      payoutLabel: "Net Earnings Per Sale (USD)",
+      payoutPlaceholder: "e.g. 69.29",
+      payoutHint: "Enter the 'Net earnings/sale*' figure shown on the right side of the card.",
+      merchantLabel: "Vendor Account",
+      merchantPlaceholder: "e.g. soundview",
+      merchantHint: "Enter the vendor account name shown on the Digistore24 marketplace card.",
+      urlLabel: "Promolink",
+      urlPlaceholder: "https://www.checkout-ds24.com/redir/...",
+      urlHint: "Click the blue 'Promote now' button, copy your individual Promolink, and paste it here.",
+    };
+  }
+  return {
+    payoutLabel: "Payout Amount",
+    payoutPlaceholder: "e.g. 75.00",
+    payoutHint: "Commission you expect per sale, in the payout currency.",
+    merchantLabel: "Merchant Name",
+    merchantPlaceholder: "Merchant or vendor name",
+    merchantHint: "The merchant or vendor you are promoting.",
+    urlLabel: "Tracking URL (with {click_id})",
+    urlPlaceholder: "https://example.com/hop?subid={click_id}",
+    urlHint: "Paste the hop or tracking URL. Include {click_id} if the network substitutes it.",
+  };
+}
 
 export default function OffersPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
@@ -71,6 +125,7 @@ export default function OffersPage() {
 
   const offer = offers.find((x) => x.id === selected);
   const categories = useMemo(() => Array.from(new Set([...CATEGORIES, ...products.map((p) => p.category).filter(Boolean) as string[]])), [products]);
+  const copy = networkCopy(form.providerKey);
   const effectiveRate = form.overrideRate && Number(form.exchangeRateOverride) > 0 ? Number(form.exchangeRateOverride) : (rate ?? 1.38);
   const convertedCad = Number(form.payoutAmount || 0) * (form.currency === "CAD" ? 1 : effectiveRate);
 
@@ -91,6 +146,9 @@ export default function OffersPage() {
           exchangeRateOverride: form.overrideRate && Number(form.exchangeRateOverride) > 0 ? Number(form.exchangeRateOverride) : null,
           commissionType: form.commissionType,
           affiliateUrl: form.affiliateUrl || null,
+          baseAffiliateUrl: form.affiliateUrl || null,
+          affiliatePageUrl: form.affiliatePageUrl || null,
+          providerKey: form.providerKey,
         }),
       });
       setCreated(result);
@@ -125,9 +183,28 @@ export default function OffersPage() {
   function onMerchantName(name: string) {
     setForm((f) => {
       const match = merchants.find((m) => m.name.toLowerCase() === name.toLowerCase());
-      return match
-        ? { ...f, merchantName: name, brandBiddingAllowed: match.brandBiddingAllowed, directLinkingAllowed: match.directLinkingAllowed }
+      const next = match
+        ? { ...f, merchantName: name, brandBiddingAllowed: match.brandBiddingAllowed, directLinkingAllowed: match.directLinkingAllowed, affiliatePageUrl: f.affiliatePageUrl || match.website || "" }
         : { ...f, merchantName: name };
+      if (f.providerKey === "clickbank") {
+        const previousHop = clickbankHop(f.merchantName);
+        if (!f.affiliateUrl || f.affiliateUrl === previousHop) next.affiliateUrl = clickbankHop(name);
+      }
+      return next;
+    });
+  }
+
+  function onProviderChange(providerKey: string) {
+    setForm((f) => {
+      const next = {
+        ...f,
+        providerKey,
+        currency: providerKey === "manual" ? f.currency : "USD",
+      };
+      if (providerKey === "clickbank" && (!f.affiliateUrl || f.affiliateUrl === clickbankHop(f.merchantName))) {
+        next.affiliateUrl = clickbankHop(f.merchantName);
+      }
+      return next;
     });
   }
 
@@ -216,7 +293,7 @@ export default function OffersPage() {
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded border border-zinc-800 bg-zinc-950 p-6">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-auto rounded border border-zinc-800 bg-zinc-950 p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">{created ? "Offer created" : "New Offer"}</h2>
               <button type="button" className="text-sm text-zinc-500 hover:text-zinc-300" onClick={closeModal}>Close</button>
@@ -234,6 +311,13 @@ export default function OffersPage() {
               </div>
             ) : (
               <form onSubmit={onSubmit} className="space-y-4">
+                <Field label="Affiliate Network">
+                  <Select value={form.providerKey} onChange={(e) => onProviderChange(e.target.value)}>
+                    <option value="clickbank">ClickBank</option>
+                    <option value="digistore24">Digistore24</option>
+                    <option value="manual">Manual</option>
+                  </Select>
+                </Field>
                 <div className="grid gap-3 md:grid-cols-2">
                   <Field label="Product name">
                     <Input list="product-names" value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} required />
@@ -244,8 +328,8 @@ export default function OffersPage() {
                     <datalist id="categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
                   </Field>
                 </div>
-                <Field label="Merchant name">
-                  <Input list="merchant-names" value={form.merchantName} onChange={(e) => onMerchantName(e.target.value)} required />
+                <Field label={copy.merchantLabel} hint={copy.merchantHint}>
+                  <Input list="merchant-names" value={form.merchantName} onChange={(e) => onMerchantName(e.target.value)} placeholder={copy.merchantPlaceholder} required />
                   <datalist id="merchant-names">{merchants.map((m) => <option key={m.id} value={m.name} />)}</datalist>
                 </Field>
                 <div className="flex flex-wrap gap-4">
@@ -253,8 +337,8 @@ export default function OffersPage() {
                   <Checkbox label="Direct linking allowed" checked={form.directLinkingAllowed} onChange={(e) => setForm({ ...form, directLinkingAllowed: e.target.checked })} />
                 </div>
                 <div className="grid gap-3 md:grid-cols-3">
-                  <Field label="Payout amount">
-                    <Input type="number" step="0.01" min="0" value={form.payoutAmount} onChange={(e) => setForm({ ...form, payoutAmount: e.target.value })} required />
+                  <Field label={copy.payoutLabel} hint={copy.payoutHint}>
+                    <Input type="number" step="0.01" min="0" value={form.payoutAmount} onChange={(e) => setForm({ ...form, payoutAmount: e.target.value })} placeholder={copy.payoutPlaceholder} required />
                   </Field>
                   <Field label="Currency">
                     <Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
@@ -285,8 +369,14 @@ export default function OffersPage() {
                     ) : null}
                   </div>
                 ) : null}
-                <Field label="Affiliate hop link / tracking URL">
-                  <Input value={form.affiliateUrl} onChange={(e) => setForm({ ...form, affiliateUrl: e.target.value })} placeholder="https://vendor.jzanini.hop.clickbank.net/" />
+                <Field label={copy.urlLabel} hint={copy.urlHint}>
+                  <Input value={form.affiliateUrl} onChange={(e) => setForm({ ...form, affiliateUrl: e.target.value })} placeholder={copy.urlPlaceholder} />
+                  {form.providerKey === "clickbank" ? (
+                    <p className="mt-1 font-mono text-[11px] text-zinc-500">Preview: {clickbankHopPreview(form.merchantName)}</p>
+                  ) : null}
+                </Field>
+                <Field label="Affiliate Support URL" hint="Check this page to verify if the vendor prohibits trademark bidding on Google search.">
+                  <Input value={form.affiliatePageUrl} onChange={(e) => setForm({ ...form, affiliatePageUrl: e.target.value })} placeholder="https://" />
                 </Field>
                 {error ? <p className="text-sm text-red-400">{error}</p> : null}
                 <div className="flex justify-end gap-2">

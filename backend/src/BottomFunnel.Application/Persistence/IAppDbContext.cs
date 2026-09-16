@@ -27,6 +27,7 @@ public interface IAppDbContext
     DbSet<CommissionLedger> CommissionLedgers { get; }
     DbSet<Experiment> Experiments { get; }
     DbSet<AiAnalysis> AiAnalyses { get; }
+    DbSet<OrganizationAiSetting> OrganizationAiSettings { get; }
     DbSet<BackgroundJob> BackgroundJobs { get; }
     DbSet<VisitorSession> VisitorSessions { get; }
     DbSet<Visit> Visits { get; }

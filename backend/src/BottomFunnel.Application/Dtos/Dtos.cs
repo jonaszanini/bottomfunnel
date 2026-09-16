@@ -150,7 +150,10 @@ public sealed record CreateUnifiedOfferRequest(
     string Currency = "USD",
     decimal? ExchangeRateOverride = null,
     CommissionType CommissionType = CommissionType.OneTime,
-    string? AffiliateUrl = null);
+    string? AffiliateUrl = null,
+    string? BaseAffiliateUrl = null,
+    string? AffiliatePageUrl = null,
+    string? ProviderKey = null);
 
 public sealed record CreateUnifiedOfferResponse(
     Guid OfferId,
@@ -386,3 +389,20 @@ public sealed record SaveStoreConnectionRequest(string ProviderKey, string Displ
 
 public sealed record AiAnalyzeRequest(string SubjectType, Guid SubjectId, string Kind);
 public sealed record AiAnalyzeResponse(string Result, bool UsedAi);
+
+public sealed record AiProviderStatusDto(
+    string Provider,
+    string? MaskedApiKey,
+    string DefaultModel,
+    bool IsActive,
+    bool Configured,
+    string? Source);
+
+public sealed record SaveAiProviderRequest(
+    string Provider,
+    string ApiKey,
+    string DefaultModel,
+    bool IsActive = true);
+
+public sealed record TestAiProviderRequest(string Provider, string ApiKey, string? DefaultModel = null);
+public sealed record AiConnectionTestDto(bool Success, string Message);

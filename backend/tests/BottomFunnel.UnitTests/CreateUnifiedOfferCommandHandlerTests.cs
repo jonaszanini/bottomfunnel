@@ -39,6 +39,31 @@ public class CreateUnifiedOfferCommandHandlerTests
         var offer = await db.Offers.SingleAsync();
         offer.Id.Should().Be(result.OfferId);
         offer.PayoutAmountCad.Should().Be(110.4m);
+        offer.ProviderKey.Should().Be("manual");
+    }
+
+    [Fact]
+    public async Task Maps_provider_hop_and_affiliate_page_without_new_columns()
+    {
+        var (handler, db, _) = Create();
+        var result = await handler.HandleAsync(new CreateUnifiedOfferRequest(
+            "ProDentim",
+            "Health",
+            "prodentim",
+            PayoutAmount: 165.68m,
+            Currency: "USD",
+            BaseAffiliateUrl: "https://prodentim.jzanini.hop.clickbank.net/",
+            AffiliatePageUrl: "https://www.prodentim.com/affiliates",
+            ProviderKey: "clickbank"), CancellationToken.None);
+
+        var offer = await db.Offers.SingleAsync(x => x.Id == result.OfferId);
+        offer.ProviderKey.Should().Be("clickbank");
+        offer.AffiliateUrl.Should().Be("https://prodentim.jzanini.hop.clickbank.net/");
+        offer.ExternalVendorId.Should().Be("prodentim");
+        var merchant = await db.Merchants.SingleAsync();
+        merchant.Name.Should().Be("prodentim");
+        merchant.Website.Should().Be("https://www.prodentim.com/affiliates");
+        merchant.ProviderKey.Should().Be("clickbank");
     }
 
     [Fact]

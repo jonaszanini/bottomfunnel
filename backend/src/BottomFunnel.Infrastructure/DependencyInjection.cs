@@ -1,4 +1,5 @@
 using BottomFunnel.Application.Abstractions;
+using BottomFunnel.Infrastructure.Ai;
 using BottomFunnel.Application.Persistence;
 using BottomFunnel.Application.Stores;
 using BottomFunnel.Infrastructure.Currency;
@@ -53,6 +54,14 @@ public static class DependencyInjection
             client.BaseAddress = new Uri("https://www.digistore24.com/api/call/");
         });
         services.AddHttpClient("openai");
+        services.AddHttpClient("anthropic", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
+        services.AddHttpClient("gemini", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
 
         services.AddSingleton<IStoreConnector, ClickBankConnector>();
         services.AddSingleton<IStoreConnector, Digistore24Connector>();
@@ -65,14 +74,9 @@ public static class DependencyInjection
         var storageRoot = configuration["Storage:Root"] ?? Path.Combine(AppContext.BaseDirectory, "storage");
         services.AddSingleton<IObjectStorage>(_ => new LocalFileStorage(storageRoot));
 
-        services.AddSingleton<IAiService>(sp =>
-        {
-            var factory = sp.GetRequiredService<IHttpClientFactory>();
-            var apiKey = configuration["Ai:ApiKey"];
-            var model = configuration["Ai:Model"] ?? "gpt-4o-mini";
-            var baseUrl = configuration["Ai:BaseUrl"] ?? "https://api.openai.com/v1";
-            return new OpenAiCompatibleService(factory, apiKey, model, baseUrl);
-        });
+        services.AddScoped<AiConfigurationService>();
+        services.AddScoped<IAiConfigurationService>(sp => sp.GetRequiredService<AiConfigurationService>());
+        services.AddScoped<IAiService, OrganizationAiService>();
 
         return services;
     }

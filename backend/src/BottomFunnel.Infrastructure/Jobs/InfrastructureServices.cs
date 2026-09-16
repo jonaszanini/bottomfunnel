@@ -77,11 +77,12 @@ public sealed class OpenAiCompatibleService : IAiService
         _baseUrl = baseUrl.TrimEnd('/');
     }
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_apiKey);
+    public Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(!string.IsNullOrWhiteSpace(_apiKey));
 
     public async Task<string> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default)
     {
-        if (!IsConfigured)
+        if (string.IsNullOrWhiteSpace(_apiKey))
             throw new InvalidOperationException("AI is not configured.");
 
         var client = _httpClientFactory.CreateClient("openai");

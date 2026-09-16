@@ -41,3 +41,21 @@ public sealed class SaveStoreConnectionRequestValidator : AbstractValidator<Save
         RuleFor(x => x.Credentials).NotNull();
     }
 }
+
+public sealed class SaveAiProviderRequestValidator : AbstractValidator<SaveAiProviderRequest>
+{
+    public SaveAiProviderRequestValidator()
+    {
+        RuleFor(x => x.Provider).NotEmpty();
+        RuleFor(x => x.DefaultModel).NotEmpty().MaximumLength(120);
+        RuleFor(x => x.ApiKey).MaximumLength(4000);
+    }
+}
+
+public sealed class TestAiProviderRequestValidator : AbstractValidator<TestAiProviderRequest>
+{
+    public TestAiProviderRequestValidator()
+    {
+        RuleFor(x => x.Provider).NotEmpty();
+    }
+}

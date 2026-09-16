@@ -1,9 +1,19 @@
+using BottomFunnel.Application.Dtos;
+
 namespace BottomFunnel.Application.Abstractions;
 
 public interface IAiService
 {
-    bool IsConfigured { get; }
+    Task<bool> IsConfiguredAsync(CancellationToken cancellationToken = default);
     Task<string> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken = default);
+}
+
+public interface IAiConfigurationService
+{
+    Task<string?> GetApiKeyAsync(string provider, CancellationToken ct = default);
+    Task SaveApiKeyAsync(string provider, string rawApiKey, string defaultModel, CancellationToken ct = default);
+    Task<bool> TestConnectionAsync(string provider, string rawApiKey, CancellationToken ct = default);
+    Task<IReadOnlyList<AiProviderStatusDto>> ListAsync(CancellationToken ct = default);
 }
 
 public interface IObjectStorage
