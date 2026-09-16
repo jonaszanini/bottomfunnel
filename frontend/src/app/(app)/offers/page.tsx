@@ -81,6 +81,7 @@ export default function OffersPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Offers</h1>
+      <p className="text-sm text-zinc-500">Each ClickBank product has its own vendor nickname. Paste that hop link here — not on Networks.</p>
       <form onSubmit={onSubmit} className="grid gap-3 rounded border border-zinc-800 p-4 md:grid-cols-3">
         <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>
         <Field label="Product">
@@ -94,7 +95,9 @@ export default function OffersPage() {
             {merchants.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </Select>
         </Field>
-        <Field label="Affiliate URL"><Input value={form.affiliateUrl} onChange={(e) => setForm({ ...form, affiliateUrl: e.target.value })} /></Field>
+        <Field label="Affiliate URL">
+          <Input value={form.affiliateUrl} onChange={(e) => setForm({ ...form, affiliateUrl: e.target.value })} placeholder="https://vendor.jzanini.hop.clickbank.net/" />
+        </Field>
         <Field label="Commission"><Input type="number" step="0.01" value={form.commission} onChange={(e) => setForm({ ...form, commission: e.target.value })} /></Field>
         <div className="flex items-end"><Button type="submit">Add offer</Button></div>
       </form>

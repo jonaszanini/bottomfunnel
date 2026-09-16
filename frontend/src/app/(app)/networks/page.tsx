@@ -47,7 +47,10 @@ export default function NetworksPage() {
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Networks</h1>
-      <p className="text-sm text-zinc-500">Connect ClickBank or Digistore24. A new store is a backend connector plus this same form.</p>
+      <p className="text-sm text-zinc-500">
+        Connect your account here (API key + your nickname). Vendor/site nicknames are per product — paste each hop link on Offers.
+        ClickBank &quot;Seller site nickname&quot; is only if you sell on ClickBank and want to sync your own catalog.
+      </p>
       <div className="flex gap-2">
         {providers.map((p) => (
           <button

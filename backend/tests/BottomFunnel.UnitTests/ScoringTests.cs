@@ -1,3 +1,4 @@
+using BottomFunnel.Application.Stores;
 using BottomFunnel.Domain.Compliance;
 using BottomFunnel.Domain.Entities;
 using BottomFunnel.Domain.Enums;
@@ -237,6 +238,30 @@ public class StoreConnectorMappingTests
     }
 
     [Fact]
+    public void Hop_link_uses_the_offer_vendor_not_a_connection_site()
+    {
+        var connector = new ClickBankConnector(new UnusedHttpClientFactory());
+        var url = connector.BuildTrackedAffiliateUrl(
+            new CanonicalOfferContext("clickbank", "1", "coolprod", null, null),
+            "click-1",
+            new Dictionary<string, string> { ["affiliateNickname"] = "jzanini", ["siteNickname"] = "mysite" });
+
+        url.Should().Be("https://coolprod.jzanini.hop.clickbank.net/?item=1&tid=click-1");
+    }
+
+    [Fact]
+    public void Hop_link_uses_pasted_affiliate_url()
+    {
+        var connector = new ClickBankConnector(new UnusedHttpClientFactory());
+        var url = connector.BuildTrackedAffiliateUrl(
+            new CanonicalOfferContext("clickbank", "1", "other", "https://alpha.jzanini.hop.clickbank.net/", null),
+            "click-1",
+            new Dictionary<string, string> { ["affiliateNickname"] = "jzanini" });
+
+        url.Should().Be("https://alpha.jzanini.hop.clickbank.net/?tid=click-1");
+    }
+
+    [Fact]
     public void Maps_digistore24_product_list()
     {
         const string json = """
@@ -260,4 +285,9 @@ public class StoreConnectorMappingTests
         products[0].Commission.Should().Be(40);
         products[0].Currency.Should().Be("EUR");
     }
+}
+
+file sealed class UnusedHttpClientFactory : IHttpClientFactory
+{
+    public HttpClient CreateClient(string name) => throw new NotSupportedException();
 }

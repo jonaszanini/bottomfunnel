@@ -21,25 +21,35 @@ public sealed class ClickBankConnector : IStoreConnector
     public IReadOnlyList<CredentialField> CredentialSchema { get; } =
     [
         new("apiKey", "API key", true, true, "API-..."),
-        new("siteNickname", "Site nickname", false, true, "YOURSITE"),
-        new("affiliateNickname", "Affiliate nickname", false, true, "youraff"),
-        new("insSecret", "INS secret", true, false)
+        new("affiliateNickname", "Affiliate nickname", false, true, "jzanini"),
+        new("insSecret", "INS secret", true, false),
+        new("siteNickname", "Seller site nickname (optional)", false, false, "only if you sell on ClickBank")
     ];
 
     public async Task TestConnectionAsync(IReadOnlyDictionary<string, string> credentials, CancellationToken cancellationToken)
     {
-        var products = await ListProductsAsync(credentials, cancellationToken);
-        _ = products;
+        if (!credentials.TryGetValue("affiliateNickname", out var affiliate) || string.IsNullOrWhiteSpace(affiliate))
+            throw new InvalidOperationException("Affiliate nickname is required.");
+
+        var url = $"orders2/count?role=AFFILIATE&affiliate={Uri.EscapeDataString(affiliate)}";
+        var (status, body) = await SendAsync(credentials, url, cancellationToken);
+        if (status is >= 200 and < 300)
+            return;
+
+        throw new InvalidOperationException(status == 403
+            ? "ClickBank returned 403. In ClickBank open Settings → API Management, agree to the API contract, keep the key Active, and grant Orders/Tickets API Read to nickname jzanini (or All Accounts)."
+            : $"ClickBank connection failed ({status}): {body}");
     }
 
     public async Task<IReadOnlyList<CanonicalProduct>> ListProductsAsync(IReadOnlyDictionary<string, string> credentials, CancellationToken cancellationToken)
     {
-        var site = credentials["siteNickname"];
-        var client = CreateClient(credentials);
-        using var response = await client.GetAsync($"products/list?site={Uri.EscapeDataString(site)}", cancellationToken);
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"ClickBank list failed ({(int)response.StatusCode}): {json}");
+        if (!credentials.TryGetValue("siteNickname", out var site) || string.IsNullOrWhiteSpace(site))
+            throw new InvalidOperationException(
+                "ClickBank product sync is for seller catalogs only. Affiliates should leave Site nickname blank and paste each product's hop link on Offers.");
+
+        var (status, json) = await SendAsync(credentials, $"products/list?site={Uri.EscapeDataString(site)}", cancellationToken);
+        if (status is < 200 or >= 300)
+            throw new InvalidOperationException($"ClickBank list failed ({status}): {json}");
 
         return MapProducts(json);
     }
@@ -210,17 +220,36 @@ public sealed class ClickBankConnector : IStoreConnector
         return null;
     }
 
-    private HttpClient CreateClient(IReadOnlyDictionary<string, string> credentials)
+    // ClickBank still accepts the legacy DEV:API header; the captain DEV key is their documented stand-in.
+    private const string CaptainDevKey = "DEV-123456789012345678901234567890123456";
+
+    private async Task<(int Status, string Body)> SendAsync(
+        IReadOnlyDictionary<string, string> credentials,
+        string relativeUrl,
+        CancellationToken cancellationToken)
     {
-        var client = _httpClientFactory.CreateClient("clickbank");
-        var key = credentials["apiKey"].StartsWith("API-", StringComparison.OrdinalIgnoreCase)
-            ? credentials["apiKey"]
-            : $"API-{credentials["apiKey"]}";
-        client.DefaultRequestHeaders.Remove("Authorization");
-        client.DefaultRequestHeaders.TryAddWithoutValidation("Authorization", key);
-        client.DefaultRequestHeaders.Remove("Accept");
-        client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
-        return client;
+        var clerkKey = NormalizeClerkKey(credentials["apiKey"]);
+        foreach (var authorization in new[] { clerkKey, $"{CaptainDevKey}:{clerkKey}" })
+        {
+            var client = _httpClientFactory.CreateClient("clickbank");
+            using var request = new HttpRequestMessage(HttpMethod.Get, relativeUrl);
+            request.Headers.TryAddWithoutValidation("Authorization", authorization);
+            request.Headers.TryAddWithoutValidation("Accept", "application/json");
+            using var response = await client.SendAsync(request, cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            if ((int)response.StatusCode is >= 200 and < 300 or not 403)
+                return ((int)response.StatusCode, body);
+        }
+
+        return (403, "Access is denied.");
+    }
+
+    private static string NormalizeClerkKey(string apiKey)
+    {
+        apiKey = apiKey.Trim();
+        if (apiKey.Contains(':', StringComparison.Ordinal))
+            return apiKey;
+        return apiKey.StartsWith("API-", StringComparison.OrdinalIgnoreCase) ? apiKey : $"API-{apiKey}";
     }
 
     private static string AppendTid(string url, string clickId) =>
