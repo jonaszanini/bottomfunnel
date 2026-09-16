@@ -41,6 +41,14 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
     {
         base.OnModelCreating(builder);
 
+        foreach (var property in builder.Model.GetEntityTypes()
+                     .SelectMany(type => type.GetProperties())
+                     .Where(property => property.ClrType == typeof(decimal) || property.ClrType == typeof(decimal?)))
+        {
+            property.SetPrecision(18);
+            property.SetScale(4);
+        }
+
         builder.Entity<Organization>().Property(x => x.Name).HasMaxLength(200).IsRequired();
         builder.Entity<OrganizationMember>().HasIndex(x => new { x.OrganizationId, x.UserId }).IsUnique();
         builder.Entity<OrganizationMember>()
@@ -51,9 +59,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
         builder.Entity<Merchant>().HasIndex(x => new { x.OrganizationId, x.Name });
         builder.Entity<Product>().HasIndex(x => new { x.OrganizationId, x.ProviderKey, x.ExternalProductId });
         builder.Entity<Offer>().HasIndex(x => new { x.OrganizationId, x.ProviderKey, x.ExternalProductId });
-        builder.Entity<Offer>().Property(x => x.Commission).HasPrecision(18, 4);
-        builder.Entity<Offer>().Property(x => x.RecurringCommission).HasPrecision(18, 4);
-        builder.Entity<Offer>().Property(x => x.AverageOrderValue).HasPrecision(18, 4);
         builder.Entity<Offer>()
             .HasOne(x => x.Product)
             .WithMany(x => x.Offers)
@@ -75,18 +80,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
             .WithOne(x => x.Keyword)
             .HasForeignKey<KeywordMetric>(x => x.KeywordId);
 
-        builder.Entity<KeywordMetric>().Property(x => x.EstimatedCpc).HasPrecision(18, 4);
-        builder.Entity<KeywordMetric>().Property(x => x.OtherCostsPerClick).HasPrecision(18, 4);
-
         builder.Entity<KeywordOpportunity>().HasIndex(x => new { x.OrganizationId, x.KeywordId, x.OfferId }).IsUnique();
-        builder.Entity<KeywordOpportunity>().Property(x => x.ExpectedRevenuePerClick).HasPrecision(18, 4);
-        builder.Entity<KeywordOpportunity>().Property(x => x.ExpectedProfitPerClick).HasPrecision(18, 4);
-        builder.Entity<KeywordOpportunity>().Property(x => x.ExpectedProfitConservative).HasPrecision(18, 4);
-        builder.Entity<KeywordOpportunity>().Property(x => x.ExpectedProfitBase).HasPrecision(18, 4);
-        builder.Entity<KeywordOpportunity>().Property(x => x.ExpectedProfitOptimistic).HasPrecision(18, 4);
-        builder.Entity<KeywordOpportunity>().Property(x => x.EstimatedConversionRate).HasPrecision(18, 6);
-        builder.Entity<KeywordOpportunity>().Property(x => x.EstimatedCpc).HasPrecision(18, 4);
-        builder.Entity<KeywordOpportunity>().Property(x => x.Commission).HasPrecision(18, 4);
 
         builder.Entity<ComplianceRestriction>()
             .HasOne(x => x.Merchant)
@@ -120,11 +114,6 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
         builder.Entity<LandingPage>().HasIndex(x => new { x.OrganizationId, x.Slug }).IsUnique();
 
         builder.Entity<Click>().HasIndex(x => x.TrackingCode);
-        builder.Entity<Conversion>().Property(x => x.Amount).HasPrecision(18, 4);
-        builder.Entity<Conversion>().Property(x => x.Commission).HasPrecision(18, 4);
-        builder.Entity<Cost>().Property(x => x.Amount).HasPrecision(18, 4);
-        builder.Entity<CommissionLedger>().Property(x => x.Amount).HasPrecision(18, 4);
-
         builder.Entity<StoreConnection>().HasIndex(x => new { x.OrganizationId, x.ProviderKey }).IsUnique();
         builder.Entity<BackgroundJob>().HasIndex(x => new { x.Status, x.CreatedAt });
     }

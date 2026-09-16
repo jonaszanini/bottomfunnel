@@ -5,6 +5,7 @@ using BottomFunnel.Application.Persistence;
 using BottomFunnel.Application.Stores;
 using BottomFunnel.Domain.Entities;
 using BottomFunnel.Domain.Enums;
+using BottomFunnel.Domain.Scoring;
 using Microsoft.EntityFrameworkCore;
 
 namespace BottomFunnel.Application.Services;
@@ -16,19 +17,22 @@ public class StoreConnectionService
     private readonly IStoreConnectorRegistry _registry;
     private readonly ICredentialProtector _protector;
     private readonly IJobQueue _jobs;
+    private readonly ICurrencyExchangeService _fx;
 
     public StoreConnectionService(
         IAppDbContext db,
         ICurrentUser current,
         IStoreConnectorRegistry registry,
         ICredentialProtector protector,
-        IJobQueue jobs)
+        IJobQueue jobs,
+        ICurrencyExchangeService fx)
     {
         _db = db;
         _current = current;
         _registry = registry;
         _protector = protector;
         _jobs = jobs;
+        _fx = fx;
     }
 
     private Guid OrgId => _current.OrganizationId;
@@ -173,6 +177,8 @@ public class StoreConnectionService
             offer.RecurringCommission = item.RecurringCommission;
             offer.AverageOrderValue = item.AverageOrderValue ?? item.Price;
             offer.Currency = item.Currency;
+            offer.ExchangeRateUsed = await _fx.GetExchangeRateAsync(string.IsNullOrWhiteSpace(item.Currency) ? "USD" : item.Currency, "CAD", ct);
+            offer.PayoutAmountCad = ProfitabilityCalculator.RoundMoney(item.Commission * offer.ExchangeRateUsed);
             offer.Country = item.Country;
             offer.Category = item.Category;
             offer.Status = item.Status;

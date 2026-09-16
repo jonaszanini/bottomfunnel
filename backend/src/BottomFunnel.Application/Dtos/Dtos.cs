@@ -90,6 +90,8 @@ public sealed record OfferDto(
     string Name,
     string? AffiliateUrl,
     decimal Commission,
+    decimal PayoutAmountCad,
+    decimal ExchangeRateUsed,
     CommissionType CommissionType,
     decimal? RecurringCommission,
     decimal? AverageOrderValue,
@@ -136,6 +138,30 @@ public sealed record UpsertOfferRequest(
     string? AdRestrictions = null,
     string? LandingPageRestrictions = null,
     string? PolicyNotes = null);
+
+public sealed record CreateUnifiedOfferRequest(
+    string ProductName,
+    string? Category,
+    string MerchantName,
+    bool BrandBiddingAllowed = false,
+    bool DirectLinkingAllowed = false,
+    bool PpcAllowed = true,
+    decimal PayoutAmount = 0,
+    string Currency = "USD",
+    decimal? ExchangeRateOverride = null,
+    CommissionType CommissionType = CommissionType.OneTime,
+    string? AffiliateUrl = null);
+
+public sealed record CreateUnifiedOfferResponse(
+    Guid OfferId,
+    Guid ProductId,
+    Guid MerchantId,
+    decimal PayoutAmount,
+    decimal PayoutAmountCad,
+    decimal ExchangeRateUsed,
+    string Currency);
+
+public sealed record CurrencyRateDto(string From, string To, decimal Rate);
 
 public sealed record KeywordDto(
     Guid Id,

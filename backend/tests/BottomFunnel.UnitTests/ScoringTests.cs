@@ -123,6 +123,30 @@ public class OpportunityScoringTests
             .Should().Be(OpportunityRecommendation.Investigate);
     }
 
+    [Fact]
+    public void Cad_payout_drives_expected_revenue_and_profit()
+    {
+        const decimal usdPayout = 80m;
+        const decimal usdCad = 1.38m;
+        var cadPayout = usdPayout * usdCad;
+
+        var usd = OpportunityScoringEngine.Score(new OpportunityScoreInputs(
+            100, usdPayout, 0.04m, 1.50m, 0, CompetitionLevel.Medium,
+            SearchVolume: 2500, VolumeConfidence: DataConfidence.High,
+            LowVolumeRisk: LowSearchVolumeRisk.Low,
+            ComplianceState: ComplianceState.Verified));
+        var cad = OpportunityScoringEngine.Score(new OpportunityScoreInputs(
+            100, cadPayout, 0.04m, 1.50m, 0, CompetitionLevel.Medium,
+            SearchVolume: 2500, VolumeConfidence: DataConfidence.High,
+            LowVolumeRisk: LowSearchVolumeRisk.Low,
+            ComplianceState: ComplianceState.Verified));
+
+        cad.ExpectedRevenuePerClick.Should().Be(4.416m);
+        cad.ExpectedProfitPerClick.Should().Be(2.916m);
+        cad.ExpectedRevenuePerClick.Should().BeGreaterThan(usd.ExpectedRevenuePerClick);
+        cad.ExpectedProfitPerClick.Should().BeGreaterThan(usd.ExpectedProfitPerClick);
+    }
+
     private static OpportunityScoreResult ScoreHappyPath() =>
         OpportunityScoring.Score(new OpportunityScoreInputs(
             IntentScore: 100,

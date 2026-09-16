@@ -1,5 +1,6 @@
 using BottomFunnel.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 
 namespace BottomFunnel.Application.Persistence;
 
@@ -29,6 +30,7 @@ public interface IAppDbContext
     DbSet<BackgroundJob> BackgroundJobs { get; }
     DbSet<VisitorSession> VisitorSessions { get; }
     DbSet<Visit> Visits { get; }
+    DatabaseFacade Database { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

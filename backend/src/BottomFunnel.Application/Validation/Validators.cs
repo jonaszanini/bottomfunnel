@@ -14,6 +14,17 @@ public sealed class UpsertOfferRequestValidator : AbstractValidator<UpsertOfferR
     }
 }
 
+public sealed class CreateUnifiedOfferRequestValidator : AbstractValidator<CreateUnifiedOfferRequest>
+{
+    public CreateUnifiedOfferRequestValidator()
+    {
+        RuleFor(x => x.ProductName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.MerchantName).NotEmpty().MaximumLength(200);
+        RuleFor(x => x.PayoutAmount).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.Currency).NotEmpty().Length(3);
+    }
+}
+
 public sealed class UpsertProductRequestValidator : AbstractValidator<UpsertProductRequest>
 {
     public UpsertProductRequestValidator()

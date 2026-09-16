@@ -1,6 +1,7 @@
 using BottomFunnel.Application.Abstractions;
 using BottomFunnel.Application.Persistence;
 using BottomFunnel.Application.Stores;
+using BottomFunnel.Infrastructure.Currency;
 using BottomFunnel.Infrastructure.Identity;
 using BottomFunnel.Infrastructure.Jobs;
 using BottomFunnel.Infrastructure.Persistence;
@@ -36,6 +37,13 @@ public static class DependencyInjection
             .AddDefaultTokenProviders();
 
         services.AddDataProtection();
+        services.AddMemoryCache();
+        services.AddHttpClient("bankofcanada", client =>
+        {
+            client.BaseAddress = new Uri("https://www.bankofcanada.ca/");
+            client.Timeout = TimeSpan.FromSeconds(5);
+        });
+        services.AddSingleton<ICurrencyExchangeService, BankOfCanadaCurrencyService>();
         services.AddHttpClient("clickbank", client =>
         {
             client.BaseAddress = new Uri("https://api.clickbank.com/rest/1.3/");

@@ -22,6 +22,11 @@ public interface IGoogleAdsClient
     Task ImportSpendCsvAsync(Guid organizationId, Stream csv, CancellationToken cancellationToken = default);
 }
 
+public interface ICurrencyExchangeService
+{
+    Task<decimal> GetExchangeRateAsync(string fromCurrency, string toCurrency, CancellationToken ct = default);
+}
+
 public sealed record CurrentUser(string UserId, string Email, Guid OrganizationId, string Role);
 
 public interface ICurrentUser

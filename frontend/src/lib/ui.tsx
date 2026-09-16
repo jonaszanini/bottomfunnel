@@ -60,8 +60,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function money(n?: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n ?? 0);
+export function money(n?: number, currency = "USD") {
+  return new Intl.NumberFormat("en-CA", { style: "currency", currency }).format(n ?? 0);
 }
 
 export function Table({ children }: { children: React.ReactNode }) {

@@ -78,6 +78,8 @@ public class Offer : OrgEntity
     public string? AffiliateUrl { get; set; }
     public string? AffiliateUrlTemplate { get; set; }
     public decimal Commission { get; set; }
+    public decimal PayoutAmountCad { get; set; }
+    public decimal ExchangeRateUsed { get; set; }
     public CommissionType CommissionType { get; set; } = CommissionType.OneTime;
     public decimal? RecurringCommission { get; set; }
     public decimal? AverageOrderValue { get; set; }

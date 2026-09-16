@@ -3,6 +3,7 @@ using BottomFunnel.Application.Dtos;
 using BottomFunnel.Application.Persistence;
 using BottomFunnel.Domain.Compliance;
 using BottomFunnel.Domain.Entities;
+using BottomFunnel.Domain.Scoring;
 using Microsoft.EntityFrameworkCore;
 
 namespace BottomFunnel.Application.Services;
@@ -11,11 +12,13 @@ public class CatalogService
 {
     private readonly IAppDbContext _db;
     private readonly ICurrentUser _current;
+    private readonly ICurrencyExchangeService _fx;
 
-    public CatalogService(IAppDbContext db, ICurrentUser current)
+    public CatalogService(IAppDbContext db, ICurrentUser current, ICurrencyExchangeService fx)
     {
         _db = db;
         _current = current;
+        _fx = fx;
     }
 
     private Guid OrgId => _current.OrganizationId;
@@ -125,6 +128,7 @@ public class CatalogService
     {
         await GetProduct(request.ProductId, ct);
         var entity = MapOffer(new Offer { OrganizationId = OrgId }, request);
+        await ApplyCadAsync(entity, ct);
         _db.Offers.Add(entity);
         await _db.SaveChangesAsync(ct);
         return await GetOfferAsync(entity.Id, ct);
@@ -135,6 +139,7 @@ public class CatalogService
         var entity = await _db.Offers.FirstOrDefaultAsync(x => x.Id == id && x.OrganizationId == OrgId, ct)
                      ?? throw new KeyNotFoundException("Offer not found.");
         MapOffer(entity, request);
+        await ApplyCadAsync(entity, ct);
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync(ct);
         return await GetOfferAsync(entity.Id, ct);
@@ -182,6 +187,7 @@ public class CatalogService
         var restrictions = x.Restrictions.Concat(x.Merchant?.Restrictions ?? []).ToList();
         return new OfferDto(
             x.Id, x.ProductId, x.Product?.Name ?? "", x.MerchantId, x.Merchant?.Name, x.Name, x.AffiliateUrl, x.Commission,
+            x.PayoutAmountCad, x.ExchangeRateUsed,
             x.CommissionType, x.RecurringCommission, x.AverageOrderValue, x.Currency, x.Country, x.Category, x.Status,
             x.ProviderKey, x.ExternalProductId,
             x.PpcAllowed, x.BrandBiddingAllowed, x.BrandPlusModifierAllowed, x.CouponBiddingAllowed, x.DirectLinkingAllowed,
@@ -233,6 +239,13 @@ public class CatalogService
         entity.LandingPageRestrictions = request.LandingPageRestrictions;
         entity.PolicyNotes = request.PolicyNotes;
         return entity;
+    }
+
+    private async Task ApplyCadAsync(Offer entity, CancellationToken ct)
+    {
+        var currency = string.IsNullOrWhiteSpace(entity.Currency) ? "USD" : entity.Currency;
+        entity.ExchangeRateUsed = await _fx.GetExchangeRateAsync(currency, "CAD", ct);
+        entity.PayoutAmountCad = ProfitabilityCalculator.RoundMoney(entity.Commission * entity.ExchangeRateUsed);
     }
 }
 

@@ -93,6 +93,9 @@ public class OffersController : ControllerBase
     [HttpGet] public Task<IReadOnlyList<OfferDto>> List(CancellationToken ct) => _catalog.ListOffersAsync(ct);
     [HttpGet("{id:guid}")] public Task<OfferDto> Get(Guid id, CancellationToken ct) => _catalog.GetOfferAsync(id, ct);
     [HttpPost] public Task<OfferDto> Create(UpsertOfferRequest request, CancellationToken ct) => _catalog.CreateOfferAsync(request, ct);
+    [HttpPost("unified")]
+    public Task<CreateUnifiedOfferResponse> CreateUnified(CreateUnifiedOfferRequest request, CancellationToken ct, [FromServices] CreateUnifiedOfferCommandHandler handler) =>
+        handler.HandleAsync(request, ct);
     [HttpPut("{id:guid}")] public Task<OfferDto> Update(Guid id, UpsertOfferRequest request, CancellationToken ct) => _catalog.UpdateOfferAsync(id, request, ct);
     [HttpDelete("{id:guid}")] public async Task<IActionResult> Delete(Guid id, CancellationToken ct) { await _catalog.DeleteOfferAsync(id, ct); return NoContent(); }
 
@@ -349,5 +352,21 @@ public class WebhooksController : ControllerBase
 
         await _tracking.ApplyCanonicalConversionAsync(conversion, orgId.Value, ct);
         return Ok(new { ok = true });
+    }
+}
+
+[ApiController]
+[Authorize]
+[Route("api/currency")]
+public class CurrencyController : ControllerBase
+{
+    private readonly ICurrencyExchangeService _fx;
+    public CurrencyController(ICurrencyExchangeService fx) => _fx = fx;
+
+    [HttpGet("rate")]
+    public async Task<ActionResult<CurrencyRateDto>> Rate([FromQuery] string from = "USD", [FromQuery] string to = "CAD", CancellationToken ct = default)
+    {
+        var rate = await _fx.GetExchangeRateAsync(from, to, ct);
+        return new CurrencyRateDto(from.ToUpperInvariant(), to.ToUpperInvariant(), rate);
     }
 }

@@ -1,17 +1,48 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import { Offer, Product, Merchant } from "@/lib/types";
 import { RestrictionForm, RestrictionList } from "@/lib/compliance";
 import { Button, Checkbox, Field, Input, Select, Table, Td, Textarea, Th, money } from "@/lib/ui";
+
+const CATEGORIES = ["Health", "Software", "Education", "Finance", "Home", "Fitness", "Business", "Other"];
+
+type UnifiedCreated = {
+  offerId: string;
+  productId: string;
+  merchantId: string;
+  payoutAmount: number;
+  payoutAmountCad: number;
+  exchangeRateUsed: number;
+  currency: string;
+};
+
+const emptyForm = {
+  productName: "",
+  category: "Health",
+  merchantName: "",
+  brandBiddingAllowed: false,
+  directLinkingAllowed: false,
+  payoutAmount: "75",
+  currency: "USD",
+  exchangeRateOverride: "",
+  overrideRate: false,
+  commissionType: "OneTime",
+  affiliateUrl: "",
+};
 
 export default function OffersPage() {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [selected, setSelected] = useState("");
-  const [form, setForm] = useState({ name: "", productId: "", merchantId: "", affiliateUrl: "", commission: "75", currency: "USD" });
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [rate, setRate] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const [created, setCreated] = useState<UnifiedCreated | null>(null);
+  const [generating, setGenerating] = useState(false);
   const [override, setOverride] = useState({
     use: false, ppcAllowed: true, brandBiddingAllowed: false, brandPlusModifierAllowed: false,
     couponBiddingAllowed: false, directLinkingAllowed: false, policyNotes: "",
@@ -24,30 +55,80 @@ export default function OffersPage() {
       api<Merchant[]>("/merchants"),
     ]);
     setOffers(o); setProducts(p); setMerchants(m);
-    if (!form.productId && p[0]) setForm((f) => ({ ...f, productId: p[0].id }));
     if (!selected && o[0]) setSelected(o[0].id);
   }
   useEffect(() => { load().catch(console.error); }, []);
 
+  useEffect(() => {
+    if (!open || form.currency === "CAD") {
+      setRate(1);
+      return;
+    }
+    api<{ from: string; to: string; rate: number }>(`/api/currency/rate?from=${form.currency}&to=CAD`)
+      .then((r) => setRate(r.rate))
+      .catch(() => setRate(1.38));
+  }, [open, form.currency]);
+
   const offer = offers.find((x) => x.id === selected);
+  const categories = useMemo(() => Array.from(new Set([...CATEGORIES, ...products.map((p) => p.category).filter(Boolean) as string[]])), [products]);
+  const effectiveRate = form.overrideRate && Number(form.exchangeRateOverride) > 0 ? Number(form.exchangeRateOverride) : (rate ?? 1.38);
+  const convertedCad = Number(form.payoutAmount || 0) * (form.currency === "CAD" ? 1 : effectiveRate);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    await api("/offers", {
-      method: "POST",
-      body: JSON.stringify({
-        productId: form.productId,
-        merchantId: form.merchantId || null,
-        name: form.name,
-        affiliateUrl: form.affiliateUrl,
-        commission: Number(form.commission),
-        commissionType: "OneTime",
-        currency: form.currency,
-        status: "Active",
-      }),
+    setError("");
+    try {
+      const result = await api<UnifiedCreated>("/offers/unified", {
+        method: "POST",
+        body: JSON.stringify({
+          productName: form.productName,
+          category: form.category,
+          merchantName: form.merchantName,
+          brandBiddingAllowed: form.brandBiddingAllowed,
+          directLinkingAllowed: form.directLinkingAllowed,
+          payoutAmount: Number(form.payoutAmount),
+          currency: form.currency,
+          exchangeRateOverride: form.overrideRate && Number(form.exchangeRateOverride) > 0 ? Number(form.exchangeRateOverride) : null,
+          commissionType: form.commissionType,
+          affiliateUrl: form.affiliateUrl || null,
+        }),
+      });
+      setCreated(result);
+      await load();
+      setSelected(result.offerId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create offer");
+    }
+  }
+
+  async function generateKeywords() {
+    if (!created) return;
+    setGenerating(true);
+    setError("");
+    try {
+      await api(`/products/${created.productId}/keywords/generate`, { method: "POST" });
+      closeModal();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Keyword generation failed");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function closeModal() {
+    setOpen(false);
+    setCreated(null);
+    setError("");
+    setForm(emptyForm);
+  }
+
+  function onMerchantName(name: string) {
+    setForm((f) => {
+      const match = merchants.find((m) => m.name.toLowerCase() === name.toLowerCase());
+      return match
+        ? { ...f, merchantName: name, brandBiddingAllowed: match.brandBiddingAllowed, directLinkingAllowed: match.directLinkingAllowed }
+        : { ...f, merchantName: name };
     });
-    setForm((f) => ({ ...f, name: "", affiliateUrl: "" }));
-    await load();
   }
 
   async function saveOverride() {
@@ -80,35 +161,23 @@ export default function OffersPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Offers</h1>
-      <p className="text-sm text-zinc-500">Each ClickBank product has its own vendor nickname. Paste that hop link here — not on Networks.</p>
-      <form onSubmit={onSubmit} className="grid gap-3 rounded border border-zinc-800 p-4 md:grid-cols-3">
-        <Field label="Name"><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></Field>
-        <Field label="Product">
-          <Select value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })}>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Merchant">
-          <Select value={form.merchantId} onChange={(e) => setForm({ ...form, merchantId: e.target.value })}>
-            <option value="">None</option>
-            {merchants.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </Select>
-        </Field>
-        <Field label="Affiliate URL">
-          <Input value={form.affiliateUrl} onChange={(e) => setForm({ ...form, affiliateUrl: e.target.value })} placeholder="https://vendor.jzanini.hop.clickbank.net/" />
-        </Field>
-        <Field label="Commission"><Input type="number" step="0.01" value={form.commission} onChange={(e) => setForm({ ...form, commission: e.target.value })} /></Field>
-        <div className="flex items-end"><Button type="submit">Add offer</Button></div>
-      </form>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Offers</h1>
+          <p className="text-sm text-zinc-500">Create product, merchant, and payout in one step. Economics are scored in CAD$.</p>
+        </div>
+        <Button type="button" onClick={() => { setCreated(null); setOpen(true); }}>New Offer</Button>
+      </div>
       <Table>
-        <thead><tr><Th>Offer</Th><Th>Product</Th><Th>Commission</Th><Th>Compliance</Th><Th>Status</Th></tr></thead>
+        <thead><tr><Th>Offer</Th><Th>Product</Th><Th>Merchant</Th><Th>Payout</Th><Th>CAD$</Th><Th>Compliance</Th><Th>Status</Th></tr></thead>
         <tbody>
           {offers.map((o) => (
             <tr key={o.id} onClick={() => setSelected(o.id)} className={selected === o.id ? "bg-zinc-900" : "cursor-pointer"}>
               <Td>{o.name}</Td>
               <Td>{o.productName}</Td>
-              <Td>{money(o.commission)}</Td>
+              <Td>{o.merchantName ?? "—"}</Td>
+              <Td>{money(o.commission, o.currency || "USD")}</Td>
+              <Td>{money(o.payoutAmountCad, "CAD")}</Td>
               <Td className={o.overallCompliance === "Prohibited" ? "text-red-400" : ""}>{o.overallCompliance}</Td>
               <Td>{o.status}</Td>
             </tr>
@@ -142,6 +211,91 @@ export default function OffersPage() {
           <RestrictionList items={offer.restrictions ?? []} onChanged={load} />
           <RestrictionForm path={`/offers/${offer.id}/restrictions`} onSaved={load} />
         </section>
+      ) : null}
+
+      {open ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-auto rounded border border-zinc-800 bg-zinc-950 p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">{created ? "Offer created" : "New Offer"}</h2>
+              <button type="button" className="text-sm text-zinc-500 hover:text-zinc-300" onClick={closeModal}>Close</button>
+            </div>
+            {created ? (
+              <div className="space-y-4">
+                <p className="text-sm text-zinc-300">
+                  Payout {money(created.payoutAmount, created.currency)} → <span className="text-emerald-400">{money(created.payoutAmountCad, "CAD")}</span>
+                  {" "}at {created.exchangeRateUsed.toFixed(4)}.
+                </p>
+                {error ? <p className="text-sm text-red-400">{error}</p> : null}
+                <Button type="button" onClick={generateKeywords} disabled={generating}>
+                  {generating ? "Generating…" : "Generate Keywords & Score"}
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={onSubmit} className="space-y-4">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Field label="Product name">
+                    <Input list="product-names" value={form.productName} onChange={(e) => setForm({ ...form, productName: e.target.value })} required />
+                    <datalist id="product-names">{products.map((p) => <option key={p.id} value={p.name} />)}</datalist>
+                  </Field>
+                  <Field label="Category">
+                    <Input list="categories" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+                    <datalist id="categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
+                  </Field>
+                </div>
+                <Field label="Merchant name">
+                  <Input list="merchant-names" value={form.merchantName} onChange={(e) => onMerchantName(e.target.value)} required />
+                  <datalist id="merchant-names">{merchants.map((m) => <option key={m.id} value={m.name} />)}</datalist>
+                </Field>
+                <div className="flex flex-wrap gap-4">
+                  <Checkbox label="Brand bidding allowed" checked={form.brandBiddingAllowed} onChange={(e) => setForm({ ...form, brandBiddingAllowed: e.target.checked })} />
+                  <Checkbox label="Direct linking allowed" checked={form.directLinkingAllowed} onChange={(e) => setForm({ ...form, directLinkingAllowed: e.target.checked })} />
+                </div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Field label="Payout amount">
+                    <Input type="number" step="0.01" min="0" value={form.payoutAmount} onChange={(e) => setForm({ ...form, payoutAmount: e.target.value })} required />
+                  </Field>
+                  <Field label="Currency">
+                    <Select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+                      <option value="USD">USD</option>
+                      <option value="CAD">CAD</option>
+                      <option value="EUR">EUR</option>
+                    </Select>
+                  </Field>
+                  <Field label="Commission type">
+                    <Select value={form.commissionType} onChange={(e) => setForm({ ...form, commissionType: e.target.value })}>
+                      <option value="OneTime">OneTime</option>
+                      <option value="Recurring">Recurring</option>
+                    </Select>
+                  </Field>
+                </div>
+                {form.currency !== "CAD" ? (
+                  <div className="rounded border border-zinc-800 bg-zinc-900 px-3 py-2 text-sm text-emerald-400">
+                    ≈ CAD$ {convertedCad.toFixed(2)} (Rate: {effectiveRate.toFixed(4)})
+                  </div>
+                ) : null}
+                {form.currency !== "CAD" ? (
+                  <div className="space-y-2">
+                    <Checkbox label="Override exchange rate" checked={form.overrideRate} onChange={(e) => setForm({ ...form, overrideRate: e.target.checked })} />
+                    {form.overrideRate ? (
+                      <Field label="CAD per 1 unit of payout currency">
+                        <Input type="number" step="0.0001" min="0" value={form.exchangeRateOverride} onChange={(e) => setForm({ ...form, exchangeRateOverride: e.target.value })} />
+                      </Field>
+                    ) : null}
+                  </div>
+                ) : null}
+                <Field label="Affiliate hop link / tracking URL">
+                  <Input value={form.affiliateUrl} onChange={(e) => setForm({ ...form, affiliateUrl: e.target.value })} placeholder="https://vendor.jzanini.hop.clickbank.net/" />
+                </Field>
+                {error ? <p className="text-sm text-red-400">{error}</p> : null}
+                <div className="flex justify-end gap-2">
+                  <button type="button" className="rounded px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200" onClick={closeModal}>Cancel</button>
+                  <Button type="submit">Create offer</Button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
       ) : null}
     </div>
   );

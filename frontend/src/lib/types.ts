@@ -34,7 +34,8 @@ export type Product = {
 
 export type Offer = {
   id: string; productId: string; productName: string; merchantId?: string; merchantName?: string;
-  name: string; affiliateUrl?: string; commission: number; commissionType: string;
+  name: string; affiliateUrl?: string; commission: number; payoutAmountCad: number; exchangeRateUsed: number;
+  commissionType: string;
   recurringCommission?: number; averageOrderValue?: number; currency: string; country?: string;
   category?: string; status: string; providerKey: string; externalProductId?: string;
   ppcAllowed?: boolean | null; brandBiddingAllowed?: boolean | null; brandPlusModifierAllowed?: boolean | null;

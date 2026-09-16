@@ -167,9 +167,12 @@ public class KeywordOpportunityService
                     ? OpportunityScoring.InferVolumeRisk(volume)
                     : keyword.Metric?.LowSearchVolumeRisk ?? OpportunityScoring.InferVolumeRisk(volume);
 
-                var result = OpportunityScoring.Score(new OpportunityScoreInputs(
+                var payoutCad = offer.PayoutAmountCad > 0
+                    ? offer.PayoutAmountCad
+                    : offer.Commission;
+                var result = OpportunityScoringEngine.Score(new OpportunityScoreInputs(
                     keyword.IntentScore,
-                    offer.Commission,
+                    payoutCad,
                     conversion,
                     cpc,
                     other,
@@ -208,7 +211,7 @@ public class KeywordOpportunityService
                 row.ExpectedProfitOptimistic = result.ExpectedProfitOptimistic;
                 row.EstimatedConversionRate = conversion;
                 row.EstimatedCpc = cpc;
-                row.Commission = offer.Commission;
+                row.Commission = payoutCad;
                 row.Competition = competition;
                 row.Recommendation = result.Recommendation;
                 row.Why = result.Why;

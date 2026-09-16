@@ -723,8 +723,8 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("EstimatedConversionRate")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
 
                     b.Property<decimal>("EstimatedCpc")
                         .HasPrecision(18, 4)
@@ -1001,6 +1001,10 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                     b.Property<bool?>("DirectLinkingAllowed")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal>("ExchangeRateUsed")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
                     b.Property<string>("ExternalProductId")
                         .HasColumnType("text");
 
@@ -1019,6 +1023,10 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
+
+                    b.Property<decimal>("PayoutAmountCad")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
 
                     b.Property<string>("PolicyNotes")
                         .HasColumnType("text");
@@ -1124,7 +1132,8 @@ namespace BottomFunnel.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.Property<decimal?>("AverageOrderValue")
-                        .HasColumnType("numeric");
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
 
                     b.Property<string>("Category")
                         .HasColumnType("text");

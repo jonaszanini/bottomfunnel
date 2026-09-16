@@ -16,6 +16,7 @@ public static class DependencyInjection
         services.AddScoped<StoreConnectionService>();
         services.AddScoped<TrackingAnalyticsService>();
         services.AddScoped<AiOrchestrator>();
+        services.AddScoped<CreateUnifiedOfferCommandHandler>();
         services.AddValidatorsFromAssemblyContaining<Validation.UpsertOfferRequestValidator>();
         return services;
     }
