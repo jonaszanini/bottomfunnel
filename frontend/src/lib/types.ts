@@ -145,3 +145,37 @@ export type StoreConnection = {
   id: string; providerKey: string; displayName: string; status: string;
   lastSyncedAt?: string; lastError?: string;
 };
+
+export type ProductCandidate = {
+  id: string;
+  providerKey: string;
+  externalId: string;
+  title: string;
+  description: string;
+  gravity: number;
+  category?: string | null;
+  affiliatePageUrl?: string | null;
+  status: "PendingReview" | "Qualified" | "Disqualified" | "Promoted" | string;
+  disqualificationReason?: string | null;
+  discoveredAt: string;
+  updatedAt?: string | null;
+};
+
+export type PagedProductCandidates = {
+  items: ProductCandidate[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type ClickBankFeedSyncResult = {
+  inserted: number;
+  updated: number;
+  skipped: number;
+  examined: number;
+};
+
+export type AuditCandidateResponse = {
+  candidate: ProductCandidate;
+  audit: OfferPolicyAuditResult;
+};

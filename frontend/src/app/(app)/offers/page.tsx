@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import { Offer, OfferPolicyAuditResult, Product, Merchant } from "@/lib/types";
+import { Offer, OfferPolicyAuditResult, Product, Merchant, ProductCandidate, PagedProductCandidates, ClickBankFeedSyncResult, AuditCandidateResponse } from "@/lib/types";
 import { RestrictionForm, RestrictionList } from "@/lib/compliance";
 import { Button, Checkbox, Field, Input, Select, Table, Td, Textarea, Th, money, PageHeader } from "@/lib/ui";
 
@@ -108,6 +108,15 @@ export default function OffersPage() {
   const [auditError, setAuditError] = useState("");
   const [auditOpen, setAuditOpen] = useState(true);
   const [refreshingSignals, setRefreshingSignals] = useState(false);
+  const [tab, setTab] = useState<"active" | "discovery">("active");
+  const [candidates, setCandidates] = useState<ProductCandidate[]>([]);
+  const [candidateTotal, setCandidateTotal] = useState(0);
+  const [candidateSearch, setCandidateSearch] = useState("");
+  const [candidateStatus, setCandidateStatus] = useState("");
+  const [candidateBusy, setCandidateBusy] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [discoveryError, setDiscoveryError] = useState("");
+  const [promoteCandidateId, setPromoteCandidateId] = useState("");
 
   async function load() {
     const [o, p, m] = await Promise.all([
@@ -118,6 +127,17 @@ export default function OffersPage() {
     setOffers(o); setProducts(p); setMerchants(m);
     if (!selected && o[0]) setSelected(o[0].id);
   }
+
+  async function loadCandidates() {
+    const params = new URLSearchParams({ page: "1", pageSize: "100" });
+    if (candidateStatus) params.set("status", candidateStatus);
+    if (candidateSearch.trim()) params.set("search", candidateSearch.trim());
+    const result = await api<PagedProductCandidates>(`/candidates?${params}`);
+    const items = Array.isArray(result?.items) ? result.items : [];
+    setCandidates(items);
+    setCandidateTotal(typeof result?.total === "number" ? result.total : items.length);
+  }
+
   useEffect(() => { load().catch(console.error); }, []);
 
   useEffect(() => {
@@ -131,6 +151,12 @@ export default function OffersPage() {
       .then((result) => setAudit(result ?? null))
       .catch(() => setAudit(null));
   }, [selected]);
+
+  useEffect(() => {
+    if (tab !== "discovery") return;
+    setDiscoveryError("");
+    loadCandidates().catch((err) => setDiscoveryError(err instanceof Error ? err.message : "Could not load candidates"));
+  }, [tab, candidateStatus, candidateSearch]);
 
   useEffect(() => {
     if (!open || form.currency === "CAD") {
@@ -152,28 +178,44 @@ export default function OffersPage() {
     e.preventDefault();
     setError("");
     try {
-      const result = await api<UnifiedCreated>("/offers/unified", {
-        method: "POST",
-        body: JSON.stringify({
-          productName: form.productName,
-          category: form.category,
-          merchantName: form.merchantName,
-          brandBiddingAllowed: form.brandBiddingAllowed,
-          directLinkingAllowed: form.directLinkingAllowed,
-          payoutAmount: Number(form.payoutAmount),
-          currency: form.currency,
-          exchangeRateOverride: form.overrideRate && Number(form.exchangeRateOverride) > 0 ? Number(form.exchangeRateOverride) : null,
-          commissionType: form.commissionType,
-          affiliateUrl: form.affiliateUrl || null,
-          baseAffiliateUrl: form.affiliateUrl || null,
-          affiliatePageUrl: form.affiliatePageUrl || null,
-          providerKey: form.providerKey,
-          trafficRestrictions: form.trafficRestrictions.trim() || null,
-        }),
-      });
+      const result = promoteCandidateId
+        ? await api<UnifiedCreated>(`/candidates/${promoteCandidateId}/promote`, {
+            method: "POST",
+            body: JSON.stringify({
+              payoutAmount: Number(form.payoutAmount),
+              currency: form.currency,
+              affiliateUrl: form.affiliateUrl || null,
+              brandBiddingAllowed: form.brandBiddingAllowed,
+              directLinkingAllowed: form.directLinkingAllowed,
+              trafficRestrictions: form.trafficRestrictions.trim() || null,
+            }),
+          })
+        : await api<UnifiedCreated>("/offers/unified", {
+            method: "POST",
+            body: JSON.stringify({
+              productName: form.productName,
+              category: form.category,
+              merchantName: form.merchantName,
+              brandBiddingAllowed: form.brandBiddingAllowed,
+              directLinkingAllowed: form.directLinkingAllowed,
+              payoutAmount: Number(form.payoutAmount),
+              currency: form.currency,
+              exchangeRateOverride: form.overrideRate && Number(form.exchangeRateOverride) > 0 ? Number(form.exchangeRateOverride) : null,
+              commissionType: form.commissionType,
+              affiliateUrl: form.affiliateUrl || null,
+              baseAffiliateUrl: form.affiliateUrl || null,
+              affiliatePageUrl: form.affiliatePageUrl || null,
+              providerKey: form.providerKey,
+              trafficRestrictions: form.trafficRestrictions.trim() || null,
+            }),
+          });
       setCreated(result);
       await load();
       setSelected(result.offerId);
+      if (promoteCandidateId) {
+        await loadCandidates().catch(() => undefined);
+        setTab("active");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create offer");
     }
@@ -198,6 +240,50 @@ export default function OffersPage() {
     setCreated(null);
     setError("");
     setForm(emptyForm);
+    setPromoteCandidateId("");
+  }
+
+  async function auditCandidate(candidate: ProductCandidate) {
+    setCandidateBusy(candidate.id);
+    setDiscoveryError("");
+    try {
+      const result = await api<AuditCandidateResponse>(`/candidates/${candidate.id}/audit`, { method: "POST" });
+      setCandidates((rows) => rows.map((row) => row.id === result.candidate.id ? result.candidate : row));
+    } catch (err) {
+      setDiscoveryError(err instanceof Error ? err.message : "Candidate audit failed.");
+    } finally {
+      setCandidateBusy("");
+    }
+  }
+
+  function openPromote(candidate: ProductCandidate) {
+    setPromoteCandidateId(candidate.id);
+    setCreated(null);
+    setError("");
+    setForm({
+      ...emptyForm,
+      providerKey: candidate.providerKey || "clickbank",
+      productName: candidate.title,
+      category: candidate.category || "Health",
+      merchantName: candidate.externalId,
+      affiliateUrl: candidate.providerKey === "clickbank" ? clickbankHop(candidate.externalId) : "",
+      affiliatePageUrl: candidate.affiliatePageUrl || "",
+    });
+    setOpen(true);
+  }
+
+  async function syncFeed() {
+    setSyncing(true);
+    setDiscoveryError("");
+    try {
+      const result = await api<ClickBankFeedSyncResult>("/candidates/sync", { method: "POST" });
+      await loadCandidates();
+      setDiscoveryError(`Synced ${result.inserted} new / ${result.updated} updated (skipped ${result.skipped} of ${result.examined}).`);
+    } catch (err) {
+      setDiscoveryError(err instanceof Error ? err.message : "Feed sync failed.");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   function onMerchantName(name: string) {
@@ -311,8 +397,41 @@ export default function OffersPage() {
         purpose="This is the main onboarding screen: one affiliate offer you might promote, with payout converted to CAD$."
         does="Click New Offer to add product name, merchant, payout, currency, and hop link. After save, generate keywords and score without leaving the page."
         flow="Start here (or after connecting a network). Offers feed keywords, opportunities, landing pages, and campaigns."
-        actions={<Button type="button" onClick={() => { setCreated(null); setOpen(true); }}>New Offer</Button>}
+        actions={<Button type="button" onClick={() => { setCreated(null); setPromoteCandidateId(""); setForm(emptyForm); setOpen(true); }}>New Offer</Button>}
       />
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setTab("active")}
+          className={`rounded px-3 py-1.5 text-sm ${tab === "active" ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+        >
+          Active Offers
+        </button>
+        <button
+          type="button"
+          onClick={() => { setTab("discovery"); loadCandidates().catch((err) => setDiscoveryError(err instanceof Error ? err.message : "Could not load candidates")); }}
+          className={`rounded px-3 py-1.5 text-sm ${tab === "discovery" ? "bg-zinc-800 text-white" : "text-zinc-400 hover:text-zinc-200"}`}
+        >
+          Discovery Inbox
+        </button>
+      </div>
+      {tab === "discovery" ? (
+        <DiscoveryInbox
+          candidates={candidates}
+          total={candidateTotal}
+          search={candidateSearch}
+          status={candidateStatus}
+          busyId={candidateBusy}
+          syncing={syncing}
+          error={discoveryError}
+          onSearch={setCandidateSearch}
+          onStatus={setCandidateStatus}
+          onAudit={auditCandidate}
+          onPromote={openPromote}
+          onSync={syncFeed}
+        />
+      ) : (
+      <>
       <Table>
         <thead><tr><Th>Offer</Th><Th>Product</Th><Th>Merchant</Th><Th>Payout</Th><Th>CAD$</Th><Th>Momentum</Th><Th>TrustScore</Th><Th>Policy</Th><Th>Compliance</Th><Th>Status</Th></tr></thead>
         <tbody>
@@ -445,12 +564,14 @@ export default function OffersPage() {
           <RestrictionForm path={`/offers/${offer.id}/restrictions`} onSaved={load} />
         </section>
       ) : null}
+      </>
+      )}
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="max-h-[90vh] w-full max-w-xl overflow-auto rounded border border-zinc-800 bg-zinc-950 p-6">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold">{created ? "Offer created" : "New Offer"}</h2>
+              <h2 className="text-lg font-semibold">{created ? "Offer created" : promoteCandidateId ? "Promote to Offer" : "New Offer"}</h2>
               <button type="button" className="text-sm text-zinc-500 hover:text-zinc-300" onClick={closeModal}>Close</button>
             </div>
             {created ? (
@@ -547,7 +668,7 @@ export default function OffersPage() {
                 {error ? <p className="text-sm text-red-400">{error}</p> : null}
                 <div className="flex justify-end gap-2">
                   <button type="button" className="rounded px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-200" onClick={closeModal}>Cancel</button>
-                  <Button type="submit">Create offer</Button>
+                  <Button type="submit">{promoteCandidateId ? "Promote to offer" : "Create offer"}</Button>
                 </div>
               </form>
             )}
@@ -617,6 +738,128 @@ function TrustScorePill({ rating, reviews, risk }: { rating?: number | null; rev
       title={risk ? `Trustpilot refund risk: ${risk}` : "Trustpilot rating"}
     >
       {rating.toFixed(1)}{reviews ? ` · ${reviews}` : ""}
+    </span>
+  );
+}
+
+function DiscoveryInbox({
+  candidates,
+  total,
+  search,
+  status,
+  busyId,
+  syncing,
+  error,
+  onSearch,
+  onStatus,
+  onAudit,
+  onPromote,
+  onSync,
+}: {
+  candidates: ProductCandidate[];
+  total: number;
+  search: string;
+  status: string;
+  busyId: string;
+  syncing: boolean;
+  error: string;
+  onSearch: (value: string) => void;
+  onStatus: (value: string) => void;
+  onAudit: (candidate: ProductCandidate) => void;
+  onPromote: (candidate: ProductCandidate) => void;
+  onSync: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="Search">
+          <Input value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Title or vendor nickname" />
+        </Field>
+        <Field label="Status">
+          <Select value={status} onChange={(e) => onStatus(e.target.value)}>
+            <option value="">All</option>
+            <option value="PendingReview">Pending review</option>
+            <option value="Qualified">Qualified</option>
+            <option value="Disqualified">Disqualified</option>
+            <option value="Promoted">Promoted</option>
+          </Select>
+        </Field>
+        <Button type="button" onClick={onSync} disabled={syncing}>
+          {syncing ? "Syncing…" : "Sync ClickBank feed"}
+        </Button>
+        <span className="text-xs text-zinc-500">{total} candidates with gravity ≥ 30</span>
+      </div>
+      {error ? <p className="text-sm text-amber-300">{error}</p> : null}
+      <Table>
+        <thead>
+          <tr>
+            <Th>Title</Th>
+            <Th>Vendor</Th>
+            <Th>Gravity</Th>
+            <Th>Network</Th>
+            <Th>Status</Th>
+            <Th>Discovered</Th>
+            <Th></Th>
+          </tr>
+        </thead>
+        <tbody>
+          {candidates.length === 0 ? (
+            <tr>
+              <Td colSpan={7}>
+                <span className="text-zinc-500">No candidates yet. Sync the ClickBank marketplace feed or wait for the weekly ingest.</span>
+              </Td>
+            </tr>
+          ) : candidates.map((candidate) => (
+            <tr key={candidate.id}>
+              <Td>
+                <div className="font-medium text-zinc-100">{candidate.title}</div>
+                {candidate.category ? <div className="text-xs text-zinc-500">{candidate.category}</div> : null}
+              </Td>
+              <Td className="font-mono text-xs">{candidate.externalId}</Td>
+              <Td>{candidate.gravity.toFixed(1)}</Td>
+              <Td>{networkLabel(candidate.providerKey)}</Td>
+              <Td><CandidateStatusBadge status={candidate.status} reason={candidate.disqualificationReason} /></Td>
+              <Td>{new Date(candidate.discoveredAt).toLocaleDateString()}</Td>
+              <Td>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    onClick={() => onAudit(candidate)}
+                    disabled={busyId === candidate.id || candidate.status === "Promoted"}
+                  >
+                    {busyId === candidate.id ? "Auditing…" : "Audit"}
+                  </Button>
+                  {candidate.status === "Qualified" ? (
+                    <Button type="button" onClick={() => onPromote(candidate)}>Promote to Offer</Button>
+                  ) : null}
+                </div>
+              </Td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    </div>
+  );
+}
+
+function networkLabel(providerKey: string) {
+  if (providerKey === "clickbank") return "ClickBank";
+  if (providerKey === "digistore24") return "Digistore24";
+  return providerKey;
+}
+
+function CandidateStatusBadge({ status, reason }: { status: string; reason?: string | null }) {
+  const tone = status === "Qualified"
+    ? "bg-emerald-500/15 text-emerald-400"
+    : status === "Disqualified"
+      ? "bg-red-500/15 text-red-400"
+      : status === "Promoted"
+        ? "bg-sky-500/15 text-sky-300"
+        : "bg-zinc-700/40 text-zinc-300";
+  const label = status === "PendingReview" ? "Pending review" : status;
+  return (
+    <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${tone}`} title={reason ?? undefined}>
+      {label}
     </span>
   );
 }

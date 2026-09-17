@@ -135,8 +135,8 @@ export function Th({ children, className }: { children?: React.ReactNode; classN
   return <th className={`border-b border-zinc-800 px-3 py-2 text-xs uppercase tracking-wide text-zinc-500 ${className ?? ""}`}>{children}</th>;
 }
 
-export function Td({ children, className }: { children?: React.ReactNode; className?: string }) {
-  return <td className={`border-b border-zinc-900 px-3 py-2 align-top ${className ?? ""}`}>{children}</td>;
+export function Td({ children, className, colSpan }: { children?: React.ReactNode; className?: string; colSpan?: number }) {
+  return <td colSpan={colSpan} className={`border-b border-zinc-900 px-3 py-2 align-top ${className ?? ""}`}>{children}</td>;
 }
 
 export function Button({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {

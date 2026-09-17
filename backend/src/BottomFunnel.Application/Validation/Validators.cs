@@ -54,6 +54,16 @@ public sealed class SaveAiProviderRequestValidator : AbstractValidator<SaveAiPro
     }
 }
 
+public sealed class PromoteCandidateToOfferRequestValidator : AbstractValidator<PromoteCandidateToOfferRequest>
+{
+    public PromoteCandidateToOfferRequestValidator()
+    {
+        RuleFor(x => x.PayoutAmount).GreaterThanOrEqualTo(0);
+        RuleFor(x => x.Currency).NotEmpty().Length(3);
+        RuleFor(x => x.TrafficRestrictions).MaximumLength(50_000);
+    }
+}
+
 public sealed class TestAiProviderRequestValidator : AbstractValidator<TestAiProviderRequest>
 {
     public TestAiProviderRequestValidator()

@@ -3,16 +3,27 @@ using System.Text;
 using System.Text.Json;
 using BottomFunnel.Application.Stores;
 using BottomFunnel.Domain.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace BottomFunnel.Infrastructure.Stores.Digistore24;
 
 public sealed class Digistore24Connector : IStoreConnector
 {
-    private readonly IHttpClientFactory _httpClientFactory;
+    public const string ApiRoot = "https://www.digistore24.com/api/call";
+    public const string PingUrl = "https://www.digistore24.com/api/call/ping";
+    public const string MarketplaceUrl = "https://www.digistore24.com/api/call/listMarketplaceEntries";
+    public const string BrowserUserAgent =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+    public const string FirewallMessage =
+        "Digistore24 firewall blocked the request (403 Forbidden). Verify endpoint formatting and User-Agent headers.";
 
-    public Digistore24Connector(IHttpClientFactory httpClientFactory)
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly ILogger<Digistore24Connector> _logger;
+
+    public Digistore24Connector(IHttpClientFactory httpClientFactory, ILogger<Digistore24Connector> logger)
     {
         _httpClientFactory = httpClientFactory;
+        _logger = logger;
     }
 
     public string ProviderKey => "digistore24";
@@ -29,24 +40,14 @@ public sealed class Digistore24Connector : IStoreConnector
 
     public async Task TestConnectionAsync(IReadOnlyDictionary<string, string> credentials, CancellationToken cancellationToken)
     {
-        var client = CreateClient(credentials);
-        using var response = await client.GetAsync("ping", cancellationToken);
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Digistore24 ping failed: {json}");
-        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
-        if (doc.RootElement.TryGetProperty("result", out var result) &&
-            result.GetString()?.Equals("error", StringComparison.OrdinalIgnoreCase) == true)
-            throw new InvalidOperationException(doc.RootElement.GetProperty("message").GetString() ?? "Digistore24 error");
+        var json = await SendAsync(credentials, PingUrl, cancellationToken);
+        EnsureApiResult(json);
     }
 
     public async Task<IReadOnlyList<CanonicalProduct>> ListProductsAsync(IReadOnlyDictionary<string, string> credentials, CancellationToken cancellationToken)
     {
-        var client = CreateClient(credentials);
-        using var response = await client.GetAsync("listProducts", cancellationToken);
-        var json = await response.Content.ReadAsStringAsync(cancellationToken);
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException($"Digistore24 listProducts failed: {json}");
+        var json = await SendAsync(credentials, MarketplaceUrl, cancellationToken);
+        EnsureApiResult(json);
         return MapProducts(json);
     }
 
@@ -174,14 +175,77 @@ public sealed class Digistore24Connector : IStoreConnector
             item.GetRawText());
     }
 
-    private HttpClient CreateClient(IReadOnlyDictionary<string, string> credentials)
+    internal static string Endpoint(string function) =>
+        $"{ApiRoot.TrimEnd('/')}/{function.Trim().TrimStart('/')}";
+
+    private async Task<string> SendAsync(
+        IReadOnlyDictionary<string, string> credentials,
+        string url,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? parameters = null)
     {
+        if (!credentials.TryGetValue("apiKey", out var apiKey) || string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("Digistore24 API key is required.");
+
         var client = _httpClientFactory.CreateClient("digistore24");
-        client.DefaultRequestHeaders.Remove("X-DS-API-KEY");
-        client.DefaultRequestHeaders.TryAddWithoutValidation("X-DS-API-KEY", credentials["apiKey"]);
-        client.DefaultRequestHeaders.Remove("Accept");
-        client.DefaultRequestHeaders.TryAddWithoutValidation("Accept", "application/json");
-        return client;
+        var hasParameters = parameters is { Count: > 0 };
+        using var request = new HttpRequestMessage(hasParameters ? HttpMethod.Post : HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("X-DS-API-KEY", apiKey.Trim());
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+        request.Headers.TryAddWithoutValidation("User-Agent", BrowserUserAgent);
+        if (hasParameters)
+            request.Content = new FormUrlEncodedContent(parameters!);
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw ApiFailure(response.StatusCode, body);
+        return body;
+    }
+
+    private InvalidOperationException ApiFailure(System.Net.HttpStatusCode status, string body)
+    {
+        var trimmed = body.TrimStart();
+        if (trimmed.StartsWith('<'))
+        {
+            _logger.LogWarning("Digistore24 returned HTML {Status}: {Body}", (int)status, body);
+            return new InvalidOperationException(FirewallMessage);
+        }
+
+        var message = TryReadErrorMessage(body);
+        if (message is not null)
+            return new InvalidOperationException(message);
+        return new InvalidOperationException($"Digistore24 request failed ({(int)status}).");
+    }
+
+    private static void EnsureApiResult(string json)
+    {
+        var message = TryReadErrorMessage(json);
+        if (message is not null)
+            throw new InvalidOperationException(message);
+    }
+
+    internal static string? TryReadErrorMessage(string json)
+    {
+        var trimmed = (json ?? "").TrimStart();
+        if (trimmed.Length == 0 || trimmed.StartsWith('<') || trimmed[0] is not ('{' or '['))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmed);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return null;
+            if (!doc.RootElement.TryGetProperty("result", out var result)
+                || !string.Equals(result.GetString(), "error", StringComparison.OrdinalIgnoreCase))
+                return null;
+            return doc.RootElement.TryGetProperty("message", out var message)
+                ? message.GetString() ?? "Digistore24 error"
+                : "Digistore24 error";
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static string AppendSid(string url, string clickId) =>

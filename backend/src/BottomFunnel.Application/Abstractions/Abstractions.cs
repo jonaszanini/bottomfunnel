@@ -55,6 +55,13 @@ public interface IReputationAuditService
     Task<OfferReputation> AuditTrustpilotAsync(string domainOrBrand, CancellationToken ct = default);
 }
 
+public interface IClickBankFeedIngestionService
+{
+    Task<ClickBankFeedSyncResult> SyncAsync(CancellationToken ct = default);
+}
+
+public sealed record ClickBankFeedSyncResult(int Inserted, int Updated, int Skipped, int Examined);
+
 public sealed record CurrentUser(string UserId, string Email, Guid OrganizationId, string Role);
 
 public interface ICurrentUser

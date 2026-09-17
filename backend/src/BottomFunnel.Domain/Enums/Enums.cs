@@ -157,3 +157,11 @@ public enum ConversionProvenance
     Reported = 1,
     Attributed = 2
 }
+
+public enum CandidateStatus
+{
+    PendingReview = 0,
+    Qualified = 1,
+    Disqualified = 2,
+    Promoted = 3
+}

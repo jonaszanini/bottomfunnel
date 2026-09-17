@@ -40,6 +40,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
     public DbSet<BackgroundJob> BackgroundJobs => Set<BackgroundJob>();
     public DbSet<VisitorSession> VisitorSessions => Set<VisitorSession>();
     public DbSet<Visit> Visits => Set<Visit>();
+    public DbSet<ProductCandidate> ProductCandidates => Set<ProductCandidate>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -167,6 +168,21 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
                 .WithOne(x => x.Reputation)
                 .HasForeignKey<OfferReputation>(x => x.OfferId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<ProductCandidate>(b =>
+        {
+            b.ToTable("ProductCandidates");
+            b.HasKey(x => x.Id);
+            b.Property(x => x.ProviderKey).HasMaxLength(32).IsRequired();
+            b.Property(x => x.ExternalId).HasMaxLength(120).IsRequired();
+            b.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            b.Property(x => x.Description).HasColumnType("text");
+            b.Property(x => x.Gravity).HasPrecision(18, 4);
+            b.Property(x => x.Category).HasMaxLength(200);
+            b.Property(x => x.AffiliatePageUrl).HasMaxLength(2000);
+            b.Property(x => x.DisqualificationReason).HasMaxLength(2000);
+            b.HasIndex(x => new { x.ProviderKey, x.ExternalId }).IsUnique();
         });
     }
 }

@@ -34,6 +34,7 @@ public interface IAppDbContext
     DbSet<BackgroundJob> BackgroundJobs { get; }
     DbSet<VisitorSession> VisitorSessions { get; }
     DbSet<Visit> Visits { get; }
+    DbSet<ProductCandidate> ProductCandidates { get; }
     DatabaseFacade Database { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);

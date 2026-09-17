@@ -5,6 +5,7 @@ using BottomFunnel.Application.Offers.Models;
 using BottomFunnel.Application.Services;
 using BottomFunnel.Application.Stores;
 using BottomFunnel.Contracts.Auth;
+using BottomFunnel.Domain.Enums;
 using BottomFunnel.Api.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -427,4 +428,41 @@ public class AiSettingsController : ControllerBase
         await _ai.TestConnectionAsync(request.Provider, request.ApiKey, ct);
         return new AiConnectionTestDto(true, "Connection succeeded.");
     }
+}
+
+[ApiController]
+[Authorize]
+[Route("candidates")]
+[Route("api/candidates")]
+public class CandidatesController : ControllerBase
+{
+    private readonly ProductCandidateService _candidates;
+    private readonly IClickBankFeedIngestionService _feed;
+
+    public CandidatesController(ProductCandidateService candidates, IClickBankFeedIngestionService feed)
+    {
+        _candidates = candidates;
+        _feed = feed;
+    }
+
+    [HttpGet]
+    public Task<PagedProductCandidatesDto> List(
+        [FromQuery] CandidateStatus? status,
+        [FromQuery] string? search,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken ct = default) =>
+        _candidates.ListAsync(new GetProductCandidatesQuery(status, search, page, pageSize), ct);
+
+    [HttpPost("{id:guid}/audit")]
+    public Task<AuditCandidateResponse> Audit(Guid id, CancellationToken ct) =>
+        _candidates.AuditAsync(id, ct);
+
+    [HttpPost("{id:guid}/promote")]
+    public Task<CreateUnifiedOfferResponse> Promote(Guid id, PromoteCandidateToOfferRequest request, CancellationToken ct) =>
+        _candidates.PromoteAsync(new PromoteCandidateToOfferCommand(id, request.PayoutAmount, request.Currency), request, ct);
+
+    [HttpPost("sync")]
+    public Task<ClickBankFeedSyncResult> Sync(CancellationToken ct) =>
+        _feed.SyncAsync(ct);
 }

@@ -1,3 +1,4 @@
+using BottomFunnel.Application.Offers.Models;
 using BottomFunnel.Domain.Enums;
 
 namespace BottomFunnel.Application.Dtos;
@@ -431,3 +432,44 @@ public sealed record SaveAiProviderRequest(
 
 public sealed record TestAiProviderRequest(string Provider, string ApiKey, string? DefaultModel = null);
 public sealed record AiConnectionTestDto(bool Success, string Message);
+
+public sealed record GetProductCandidatesQuery(
+    CandidateStatus? Status = null,
+    string? Search = null,
+    int Page = 1,
+    int PageSize = 50);
+
+public sealed record ProductCandidateDto(
+    Guid Id,
+    string ProviderKey,
+    string ExternalId,
+    string Title,
+    string Description,
+    decimal Gravity,
+    string? Category,
+    string? AffiliatePageUrl,
+    CandidateStatus Status,
+    string? DisqualificationReason,
+    DateTimeOffset DiscoveredAt,
+    DateTimeOffset? UpdatedAt);
+
+public sealed record PagedProductCandidatesDto(
+    IReadOnlyList<ProductCandidateDto> Items,
+    int Total,
+    int Page,
+    int PageSize);
+
+public sealed record PromoteCandidateToOfferCommand(
+    Guid CandidateId,
+    decimal PayoutAmount,
+    string Currency);
+
+public sealed record PromoteCandidateToOfferRequest(
+    decimal PayoutAmount,
+    string Currency = "USD",
+    string? AffiliateUrl = null,
+    bool BrandBiddingAllowed = false,
+    bool DirectLinkingAllowed = false,
+    string? TrafficRestrictions = null);
+
+public sealed record AuditCandidateResponse(ProductCandidateDto Candidate, OfferPolicyAuditResult Audit);

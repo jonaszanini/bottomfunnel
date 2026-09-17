@@ -119,6 +119,33 @@ public static class DataSeeder
         var db = scope.ServiceProvider.GetRequiredService<Infrastructure.Persistence.AppDbContext>();
         await db.Database.MigrateAsync();
 
+        if (!await db.ProductCandidates.AnyAsync())
+        {
+            db.ProductCandidates.AddRange(
+                new ProductCandidate
+                {
+                    ProviderKey = "clickbank",
+                    ExternalId = "alphavend",
+                    Title = "Alpha Formula",
+                    Description = "Sample marketplace row so Discovery Inbox has gravity ≥ 30 offers before the weekly feed sync.",
+                    Gravity = 88.2500m,
+                    Category = "Health & Fitness",
+                    AffiliatePageUrl = "https://www.example.com/affiliates",
+                    Status = CandidateStatus.PendingReview
+                },
+                new ProductCandidate
+                {
+                    ProviderKey = "clickbank",
+                    ExternalId = "betacourse",
+                    Title = "Beta Course",
+                    Description = "Education offer above the gravity floor.",
+                    Gravity = 41.0000m,
+                    Category = "Education",
+                    Status = CandidateStatus.PendingReview
+                });
+            await db.SaveChangesAsync();
+        }
+
         var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
         if (await users.FindByEmailAsync("admin@local") is not null)
             return;

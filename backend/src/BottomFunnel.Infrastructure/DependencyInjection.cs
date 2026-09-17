@@ -3,6 +3,7 @@ using BottomFunnel.Infrastructure.Ai;
 using BottomFunnel.Application.Persistence;
 using BottomFunnel.Application.Stores;
 using BottomFunnel.Infrastructure.Currency;
+using BottomFunnel.Infrastructure.Feeds;
 using BottomFunnel.Infrastructure.Identity;
 using BottomFunnel.Infrastructure.Jobs;
 using BottomFunnel.Infrastructure.MarketSignals;
@@ -53,6 +54,9 @@ public static class DependencyInjection
         services.AddHttpClient("digistore24", client =>
         {
             client.BaseAddress = new Uri("https://www.digistore24.com/api/call/");
+            client.Timeout = TimeSpan.FromSeconds(30);
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+            client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", Digistore24Connector.BrowserUserAgent);
         });
         services.AddHttpClient("openai", client =>
         {
@@ -84,6 +88,14 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(25);
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (compatible; BottomFunnel/1.0; +https://bottomfunnel.local)");
         });
+        services.AddHttpClient("clickbank-feed", client =>
+        {
+            client.Timeout = TimeSpan.FromMinutes(3);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("BottomFunnelFeedIngest/1.0");
+        });
+        services.AddSingleton<ClickBankFeedIngestionService>();
+        services.AddSingleton<IClickBankFeedIngestionService>(sp => sp.GetRequiredService<ClickBankFeedIngestionService>());
+        services.AddHostedService(sp => sp.GetRequiredService<ClickBankFeedIngestionService>());
 
         services.AddSingleton<IStoreConnector, ClickBankConnector>();
         services.AddSingleton<IStoreConnector, Digistore24Connector>();
