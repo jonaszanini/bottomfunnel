@@ -265,22 +265,22 @@ export default function OffersPage() {
       providerKey: candidate.providerKey || "clickbank",
       productName: candidate.title,
       category: candidate.category || "Health",
-      merchantName: candidate.externalId,
-      affiliateUrl: candidate.providerKey === "clickbank" ? clickbankHop(candidate.externalId) : "",
+      merchantName: candidate.vendor || candidate.externalId,
+      affiliateUrl: candidate.providerKey === "clickbank" ? clickbankHop(candidate.vendor || candidate.externalId) : "",
       affiliatePageUrl: candidate.affiliatePageUrl || "",
     });
     setOpen(true);
   }
 
-  async function syncFeed() {
+  async function syncMarketplace() {
     setSyncing(true);
     setDiscoveryError("");
     try {
       const result = await api<ClickBankFeedSyncResult>("/candidates/sync", { method: "POST" });
       await loadCandidates();
-      setDiscoveryError(`Synced ${result.inserted} new / ${result.updated} updated (skipped ${result.skipped} of ${result.examined}).`);
+      setDiscoveryError(`Synced Digistore24 marketplace: ${result.inserted} new / ${result.updated} updated (skipped ${result.skipped} of ${result.examined}).`);
     } catch (err) {
-      setDiscoveryError(err instanceof Error ? err.message : "Feed sync failed.");
+      setDiscoveryError(err instanceof Error ? err.message : "Marketplace sync failed.");
     } finally {
       setSyncing(false);
     }
@@ -428,7 +428,7 @@ export default function OffersPage() {
           onStatus={setCandidateStatus}
           onAudit={auditCandidate}
           onPromote={openPromote}
-          onSync={syncFeed}
+          onSync={syncMarketplace}
         />
       ) : (
       <>
@@ -785,9 +785,9 @@ function DiscoveryInbox({
           </Select>
         </Field>
         <Button type="button" onClick={onSync} disabled={syncing}>
-          {syncing ? "Syncing…" : "Sync ClickBank feed"}
+          {syncing ? "Syncing…" : "Sync Digistore24 Marketplace"}
         </Button>
-        <span className="text-xs text-zinc-500">{total} candidates with gravity ≥ 30</span>
+        <span className="text-xs text-zinc-500">{total} staged candidates · uses the API key saved on Networks</span>
       </div>
       {error ? <p className="text-sm text-amber-300">{error}</p> : null}
       <Table>
@@ -806,7 +806,7 @@ function DiscoveryInbox({
           {candidates.length === 0 ? (
             <tr>
               <Td colSpan={7}>
-                <span className="text-zinc-500">No candidates yet. Sync the ClickBank marketplace feed or wait for the weekly ingest.</span>
+                <span className="text-zinc-500">No candidates yet. Save a Digistore24 API key on Networks, then Sync Digistore24 Marketplace.</span>
               </Td>
             </tr>
           ) : candidates.map((candidate) => (
@@ -815,7 +815,7 @@ function DiscoveryInbox({
                 <div className="font-medium text-zinc-100">{candidate.title}</div>
                 {candidate.category ? <div className="text-xs text-zinc-500">{candidate.category}</div> : null}
               </Td>
-              <Td className="font-mono text-xs">{candidate.externalId}</Td>
+              <Td className="font-mono text-xs">{candidate.vendor || candidate.externalId}</Td>
               <Td>{candidate.gravity.toFixed(1)}</Td>
               <Td>{networkLabel(candidate.providerKey)}</Td>
               <Td><CandidateStatusBadge status={candidate.status} reason={candidate.disqualificationReason} /></Td>

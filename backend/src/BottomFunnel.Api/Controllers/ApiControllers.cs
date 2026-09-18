@@ -236,7 +236,6 @@ public class StoreConnectionsController : ControllerBase
     [HttpGet] public Task<IReadOnlyList<StoreConnectionDto>> List(CancellationToken ct) => _stores.ListAsync(ct);
     [HttpPost] public Task<StoreConnectionDto> Save(SaveStoreConnectionRequest request, CancellationToken ct) => _stores.SaveAsync(request, ct);
     [HttpPost("{id:guid}/test")] public async Task<IActionResult> Test(Guid id, CancellationToken ct) { await _stores.TestAsync(id, ct); return NoContent(); }
-    [HttpPost("{id:guid}/sync")] public async Task<IActionResult> Sync(Guid id, CancellationToken ct) { await _stores.SyncAsync(id, ct); return NoContent(); }
 }
 
 [ApiController]
@@ -437,12 +436,10 @@ public class AiSettingsController : ControllerBase
 public class CandidatesController : ControllerBase
 {
     private readonly ProductCandidateService _candidates;
-    private readonly IClickBankFeedIngestionService _feed;
 
-    public CandidatesController(ProductCandidateService candidates, IClickBankFeedIngestionService feed)
+    public CandidatesController(ProductCandidateService candidates)
     {
         _candidates = candidates;
-        _feed = feed;
     }
 
     [HttpGet]
@@ -464,5 +461,5 @@ public class CandidatesController : ControllerBase
 
     [HttpPost("sync")]
     public Task<ClickBankFeedSyncResult> Sync(CancellationToken ct) =>
-        _feed.SyncAsync(ct);
+        _candidates.SyncDigistore24MarketplaceAsync(ct);
 }

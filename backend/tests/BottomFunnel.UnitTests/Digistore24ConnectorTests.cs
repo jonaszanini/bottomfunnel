@@ -85,6 +85,71 @@ public class Digistore24ConnectorTests
         products.Should().BeEmpty();
     }
 
+    [Fact]
+    public void Marketplace_entries_map_vendor_salespage_and_commission()
+    {
+        const string json = """
+        {
+          "result": "success",
+          "data": {
+            "items": [
+              {
+                "product_id": "99881",
+                "product_name": "Wellness Bundle",
+                "description": "Third-party marketplace offer",
+                "merchant_name": "acmevendor",
+                "salespage_url": "https://example.com/sales",
+                "affiliate_commission": 47.5,
+                "currency": "EUR",
+                "category": "Health"
+              }
+            ],
+            "page_no": 1
+          }
+        }
+        """;
+
+        var products = Digistore24Connector.MapProducts(json);
+        products.Should().ContainSingle();
+        products[0].ExternalProductId.Should().Be("99881");
+        products[0].Name.Should().Be("Wellness Bundle");
+        products[0].VendorName.Should().Be("acmevendor");
+        products[0].AffiliateUrlTemplate.Should().Be("https://example.com/sales");
+        products[0].Commission.Should().Be(47.5m);
+    }
+
+    [Fact]
+    public void Documented_marketplace_entries_use_id_headline_and_affiliate_profit()
+    {
+        const string json = """
+        {
+          "result": "success",
+          "data": {
+            "entries": [
+              {
+                "id": 41,
+                "headline": "Sleep Reset",
+                "description": "Third-party listing",
+                "main_product_id": 9001,
+                "product_category": "Health",
+                "stats_stars": 4.2,
+                "stats_affiliate_profit_sale": 18.5,
+                "currency": "EUR"
+              }
+            ],
+            "count": 1
+          }
+        }
+        """;
+
+        var products = Digistore24Connector.MapProducts(json);
+        products.Should().ContainSingle();
+        products[0].ExternalProductId.Should().Be("9001");
+        products[0].Name.Should().Be("Sleep Reset");
+        products[0].Category.Should().Be("Health");
+        products[0].Commission.Should().Be(18.5m);
+    }
+
     private sealed class RecordingHttpClientFactory : IHttpClientFactory
     {
         private readonly Func<HttpClient, HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _handler;

@@ -3,6 +3,7 @@ using BottomFunnel.Application.Dtos;
 using BottomFunnel.Application.Offers;
 using BottomFunnel.Application.Offers.Models;
 using BottomFunnel.Application.Persistence;
+using BottomFunnel.Application.Stores;
 using BottomFunnel.Domain.Entities;
 using BottomFunnel.Domain.Enums;
 using BottomFunnel.Domain.Scoring;
@@ -20,6 +21,8 @@ public sealed class ProductCandidateService
     private readonly IJobQueue _jobs;
     private readonly IAiService _ai;
     private readonly IHttpClientFactory _http;
+    private readonly IStoreConnectorRegistry _stores;
+    private readonly ICredentialProtector _protector;
 
     public ProductCandidateService(
         IAppDbContext db,
@@ -27,7 +30,9 @@ public sealed class ProductCandidateService
         ICurrencyExchangeService fx,
         IJobQueue jobs,
         IAiService ai,
-        IHttpClientFactory http)
+        IHttpClientFactory http,
+        IStoreConnectorRegistry stores,
+        ICredentialProtector protector)
     {
         _db = db;
         _current = current;
@@ -35,6 +40,8 @@ public sealed class ProductCandidateService
         _jobs = jobs;
         _ai = ai;
         _http = http;
+        _stores = stores;
+        _protector = protector;
     }
 
     public async Task<PagedProductCandidatesDto> ListAsync(GetProductCandidatesQuery query, CancellationToken ct)
@@ -50,6 +57,7 @@ public sealed class ProductCandidateService
             rows = rows.Where(x =>
                 x.Title.ToLower().Contains(term)
                 || x.ExternalId.ToLower().Contains(term)
+                || (x.Vendor != null && x.Vendor.ToLower().Contains(term))
                 || (x.Description != null && x.Description.ToLower().Contains(term)));
         }
 
@@ -120,8 +128,9 @@ public sealed class ProductCandidateService
 
         var orgId = _current.OrganizationId;
         var currency = string.IsNullOrWhiteSpace(command.Currency) ? "USD" : command.Currency.Trim().ToUpperInvariant();
-        var vendor = candidate.ExternalId.Trim();
-        var hop = FirstUrl(extras?.AffiliateUrl, ClickBankHop(vendor));
+        var productId = candidate.ExternalId.Trim();
+        var vendor = string.IsNullOrWhiteSpace(candidate.Vendor) ? productId : candidate.Vendor.Trim();
+        var hop = await ResolveHopAsync(candidate, vendor, productId, extras?.AffiliateUrl, ct);
 
         await using var tx = await _db.Database.BeginTransactionAsync(ct);
         try
@@ -146,7 +155,7 @@ public sealed class ProductCandidateService
                 Status = OfferStatus.Active,
                 ProviderKey = candidate.ProviderKey,
                 ExternalVendorId = vendor,
-                ExternalProductId = vendor,
+                ExternalProductId = productId,
                 BrandBiddingAllowed = extras?.BrandBiddingAllowed ?? false,
                 DirectLinkingAllowed = extras?.DirectLinkingAllowed ?? false,
                 PpcAllowed = true,
@@ -247,6 +256,112 @@ public sealed class ProductCandidateService
             : $"https://{nickname}.{ClickBankAffiliate}.hop.clickbank.net/";
     }
 
+    public async Task<ClickBankFeedSyncResult> SyncDigistore24MarketplaceAsync(CancellationToken ct)
+    {
+        var connection = await _db.StoreConnections
+            .Where(x => x.OrganizationId == _current.OrganizationId && x.ProviderKey == "digistore24")
+            .OrderByDescending(x => x.Status == StoreConnectionStatus.Connected)
+            .ThenByDescending(x => x.UpdatedAt)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException("Save a Digistore24 API key on Networks before syncing the marketplace.");
+
+        var creds = _protector.Unprotect(connection.EncryptedCredentials);
+        if (!creds.TryGetValue("apiKey", out var apiKey) || string.IsNullOrWhiteSpace(apiKey))
+            throw new InvalidOperationException("Save a Digistore24 API key on Networks before syncing the marketplace.");
+
+        var products = await _stores.GetRequired("digistore24").ListProductsAsync(creds, ct);
+        if (products.Count == 0)
+            throw new InvalidOperationException("Digistore24 listMarketplaceEntries returned no entries for the API key saved on Networks. That call lists this account's own marketplace listings, not the public affiliate catalog.");
+        var existingRows = await _db.ProductCandidates
+            .Where(x => x.ProviderKey == "digistore24")
+            .ToListAsync(ct);
+        var existing = existingRows.ToDictionary(x => x.ExternalId, StringComparer.OrdinalIgnoreCase);
+        var added = new List<ProductCandidate>();
+        var result = UpsertMarketplace("digistore24", products, existing, added, DateTimeOffset.UtcNow);
+        if (added.Count > 0)
+            _db.ProductCandidates.AddRange(added);
+        await _db.SaveChangesAsync(ct);
+        return result;
+    }
+
+    internal static ClickBankFeedSyncResult UpsertMarketplace(
+        string providerKey,
+        IEnumerable<CanonicalProduct> products,
+        Dictionary<string, ProductCandidate> existing,
+        List<ProductCandidate> added,
+        DateTimeOffset now)
+    {
+        var inserted = 0;
+        var updated = 0;
+        var skipped = 0;
+        var examined = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in products)
+        {
+            examined++;
+            var externalId = item.ExternalProductId?.Trim() ?? "";
+            if (externalId.Length == 0 || string.IsNullOrWhiteSpace(item.Name) || !seen.Add(externalId))
+            {
+                skipped++;
+                continue;
+            }
+
+            if (!existing.TryGetValue(externalId, out var row))
+            {
+                row = new ProductCandidate
+                {
+                    ProviderKey = providerKey,
+                    ExternalId = externalId,
+                    Status = CandidateStatus.PendingReview,
+                    DiscoveredAt = now
+                };
+                existing[externalId] = row;
+                added.Add(row);
+                inserted++;
+            }
+            else
+            {
+                updated++;
+            }
+
+            row.Title = Truncate(item.Name.Trim(), 300);
+            row.Description = item.Description ?? "";
+            row.Vendor = string.IsNullOrWhiteSpace(item.VendorName) ? row.Vendor : Truncate(item.VendorName.Trim(), 200);
+            row.Gravity = item.Commission;
+            row.Category = string.IsNullOrWhiteSpace(item.Category) ? row.Category : Truncate(item.Category.Trim(), 200);
+            if (!string.IsNullOrWhiteSpace(item.AffiliateUrlTemplate))
+                row.AffiliatePageUrl = Truncate(item.AffiliateUrlTemplate.Trim(), 2000);
+            row.UpdatedAt = now;
+        }
+
+        return new ClickBankFeedSyncResult(inserted, updated, skipped, examined);
+    }
+
+    private async Task<string> ResolveHopAsync(
+        ProductCandidate candidate,
+        string vendor,
+        string productId,
+        string? requestedUrl,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedUrl))
+            return requestedUrl.Trim();
+        if (!string.Equals(candidate.ProviderKey, "digistore24", StringComparison.OrdinalIgnoreCase))
+            return ClickBankHop(vendor);
+
+        var connection = await _db.StoreConnections.FirstOrDefaultAsync(
+            x => x.OrganizationId == _current.OrganizationId && x.ProviderKey == "digistore24", ct);
+        var affiliate = "affiliate";
+        if (connection is not null)
+        {
+            var creds = _protector.Unprotect(connection.EncryptedCredentials);
+            if (creds.TryGetValue("affiliateId", out var id) && !string.IsNullOrWhiteSpace(id))
+                affiliate = id.Trim();
+        }
+
+        return $"https://www.digistore24.com/redir/{Uri.EscapeDataString(productId)}/{Uri.EscapeDataString(affiliate)}/";
+    }
+
     private async Task<string> DownloadAsync(string? url, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(url) || !Uri.TryCreate(url, UriKind.Absolute, out var uri)
@@ -283,6 +398,7 @@ public sealed class ProductCandidateService
         x.Id,
         x.ProviderKey,
         x.ExternalId,
+        x.Vendor,
         x.Title,
         x.Description,
         x.Gravity,

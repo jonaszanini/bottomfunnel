@@ -8,9 +8,9 @@ const STEPS = [
     n: 1,
     href: "/networks",
     title: "Networks (optional)",
-    you: "Save your ClickBank or Digistore24 API key and affiliate nickname.",
-    why: "So conversion webhooks can credit you, and hop links can use your id.",
-    skip: "Skip if you only paste hop links by hand. Affiliates cannot Sync the marketplace catalog.",
+    you: "Save Affiliate ID, API key, and IPN / webhook passphrase for ClickBank or Digistore24.",
+    why: "Affiliate ID builds hop links, the API key authenticates marketplace discovery, and the passphrase verifies sale postbacks.",
+    skip: "Skip if you only paste hop links by hand. Marketplace sync lives on Offers → Discovery Inbox, not here.",
   },
   {
     n: 2,

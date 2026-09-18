@@ -176,6 +176,7 @@ public class AppDbContext : IdentityDbContext<ApplicationUser>, IAppDbContext
             b.HasKey(x => x.Id);
             b.Property(x => x.ProviderKey).HasMaxLength(32).IsRequired();
             b.Property(x => x.ExternalId).HasMaxLength(120).IsRequired();
+            b.Property(x => x.Vendor).HasMaxLength(200);
             b.Property(x => x.Title).HasMaxLength(300).IsRequired();
             b.Property(x => x.Description).HasColumnType("text");
             b.Property(x => x.Gravity).HasPrecision(18, 4);

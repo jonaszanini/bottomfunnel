@@ -2,6 +2,7 @@ using System.Text;
 using BottomFunnel.Application.Abstractions;
 using BottomFunnel.Application.Dtos;
 using BottomFunnel.Application.Services;
+using BottomFunnel.Application.Stores;
 using BottomFunnel.Domain.Entities;
 using BottomFunnel.Domain.Enums;
 using BottomFunnel.Infrastructure.Feeds;
@@ -152,6 +153,44 @@ public class ProductCandidateServiceTests
         ProductCandidateService.ClickBankHop("Pro Dentim!").Should().Be("https://prodentim.jzanini.hop.clickbank.net/");
     }
 
+    [Fact]
+    public void Upserts_digistore24_marketplace_rows_without_resetting_promoted_status()
+    {
+        var existing = new Dictionary<string, ProductCandidate>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["keep"] = new()
+            {
+                ProviderKey = "digistore24",
+                ExternalId = "keep",
+                Title = "Old",
+                Status = CandidateStatus.Promoted,
+                Gravity = 1
+            }
+        };
+        var added = new List<ProductCandidate>();
+        var result = ProductCandidateService.UpsertMarketplace(
+            "digistore24",
+            [
+                new CanonicalProduct("keep", "Kept Offer", "updated", "Health", "vendor-a", null, "EUR", 10, 10, 22, null, CommissionType.OneTime, "https://example.com/a", null, OfferStatus.Active, "{}"),
+                new CanonicalProduct("new", "New Offer", "desc", "Biz", "vendor-b", null, "USD", 20, 20, 15, null, CommissionType.OneTime, "https://example.com/b", null, OfferStatus.Active, "{}"),
+                new CanonicalProduct("", "Missing id", null, null, null, null, "USD", null, null, 0, null, CommissionType.OneTime, null, null, OfferStatus.Active, "{}")
+            ],
+            existing,
+            added,
+            DateTimeOffset.UnixEpoch);
+
+        result.Inserted.Should().Be(1);
+        result.Updated.Should().Be(1);
+        result.Skipped.Should().Be(1);
+        added.Should().ContainSingle();
+        added[0].ExternalId.Should().Be("new");
+        added[0].Vendor.Should().Be("vendor-b");
+        added[0].Status.Should().Be(CandidateStatus.PendingReview);
+        existing["keep"].Status.Should().Be(CandidateStatus.Promoted);
+        existing["keep"].Title.Should().Be("Kept Offer");
+        existing["keep"].Gravity.Should().Be(22);
+    }
+
     private static (ProductCandidateService Service, AppDbContext Db) Create()
     {
         var orgId = Guid.NewGuid();
@@ -166,7 +205,9 @@ public class ProductCandidateServiceTests
             new StubFx(1.38m),
             new FakeJobQueue(),
             new FakeAi(),
-            new UnusedHttp());
+            new UnusedHttp(),
+            new FakeStoreRegistry(),
+            new FakeProtector());
         return (service, db);
     }
 
@@ -204,5 +245,18 @@ public class ProductCandidateServiceTests
     private sealed class UnusedHttp : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeStoreRegistry : IStoreConnectorRegistry
+    {
+        public IReadOnlyList<IStoreConnector> All => [];
+        public IStoreConnector GetRequired(string providerKey) => throw new NotSupportedException();
+        public IStoreConnector? Find(string providerKey) => null;
+    }
+
+    private sealed class FakeProtector : ICredentialProtector
+    {
+        public string Protect(IReadOnlyDictionary<string, string> credentials) => "";
+        public Dictionary<string, string> Unprotect(string protectedPayload) => new();
     }
 }

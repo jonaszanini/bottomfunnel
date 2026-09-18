@@ -150,6 +150,7 @@ export type ProductCandidate = {
   id: string;
   providerKey: string;
   externalId: string;
+  vendor?: string | null;
   title: string;
   description: string;
   gravity: number;

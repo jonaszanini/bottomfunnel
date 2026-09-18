@@ -443,6 +443,7 @@ public sealed record ProductCandidateDto(
     Guid Id,
     string ProviderKey,
     string ExternalId,
+    string? Vendor,
     string Title,
     string Description,
     decimal Gravity,

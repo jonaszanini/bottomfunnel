@@ -33,9 +33,9 @@ public sealed class Digistore24Connector : IStoreConnector
 
     public IReadOnlyList<CredentialField> CredentialSchema { get; } =
     [
-        new("apiKey", "API key", true, true),
-        new("ipnPassphrase", "IPN passphrase", true, false),
-        new("affiliateId", "Affiliate id", false, false)
+        new("affiliateId", "Affiliate ID", false, true, "used to auto-generate hop links"),
+        new("apiKey", "API key", true, true, "used to authenticate marketplace discovery"),
+        new("ipnPassphrase", "IPN / Webhook Passphrase", true, false, "used to verify incoming sale postbacks")
     ];
 
     public async Task TestConnectionAsync(IReadOnlyDictionary<string, string> credentials, CancellationToken cancellationToken)
@@ -120,47 +120,32 @@ public sealed class Digistore24Connector : IStoreConnector
             data = dataEl;
 
         var items = new List<JsonElement>();
-        if (data.ValueKind == JsonValueKind.Array)
-            items.AddRange(data.EnumerateArray());
-        else if (data.ValueKind == JsonValueKind.Object)
-        {
-            if (data.TryGetProperty("products", out var products))
-            {
-                if (products.ValueKind == JsonValueKind.Array)
-                    items.AddRange(products.EnumerateArray());
-                else if (products.ValueKind == JsonValueKind.Object)
-                    items.AddRange(products.EnumerateObject().Select(p => p.Value));
-            }
-            else
-            {
-                foreach (var prop in data.EnumerateObject())
-                {
-                    if (prop.Value.ValueKind == JsonValueKind.Object)
-                        items.Add(prop.Value);
-                }
-            }
-        }
+        CollectEntries(data, items);
 
         return items.Select(MapProduct).Where(x => !string.IsNullOrWhiteSpace(x.ExternalProductId)).ToList();
     }
 
     private static CanonicalProduct MapProduct(JsonElement item)
     {
-        var id = ReadString(item, "product_id", "id", "productId") ?? "";
-        var name = ReadString(item, "name", "product_name", "title") ?? id;
+        var id = ReadString(item, "product_id", "main_product_id", "id", "productId") ?? "";
+        var name = ReadString(item, "headline", "name", "product_name", "title") ?? id;
         var description = ReadString(item, "description", "note");
         decimal? price = ReadDecimal(item, "price", "amount", "sales_price");
-        decimal commission = ReadDecimal(item, "affiliate_commission", "commission", "commission_value") ?? 0;
+        decimal commission = ReadDecimal(item, "stats_affiliate_profit_sale", "affiliate_share", "affiliate_commission", "commission", "commission_value") ?? 0;
+        if (commission == 0)
+            commission = ReadDecimal(item, "stats_stars") ?? 0;
         var currency = ReadString(item, "currency") ?? "EUR";
-        var vendor = ReadString(item, "vendor_name", "merchant", "vendor");
+        var vendor = ReadString(item, "vendor_name", "merchant_name", "merchant", "vendor");
         var recurring = string.Equals(ReadString(item, "billing_type", "payment_type"), "subscription", StringComparison.OrdinalIgnoreCase);
-        var url = ReadString(item, "order_form_url", "buy_url", "url");
+        var url = ReadString(item, "salespage_url", "sales_page_url", "support_url", "order_form_url", "buy_url", "url");
+        if (commission == 0 && item.TryGetProperty("stats", out var stats) && stats.ValueKind == JsonValueKind.Object)
+            commission = ReadDecimal(stats, "affiliate_commission", "earnings_per_sale", "earnings_per_order", "conversion_rate") ?? 0;
 
         return new CanonicalProduct(
             id,
             name,
             description,
-            ReadString(item, "category"),
+            ReadString(item, "product_category", "category"),
             vendor,
             ReadString(item, "vendor_id"),
             currency,
@@ -170,9 +155,47 @@ public sealed class Digistore24Connector : IStoreConnector
             ReadDecimal(item, "rebill_commission"),
             recurring ? CommissionType.Recurring : CommissionType.OneTime,
             url,
-            ReadString(item, "country"),
+            ReadString(item, "country", "language"),
             OfferStatus.Active,
             item.GetRawText());
+    }
+
+    private static void CollectEntries(JsonElement node, List<JsonElement> items)
+    {
+        if (node.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in node.EnumerateArray())
+                CollectEntries(el, items);
+            return;
+        }
+
+        if (node.ValueKind != JsonValueKind.Object)
+            return;
+
+        if (node.TryGetProperty("entries", out var entries) && entries.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var el in entries.EnumerateArray())
+            {
+                if (el.ValueKind == JsonValueKind.Object)
+                    items.Add(el);
+            }
+            return;
+        }
+
+        var productId = ReadString(node, "product_id", "productId");
+        var name = ReadString(node, "name", "product_name", "title", "headline");
+        if (productId is not null || (ReadString(node, "id") is not null && name is not null))
+        {
+            items.Add(node);
+            return;
+        }
+
+        foreach (var prop in node.EnumerateObject())
+        {
+            if (prop.Value.ValueKind is JsonValueKind.Array or JsonValueKind.Object
+                && prop.Name is not ("stats" or "vendor" or "merchant"))
+                CollectEntries(prop.Value, items);
+        }
     }
 
     internal static string Endpoint(string function) =>

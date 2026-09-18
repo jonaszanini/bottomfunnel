@@ -16,20 +16,19 @@ public sealed class ClickBankConnector : IStoreConnector
     public string ProviderKey => "clickbank";
     public string DisplayName => "ClickBank";
     public StoreCapabilities Capabilities =>
-        StoreCapabilities.CanListProducts | StoreCapabilities.CanBuildAffiliateUrl | StoreCapabilities.CanReceiveWebhooks | StoreCapabilities.CanListOrders;
+        StoreCapabilities.CanBuildAffiliateUrl | StoreCapabilities.CanReceiveWebhooks | StoreCapabilities.CanListOrders;
 
     public IReadOnlyList<CredentialField> CredentialSchema { get; } =
     [
-        new("apiKey", "API key", true, true, "API-..."),
-        new("affiliateNickname", "Affiliate nickname", false, true, "jzanini"),
-        new("insSecret", "INS secret", true, false),
-        new("siteNickname", "Seller site nickname (optional)", false, false, "only if you sell on ClickBank")
+        new("affiliateNickname", "Affiliate ID", false, true, "used to auto-generate hop links"),
+        new("apiKey", "API key", true, true, "used to authenticate API calls"),
+        new("insSecret", "IPN / Webhook Passphrase", true, false, "used to verify incoming sale postbacks")
     ];
 
     public async Task TestConnectionAsync(IReadOnlyDictionary<string, string> credentials, CancellationToken cancellationToken)
     {
         if (!credentials.TryGetValue("affiliateNickname", out var affiliate) || string.IsNullOrWhiteSpace(affiliate))
-            throw new InvalidOperationException("Affiliate nickname is required.");
+            throw new InvalidOperationException("Affiliate ID is required.");
 
         var url = $"orders2/count?role=AFFILIATE&affiliate={Uri.EscapeDataString(affiliate)}";
         var (status, body) = await SendAsync(credentials, url, cancellationToken);
@@ -41,17 +40,11 @@ public sealed class ClickBankConnector : IStoreConnector
             : $"ClickBank connection failed ({status}): {body}");
     }
 
-    public async Task<IReadOnlyList<CanonicalProduct>> ListProductsAsync(IReadOnlyDictionary<string, string> credentials, CancellationToken cancellationToken)
+    public Task<IReadOnlyList<CanonicalProduct>> ListProductsAsync(IReadOnlyDictionary<string, string> credentials, CancellationToken cancellationToken)
     {
-        if (!credentials.TryGetValue("siteNickname", out var site) || string.IsNullOrWhiteSpace(site))
-            throw new InvalidOperationException(
-                "ClickBank product sync is for seller catalogs only. Affiliates should leave Site nickname blank and paste each product's hop link on Offers.");
-
-        var (status, json) = await SendAsync(credentials, $"products/list?site={Uri.EscapeDataString(site)}", cancellationToken);
-        if (status is < 200 or >= 300)
-            throw new InvalidOperationException($"ClickBank list failed ({status}): {json}");
-
-        return MapProducts(json);
+        _ = credentials;
+        _ = cancellationToken;
+        throw new InvalidOperationException("Seller product sync has been removed. Use Offers → Discovery Inbox to sync the Digistore24 marketplace.");
     }
 
     public string BuildTrackedAffiliateUrl(CanonicalOfferContext offer, string clickId, IReadOnlyDictionary<string, string> credentials)

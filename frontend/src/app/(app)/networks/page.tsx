@@ -39,25 +39,14 @@ export default function NetworksPage() {
     }
   }
 
-  async function sync(id: string) {
-    setMessage("Syncing…");
-    try {
-      await api(`/store-connections/${id}/sync`, { method: "POST" });
-      setMessage("Sync finished. Check Products and Offers.");
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Sync failed");
-    }
-    await load();
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
         title="Networks"
-        summary="Connect ClickBank or Digistore24 for webhooks and identity. Affiliates paste hop links on Offers — Sync products is seller-catalog only."
-        purpose="Store your network account (API key, affiliate nickname, INS secret) so conversions can post back and hop links can use your id."
-        does="Save ClickBank/Digistore24 credentials. Leave seller site nickname blank unless you sell on ClickBank. Do not expect Sync to import the marketplace."
-        flow="Optional first step. Connecting is not required to create an offer. Hop links still belong on Offers, per product."
+        summary="Credential and postback setup for ClickBank and Digistore24. Marketplace discovery is not done here."
+        purpose="Enter Affiliate ID to auto-generate hop links, API key to authenticate marketplace discovery, and IPN / webhook passphrase to verify incoming sale postbacks."
+        does="Save those credentials. Digistore24 marketplace sync runs from Offers → Discovery Inbox and uses the API key saved here."
+        flow="Connect a network, then open Offers → Discovery Inbox to sync the Digistore24 marketplace, or create an offer by hand."
       />
       <div className="flex gap-2">
         {providers.map((p) => (
@@ -90,15 +79,12 @@ export default function NetworksPage() {
       ) : null}
       {message ? <p className="text-sm text-zinc-400">{message}</p> : null}
       <Table>
-        <thead><tr><Th>Provider</Th><Th>Status</Th><Th>Last sync</Th><Th>Error</Th><Th></Th></tr></thead>
+        <thead><tr><Th>Provider</Th><Th>Status</Th></tr></thead>
         <tbody>
           {connections.map((c) => (
             <tr key={c.id}>
               <Td>{c.displayName}</Td>
               <Td>{c.status}</Td>
-              <Td>{c.lastSyncedAt ? new Date(c.lastSyncedAt).toLocaleString() : "—"}</Td>
-              <Td className="max-w-md text-red-400">{c.lastError ?? "—"}</Td>
-              <Td><Button type="button" onClick={() => sync(c.id)}>Sync products</Button></Td>
             </tr>
           ))}
         </tbody>

@@ -46,7 +46,7 @@ docker compose up -d
 
 ## ClickBank and Digistore24
 
-Connect accounts under **Networks** (API key + your affiliate nickname). Credentials are encrypted at rest. Vendor/site nicknames are per product — paste hop links on **Offers**. ClickBank product sync is seller-catalog only, not the public marketplace. Hop/affiliate URLs include the click id (`tid` / `sid`).
+Connect accounts under **Networks** (Affiliate ID, API key, and IPN / webhook passphrase). Credentials are encrypted at rest. Sync the Digistore24 marketplace from **Offers → Discovery Inbox**; that writes third-party candidates into staging, not live offers. Hop/affiliate URLs include the click id (`tid` / `sid`).
 
 Webhooks:
 
