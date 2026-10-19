@@ -1,67 +1,48 @@
-# Bottom Funnel
+# Flow Hub
 
-Internal platform for finding, scoring, launching, and tracking bottom-of-funnel affiliate campaigns.
+Single-user tracker for one affiliate offer at a time. A Track holds the affiliate link, postback URL, script, Google Ads conversion upload, and IP exclusions. Pages are generated as JSON, rendered in PHP, and exported as one `index.html`.
 
-## Stack
+## Local setup
 
-- `frontend/` — Next.js + React + TypeScript + Tailwind
-- `backend/` — .NET 10 ASP.NET Core modular monolith
-- PostgreSQL via Docker Compose (database only)
+XAMPP Apache stays on PHP 8.0. This app uses PHP 8.3, installed separately, plus the MariaDB that ships with XAMPP.
 
-## Prerequisites
-
-- .NET 10 SDK
-- Node.js 20+
-- Docker Desktop (for PostgreSQL)
-
-## Run locally
-
-```bash
-docker compose up -d
-cd backend
-dotnet ef database update --project src/BottomFunnel.Infrastructure --startup-project src/BottomFunnel.Api
-dotnet run --project src/BottomFunnel.Api
-```
-
-In another terminal:
-
-```bash
-cd frontend
+```powershell
+$php = "C:\Users\jonas\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.3_Microsoft.Winget.Source_8wekyb3d8bbwe"
+$env:Path = "$php;" + $env:Path
+copy .env.example .env
+php artisan key:generate
+C:\xampp\mysql\bin\mysql.exe -u root -e "CREATE DATABASE IF NOT EXISTS flow_hub CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+php artisan migrate --seed
 npm install
-npm run dev
+npm run build
+php artisan serve --host=127.0.0.1 --port=8000
+php artisan queue:work
 ```
 
-- App: http://localhost:3000
-- API: http://localhost:5080
-- Seed login: `admin@local` / `ChangeMe123!`
+Sign in with `FLOW_HUB_USERNAME` and `FLOW_HUB_PASSWORD` from `.env`. There is no registration.
 
-The API applies migrations on startup, so the `dotnet ef` step is optional after the first run if PostgreSQL is already up.
+Set `OPENAI_API_KEY` before generating a page. Set `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, and `GOOGLE_ADS_DEVELOPER_TOKEN` before linking an account. The OAuth redirect is `GOOGLE_ADS_REDIRECT_URI`. Data Manager conversion upload uses the same Google login and does not use the developer token. Missing credentials stop that call with an error.
 
-Reset the database:
+`GOOGLE_ADS_API_VERSION` defaults to `v22`.
 
-```bash
-docker compose down -v
-docker compose up -d
-```
+## What a Track does
 
-## ClickBank and Digistore24
+1. Create a Track with the product, platform, offer URL, page type, strategy, Google Ads account, and offline conversion action.
+2. Generate a page. The selected page type is saved on the page and written onto the Track.
+3. Export `index.html`. Host that file and use its URL as the ad destination. The Track script is already in the file.
+4. Give the Track postback URL to the affiliate platform. ClickBank uses `tid`, Digistore24 uses `sid`, BuyGoods uses `subid`, and MaxWeb uses `subid1`.
+5. A matched postback is stored in full, converted to CAD$ with the Bank of Canada rate, and queued to Data Manager. The same order id updates the existing row. Refunds restate the value.
 
-Connect accounts under **Networks** (Affiliate ID, API key, and IPN / webhook passphrase). Credentials are encrypted at rest. Sync the Digistore24 marketplace from **Offers → Discovery Inbox**; that writes third-party candidates into staging, not live offers. Hop/affiliate URLs include the click id (`tid` / `sid`).
+Strategy is a filter label. Spend is typed in by hand, in CAD$. The dashboard flags three cases and does not pause campaigns: no conversions once spend reaches about 50 percent of the typical commission for one sale, spend at about 70 percent of recorded commission, and ROI at or under 30 percent.
 
-Webhooks:
+## Hosting
 
-- `POST http://localhost:5080/webhooks/clickbank`
-- `POST http://localhost:5080/webhooks/digistore24`
-- Generic postback: `GET/POST http://localhost:5080/postback?clickId={guid}&commission=40`
+Run the production app in AWS `ca-central-1`.
 
-Tracking redirect: `GET http://localhost:5080/t/{trackingCode}`
+- One small EC2 instance, or a Laravel Forge server, in that region.
+- RDS MySQL in the same region. Do not put the database in another region.
+- HTTPS on the app domain so postbacks and the tracker script are served over TLS.
+- A queue worker (`php artisan queue:work`) for conversion upload and IP exclusion. The webhook returns after the job is queued.
+- Secrets stay in the environment: `APP_KEY`, database password, `OPENAI_API_KEY`, Google client id, client secret, developer token, and `FLOW_HUB_PASSWORD`.
 
-## Adding another store
-
-1. Implement `IStoreConnector` in `backend/src/BottomFunnel.Infrastructure/Stores/{Provider}/`
-2. Register it with `services.AddSingleton<IStoreConnector, FooConnector>()`
-3. The Networks form renders `CredentialSchema` automatically
-
-## AI
-
-Set `Ai:ApiKey` in `backend/src/BottomFunnel.Api/appsettings.Development.json` or the `Ai__ApiKey` environment variable. Without a key, analysis falls back to a deterministic summary.
+Local development stays on this machine.
