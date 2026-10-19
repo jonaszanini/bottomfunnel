@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\ThemeManager;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -37,6 +38,10 @@ class HandleInertiaRequests extends Middleware
     {
         return [
             ...parent::share($request),
+            'theme' => [
+                'preference' => ThemeManager::getPreference($request),
+                'htmlClass' => ThemeManager::getHtmlClass($request),
+            ],
             'auth' => [
                 'user' => $request->user() ? [
                     'username' => $request->user()->username,

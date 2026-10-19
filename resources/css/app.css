@@ -3,8 +3,337 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../js/**/*.{js,jsx}';
+@source '../views/**/*.blade.php';
 
+/* Tailwind v4 class-based dark mode custom variant */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   Design Tokens - Root Semantic camelCase CSS Variables (Light Theme Default)
+   ========================================================================== */
+:root {
+    /* Backgrounds */
+    --primaryBackgroundColor: #f5f5f4;    /* stone-100 base app background */
+    --secondaryBackgroundColor: #ffffff;  /* card / surface background */
+    --surfaceBackgroundColor: #ffffff;    /* panels, containers, modals */
+    --cardBackgroundColor: #ffffff;       /* widget & card background */
+    --elevatedBackgroundColor: #ffffff;   /* dropdowns, popovers */
+    --subtleBackgroundColor: #f0fdfa;     /* teal-50 subtle highlight background */
+    --inputBackgroundColor: #ffffff;      /* input, select, control background */
+    --headerBackgroundColor: #ffffff;     /* header & top navigation background */
+
+    /* Typography & Text */
+    --primaryTextColor: #1c1917;          /* stone-900 high contrast readable text */
+    --secondaryTextColor: #57534e;        /* stone-600 readable body & secondary text */
+    --mutedTextColor: #a8a29e;            /* stone-400 placeholder & meta text */
+    --invertedTextColor: #ffffff;         /* text on dark or high-contrast surfaces */
+
+    /* Brand / Accent (Tailored Flow Hub Palette) */
+    --accentColor: #0f766e;               /* teal-700 primary action & interactive */
+    --accentHoverColor: #115e59;          /* teal-800 hover state */
+    --accentActiveColor: #134e4a;         /* teal-900 active pressed state */
+    --accentSubtleColor: #ccfbf1;         /* teal-100 badge & pill background */
+    --accentTextColor: #ffffff;           /* crisp white text on accent buttons */
+    --accentFocusRing: rgba(15, 118, 110, 0.35);
+
+    /* Borders & Lines */
+    --borderColor: #e7e5e4;               /* stone-200 card and table border */
+    --borderHoverColor: #d6d3d1;          /* stone-300 hover state */
+    --borderFocusColor: #0f766e;          /* focused element outline */
+    --dividerColor: #e7e5e4;              /* horizontal rules and dividers */
+
+    /* Feedback & Status */
+    --successColor: #0f766e;              /* success text */
+    --successBackgroundColor: #f0fdfa;    /* success alert background */
+    --successBorderColor: #99f6e4;        /* success border */
+
+    --dangerColor: #b91c1c;               /* danger / error text */
+    --dangerBackgroundColor: #fef2f2;     /* danger alert background */
+    --dangerBorderColor: #fecaca;         /* danger border */
+
+    --warningColor: #b45309;              /* warning text */
+    --warningBackgroundColor: #fffbeb;    /* warning alert background */
+    --warningBorderColor: #fde68a;        /* warning border */
+
+    /* Shadows */
+    --shadowSm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    --shadowMd: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+    --shadowLg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+
+    /* Transitions */
+    --themeTransitionDuration: 280ms;
+    --themeTransitionTiming: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ==========================================================================
+   Design Tokens - Dark Mode Overrides (Class or Attribute Applied)
+   ========================================================================== */
+html.dark,
+[data-theme="dark"] {
+    /* Backgrounds */
+    --primaryBackgroundColor: #0c0a09;    /* stone-950 deep obsidian canvas */
+    --secondaryBackgroundColor: #1c1917;  /* stone-900 surface & cards */
+    --surfaceBackgroundColor: #1c1917;    /* stone-900 panels and containers */
+    --cardBackgroundColor: #1c1917;       /* stone-900 card background */
+    --elevatedBackgroundColor: #292524;   /* stone-800 elevated dialogs */
+    --subtleBackgroundColor: #132a27;     /* dark teal luminous highlight */
+    --inputBackgroundColor: #1c1917;      /* stone-900 input controls */
+    --headerBackgroundColor: #141211;     /* high-end dark navbar */
+
+    /* Typography & Text */
+    --primaryTextColor: #f5f5f4;          /* stone-100 high contrast white */
+    --secondaryTextColor: #a8a29e;        /* stone-400 clear neutral body text */
+    --mutedTextColor: #78716c;            /* stone-500 muted timestamps and hints */
+    --invertedTextColor: #0c0a09;         /* dark text on white badges */
+
+    /* Brand / Accent */
+    --accentColor: #14b8a6;               /* vibrant teal-500 glow in dark */
+    --accentHoverColor: #2dd4bf;          /* teal-400 interactive hover */
+    --accentActiveColor: #0d9488;         /* teal-600 */
+    --accentSubtleColor: rgba(20, 184, 166, 0.16);
+    --accentTextColor: #042f2e;           /* contrast text */
+    --accentFocusRing: rgba(20, 184, 166, 0.45);
+
+    /* Borders & Lines */
+    --borderColor: #292524;               /* stone-800 clean subtle divider */
+    --borderHoverColor: #44403c;          /* stone-700 hover border */
+    --borderFocusColor: #14b8a6;          /* focused border */
+    --dividerColor: #292524;
+
+    /* Feedback & Status */
+    --successColor: #5eead4;              /* teal-300 */
+    --successBackgroundColor: rgba(19, 78, 74, 0.4);
+    --successBorderColor: #115e59;
+
+    --dangerColor: #fca5a5;               /* red-300 */
+    --dangerBackgroundColor: rgba(127, 29, 29, 0.35);
+    --dangerBorderColor: #991b1b;
+
+    --warningColor: #fcd34d;              /* amber-300 */
+    --warningBackgroundColor: rgba(120, 53, 15, 0.35);
+    --warningBorderColor: #92400e;
+
+    /* Shadows */
+    --shadowSm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+    --shadowMd: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
+    --shadowLg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+}
+
+/* ==========================================================================
+   Native CSS Media Query Fallback (Auto-detection without JS or prior to JS)
+   ========================================================================== */
+@media (prefers-color-scheme: dark) {
+    :root:not(.light):not([data-theme="light"]) {
+        --primaryBackgroundColor: #0c0a09;
+        --secondaryBackgroundColor: #1c1917;
+        --surfaceBackgroundColor: #1c1917;
+        --cardBackgroundColor: #1c1917;
+        --elevatedBackgroundColor: #292524;
+        --subtleBackgroundColor: #132a27;
+        --inputBackgroundColor: #1c1917;
+        --headerBackgroundColor: #141211;
+
+        --primaryTextColor: #f5f5f4;
+        --secondaryTextColor: #a8a29e;
+        --mutedTextColor: #78716c;
+        --invertedTextColor: #0c0a09;
+
+        --accentColor: #14b8a6;
+        --accentHoverColor: #2dd4bf;
+        --accentActiveColor: #0d9488;
+        --accentSubtleColor: rgba(20, 184, 166, 0.16);
+        --accentTextColor: #042f2e;
+        --accentFocusRing: rgba(20, 184, 166, 0.45);
+
+        --borderColor: #292524;
+        --borderHoverColor: #44403c;
+        --borderFocusColor: #14b8a6;
+        --dividerColor: #292524;
+
+        --successColor: #5eead4;
+        --successBackgroundColor: rgba(19, 78, 74, 0.4);
+        --successBorderColor: #115e59;
+
+        --dangerColor: #fca5a5;
+        --dangerBackgroundColor: rgba(127, 29, 29, 0.35);
+        --dangerBorderColor: #991b1b;
+
+        --warningColor: #fcd34d;
+        --warningBackgroundColor: rgba(120, 53, 15, 0.35);
+        --warningBorderColor: #92400e;
+
+        --shadowSm: 0 1px 2px 0 rgba(0, 0, 0, 0.5);
+        --shadowMd: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.35);
+        --shadowLg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+    }
+}
+
+/* ==========================================================================
+   Tailwind CSS v4 @theme configuration
+   ========================================================================== */
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+
+    --color-theme-primary: var(--primaryBackgroundColor);
+    --color-theme-secondary: var(--secondaryBackgroundColor);
+    --color-theme-surface: var(--surfaceBackgroundColor);
+    --color-theme-card: var(--cardBackgroundColor);
+    --color-theme-elevated: var(--elevatedBackgroundColor);
+    --color-theme-subtle: var(--subtleBackgroundColor);
+    --color-theme-input: var(--inputBackgroundColor);
+    --color-theme-header: var(--headerBackgroundColor);
+
+    --color-theme-text-primary: var(--primaryTextColor);
+    --color-theme-text-secondary: var(--secondaryTextColor);
+    --color-theme-text-muted: var(--mutedTextColor);
+
+    --color-theme-accent: var(--accentColor);
+    --color-theme-accent-hover: var(--accentHoverColor);
+    --color-theme-accent-active: var(--accentActiveColor);
+    --color-theme-accent-subtle: var(--accentSubtleColor);
+    --color-theme-accent-text: var(--accentTextColor);
+
+    --color-theme-border: var(--borderColor);
+    --color-theme-border-hover: var(--borderHoverColor);
+    --color-theme-border-focus: var(--borderFocusColor);
+
+    --color-theme-success: var(--successColor);
+    --color-theme-success-bg: var(--successBackgroundColor);
+    --color-theme-success-border: var(--successBorderColor);
+
+    --color-theme-danger: var(--dangerColor);
+    --color-theme-danger-bg: var(--dangerBackgroundColor);
+    --color-theme-danger-border: var(--dangerBorderColor);
+
+    --color-theme-warning: var(--warningColor);
+    --color-theme-warning-bg: var(--warningBackgroundColor);
+    --color-theme-warning-border: var(--warningBorderColor);
 }
+
+/* ==========================================================================
+   Smooth Theme Switching Transitions
+   Triggered on interactive user toggle, preventing flash on initial load.
+   ========================================================================== */
+html.theme-transitioning,
+html.theme-transitioning *,
+html.theme-transitioning *::before,
+html.theme-transitioning *::after {
+    transition: background-color var(--themeTransitionDuration) var(--themeTransitionTiming),
+                border-color var(--themeTransitionDuration) var(--themeTransitionTiming),
+                color var(--themeTransitionDuration) var(--themeTransitionTiming),
+                fill var(--themeTransitionDuration) var(--themeTransitionTiming),
+                stroke var(--themeTransitionDuration) var(--themeTransitionTiming),
+                box-shadow var(--themeTransitionDuration) var(--themeTransitionTiming) !important;
+    transition-delay: 0s !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.theme-transitioning,
+    html.theme-transitioning *,
+    html.theme-transitioning *::before,
+    html.theme-transitioning *::after {
+        transition: none !important;
+    }
+}
+
+/* Global root styling */
+html, body {
+    background-color: var(--primaryBackgroundColor);
+    color: var(--primaryTextColor);
+}
+
+/* ==========================================================================
+   Accessible Theme Toggle Component Styles (Segmented Pill Control)
+   ========================================================================== */
+.theme-toggle-segmented {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border-radius: 9999px;
+    background-color: var(--inputBackgroundColor);
+    border: 1px solid var(--borderColor);
+    box-shadow: var(--shadowSm);
+    user-select: none;
+    -webkit-user-select: none;
+    gap: 2px;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.theme-toggle-indicator {
+    position: absolute;
+    left: 0;
+    top: 2px;
+    border-radius: 9999px;
+    background-color: var(--accentColor);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    pointer-events: none;
+    opacity: 0;
+    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.15s ease,
+                background-color 0.2s ease;
+    z-index: 1;
+}
+
+.theme-toggle-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 8px;
+    border-radius: 9999px;
+    border: none;
+    background: transparent;
+    color: var(--secondaryTextColor);
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1;
+    z-index: 2;
+    transition: color 0.15s ease, transform 0.1s ease;
+    outline: none;
+}
+
+.theme-toggle-btn:hover {
+    color: var(--primaryTextColor);
+}
+
+.theme-toggle-btn:focus-visible {
+    box-shadow: 0 0 0 2px var(--accentFocusRing);
+}
+
+.theme-toggle-btn.is-active {
+    color: var(--invertedTextColor);
+}
+
+/* In dark mode, white text on accent color looks vibrant and clean */
+html.dark .theme-toggle-btn.is-active,
+[data-theme="dark"] .theme-toggle-btn.is-active {
+    color: #ffffff;
+}
+
+.theme-toggle-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.theme-toggle-label {
+    display: inline-block;
+}
+
+/* Semantic helper utility classes for HTML & Blade templates */
+.bg-theme-canvas { background-color: var(--primaryBackgroundColor) !important; }
+.bg-theme-surface { background-color: var(--surfaceBackgroundColor) !important; }
+.bg-theme-card { background-color: var(--cardBackgroundColor) !important; }
+.bg-theme-subtle { background-color: var(--subtleBackgroundColor) !important; }
+.bg-theme-input { background-color: var(--inputBackgroundColor) !important; }
+.text-theme-primary { color: var(--primaryTextColor) !important; }
+.text-theme-secondary { color: var(--secondaryTextColor) !important; }
+.text-theme-muted { color: var(--mutedTextColor) !important; }
+.text-theme-accent { color: var(--accentColor) !important; }
+.border-theme { border-color: var(--borderColor) !important; }
+.border-theme-hover:hover { border-color: var(--borderHoverColor) !important; }

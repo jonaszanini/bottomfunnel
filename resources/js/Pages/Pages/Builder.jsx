@@ -53,14 +53,14 @@ export default function Builder({ page }) {
         <Layout title={page.name}>
             <div className="mb-4 flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-semibold">{page.product_name}</h1>
-                    <p className="text-sm text-stone-600">{page.page_type_label}. Saving writes this page type onto the Track.</p>
+                    <h1 className="text-2xl font-semibold text-theme-primary">{page.product_name}</h1>
+                    <p className="text-sm text-theme-secondary">{page.page_type_label}. Saving writes this page type onto the Track.</p>
                 </div>
                 <a className={quiet} href={`/pages/${page.id}/export`}>Export index.html</a>
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
                 <form
-                    className="grid gap-3 rounded-xl bg-white p-4"
+                    className="grid gap-3 rounded-xl border border-theme bg-theme-surface p-4 shadow-sm text-theme-primary"
                     onSubmit={(event) => {
                         event.preventDefault();
                         form.put(`/pages/${page.id}`);
@@ -126,7 +126,7 @@ export default function Builder({ page }) {
                     </Field>
                     <button className={button} disabled={form.processing}>Save page</button>
                 </form>
-                <iframe title="Live preview" className="min-h-[720px] w-full rounded-xl border border-stone-200 bg-white" srcDoc={preview} />
+                <iframe title="Live preview" className="min-h-[720px] w-full rounded-xl border border-theme bg-white" srcDoc={preview} />
             </div>
         </Layout>
     );

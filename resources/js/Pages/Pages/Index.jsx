@@ -23,9 +23,9 @@ export default function Index({ pages, tracks, pageTypes, languages }) {
 
     return (
         <Layout title="Pages">
-            <h1 className="text-2xl font-semibold">Pages</h1>
+            <h1 className="text-2xl font-semibold text-theme-primary">Pages</h1>
             <form
-                className="mt-4 grid gap-3 rounded-xl bg-white p-4 md:grid-cols-2"
+                className="mt-4 grid gap-3 rounded-xl border border-theme bg-theme-surface p-4 shadow-sm md:grid-cols-2 text-theme-primary"
                 onSubmit={(event) => {
                     event.preventDefault();
                     form.post('/pages/generate');
@@ -59,13 +59,13 @@ export default function Index({ pages, tracks, pageTypes, languages }) {
                 </div>
             </form>
 
-            <div className="mt-4 overflow-hidden rounded-xl bg-white">
-                {pages.length === 0 && <p className="p-4 text-sm text-stone-500">No pages yet.</p>}
+            <div className="mt-4 overflow-hidden rounded-xl border border-theme bg-theme-surface shadow-sm text-theme-primary">
+                {pages.length === 0 && <p className="p-4 text-sm text-theme-muted">No pages yet.</p>}
                 {pages.map((page) => (
-                    <div key={page.id} className="flex items-center justify-between border-b border-stone-100 px-4 py-3 text-sm">
+                    <div key={page.id} className="flex items-center justify-between border-b border-theme px-4 py-3 text-sm text-theme-primary hover:bg-theme-subtle/50 transition-colors">
                         <div>
-                            <strong>{page.name}</strong>
-                            <span className="ml-2 text-stone-500">{page.product_name} · {page.page_type}</span>
+                            <strong className="text-theme-primary">{page.name}</strong>
+                            <span className="ml-2 text-theme-muted">{page.product_name} · {page.page_type}</span>
                         </div>
                         <div className="flex gap-2">
                             <Link className={quiet} href={`/pages/${page.id}/edit`}>Edit</Link>

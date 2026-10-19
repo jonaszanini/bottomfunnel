@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\UploadConversionJob;
 use App\Models\AdSpend;
 use App\Models\Conversion;
 use App\Models\ConversionAction;
@@ -15,6 +16,7 @@ use App\Support\Options;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -188,7 +190,7 @@ class TrackController extends Controller
         if ($conversion->status === 'unmatched' || ! $conversion->visit_id) {
             return back()->with('error', 'Match this conversion to a session before upload.');
         }
-        \App\Jobs\UploadConversionJob::dispatch($conversion->id);
+        UploadConversionJob::dispatch($conversion->id);
 
         return back()->with('success', 'Upload queued again.');
     }
@@ -222,7 +224,7 @@ class TrackController extends Controller
             try {
                 $created = $googleAds->createConversionAction($account, $name);
             } catch (GoogleRequestException $exception) {
-                throw \Illuminate\Validation\ValidationException::withMessages([
+                throw ValidationException::withMessages([
                     'conversion_action_name' => $exception->getMessage(),
                 ]);
             }
@@ -238,7 +240,7 @@ class TrackController extends Controller
         ])['conversion_action_id'];
         $action = ConversionAction::query()->findOrFail($id);
         if ($action->google_ads_account_id !== $account->id) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
+            throw ValidationException::withMessages([
                 'conversion_action_id' => 'Choose a conversion action from the linked account.',
             ]);
         }

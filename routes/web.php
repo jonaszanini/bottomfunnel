@@ -6,10 +6,14 @@ use App\Http\Controllers\HookController;
 use App\Http\Controllers\IpBlockController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\ThemeController;
 use App\Http\Controllers\TrackController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\TrackScriptController;
 use Illuminate\Support\Facades\Route;
+
+Route::post('/theme', [ThemeController::class, 'update'])->name('theme.update');
+Route::view('/welcome', 'welcome')->name('welcome');
 
 Route::post('/hooks/{platform}/{secret}', HookController::class)->middleware('throttle:60,1');
 Route::post('/t/collect', TrackingController::class)->middleware('throttle:120,1');

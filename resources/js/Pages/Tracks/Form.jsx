@@ -55,17 +55,17 @@ export default function Form({ track, accounts, pageTypes, strategies, platforms
     return (
         <Layout title={track ? 'Edit Track' : 'New Track'}>
             <form
-                className="grid max-w-3xl gap-4 rounded-xl bg-white p-5"
+                className="grid max-w-3xl gap-4 rounded-xl border border-theme bg-theme-surface p-5 shadow-sm text-theme-primary"
                 onSubmit={(event) => {
                     event.preventDefault();
                     track ? form.put(`/tracks/${track.id}`) : form.post('/tracks');
                 }}
             >
-                <h1 className="text-2xl font-semibold">{track ? 'Edit Track' : 'New Track'}</h1>
-                <p className="text-sm text-stone-600">Strategy is a label for filtering. Flow Hub does not change bids. Every amount is CAD$.</p>
+                <h1 className="text-2xl font-semibold text-theme-primary">{track ? 'Edit Track' : 'New Track'}</h1>
+                <p className="text-sm text-theme-secondary">Strategy is a label for filtering. Flow Hub does not change bids. Every amount is CAD$.</p>
                 {accounts.length === 0 && (
-                    <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                        Link a Google Ads account before creating a Track. <Link className="underline" href="/google-ads">Open Google Ads</Link>
+                    <p className="rounded-md border border-[var(--warningBorderColor)] bg-[var(--warningBackgroundColor)] px-3 py-2 text-sm text-[var(--warningColor)]">
+                        Link a Google Ads account before creating a Track. <Link className="underline font-medium" href="/google-ads">Open Google Ads</Link>
                     </p>
                 )}
                 <Field label="Product name" error={form.errors.product_name}>
@@ -106,28 +106,28 @@ export default function Form({ track, accounts, pageTypes, strategies, platforms
                         {accounts.map((account) => <option key={account.id} value={account.id}>{account.name} ({account.customer_id})</option>)}
                     </select>
                 </Field>
-                {loadError && <p className="text-sm text-red-700">{loadError}</p>}
+                {loadError && <p className="text-sm text-[var(--dangerColor)]">{loadError}</p>}
                 <fieldset className="grid gap-3">
-                    <legend className="text-sm font-medium text-stone-700">Offline conversion action</legend>
-                    <label className="text-sm"><input type="radio" checked={form.data.conversion_mode === 'existing'} onChange={() => form.setData('conversion_mode', 'existing')} /> Select an existing action</label>
+                    <legend className="text-sm font-medium text-theme-secondary">Offline conversion action</legend>
+                    <label className="text-sm text-theme-primary"><input type="radio" checked={form.data.conversion_mode === 'existing'} onChange={() => form.setData('conversion_mode', 'existing')} /> Select an existing action</label>
                     <select className={control} value={form.data.conversion_action_id} onChange={(event) => form.setData('conversion_action_id', event.target.value)}>
                         <option value="">Choose an action</option>
                         {actions.map((action) => <option key={action.id} value={action.id}>{action.name}</option>)}
                     </select>
-                    {form.errors.conversion_action_id && <p className="text-sm text-red-700">{form.errors.conversion_action_id}</p>}
-                    <label className="text-sm"><input type="radio" checked={form.data.conversion_mode === 'new'} onChange={() => form.setData('conversion_mode', 'new')} /> Create a new action</label>
+                    {form.errors.conversion_action_id && <p className="text-sm text-[var(--dangerColor)]">{form.errors.conversion_action_id}</p>}
+                    <label className="text-sm text-theme-primary"><input type="radio" checked={form.data.conversion_mode === 'new'} onChange={() => form.setData('conversion_mode', 'new')} /> Create a new action</label>
                     <input className={control} placeholder="Action name" value={form.data.conversion_action_name} onChange={(event) => form.setData('conversion_action_name', event.target.value)} />
-                    {form.errors.conversion_action_name && <p className="text-sm text-red-700">{form.errors.conversion_action_name}</p>}
+                    {form.errors.conversion_action_name && <p className="text-sm text-[var(--dangerColor)]">{form.errors.conversion_action_name}</p>}
                 </fieldset>
                 <fieldset>
-                    <legend className="mb-2 text-sm font-medium text-stone-700">Campaigns for IP exclusion</legend>
-                    <div className="grid gap-2">
+                    <legend className="mb-2 text-sm font-medium text-theme-secondary">Campaigns for IP exclusion</legend>
+                    <div className="grid gap-2 text-theme-primary">
                         {campaigns.map((campaign) => (
                             <label key={campaign.id} className="text-sm">
                                 <input type="checkbox" checked={form.data.campaign_ids.map(String).includes(String(campaign.id))} onChange={() => toggleCampaign(campaign.id)} /> {campaign.name}
                             </label>
                         ))}
-                        {campaigns.length === 0 && <p className="text-sm text-stone-500">Campaigns appear after the account loads. IP exclusion needs at least one.</p>}
+                        {campaigns.length === 0 && <p className="text-sm text-theme-muted">Campaigns appear after the account loads. IP exclusion needs at least one.</p>}
                     </div>
                 </fieldset>
                 <button className={button} disabled={form.processing || accounts.length === 0}>Save Track</button>
