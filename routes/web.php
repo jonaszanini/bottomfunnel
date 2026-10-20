@@ -10,6 +10,7 @@ use App\Http\Controllers\ThemeController;
 use App\Http\Controllers\TrackController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\TrackScriptController;
+use App\Http\Controllers\WatchedProductController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/theme', [ThemeController::class, 'update'])->name('theme.update');
@@ -51,4 +52,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/ip-blocks', [IpBlockController::class, 'index'])->name('blocks.index');
     Route::post('/ip-blocks/{ipBlock}/unblock', [IpBlockController::class, 'unblock'])->name('blocks.unblock');
     Route::post('/ip-blocks/{ipBlock}/whitelist', [IpBlockController::class, 'whitelist'])->name('blocks.whitelist');
+
+    Route::get('/watching-products', [WatchedProductController::class, 'index'])->name('watching-products.index');
+    Route::post('/watching-products', [WatchedProductController::class, 'store'])->name('watching-products.store');
+    Route::put('/watching-products/{watchedProduct}', [WatchedProductController::class, 'update'])->name('watching-products.update');
+    Route::delete('/watching-products/{watchedProduct}', [WatchedProductController::class, 'destroy'])->name('watching-products.destroy');
+    Route::post('/watching-products/{watchedProduct}/review', [WatchedProductController::class, 'review'])->name('watching-products.review');
+    Route::patch('/watching-products/{watchedProduct}/status', [WatchedProductController::class, 'updateStatus'])->name('watching-products.status');
 });
