@@ -27,7 +27,7 @@ export default function Login() {
                 <label className="mt-5 block text-sm">
                     <span className="font-medium text-theme-secondary">Username</span>
                     <input
-                        className="mt-1 w-full rounded-md border border-theme bg-theme-input px-3 py-2 text-sm text-theme-primary placeholder:text-theme-muted focus:border-[var(--borderFocusColor)] focus:outline-none transition-colors"
+                        className="mt-1 w-full rounded-md border border-theme bg-theme-input px-3 py-2 text-sm text-theme-primary placeholder:text-theme-muted placeholder:opacity-45 dark:placeholder:opacity-30 focus:border-[var(--borderFocusColor)] focus:outline-none transition-colors"
                         value={form.data.username}
                         onChange={(event) => form.setData('username', event.target.value)}
                         autoComplete="username"
@@ -40,7 +40,7 @@ export default function Login() {
                     <span className="font-medium text-theme-secondary">Password</span>
                     <input
                         type="password"
-                        className="mt-1 w-full rounded-md border border-theme bg-theme-input px-3 py-2 text-sm text-theme-primary placeholder:text-theme-muted focus:border-[var(--borderFocusColor)] focus:outline-none transition-colors"
+                        className="mt-1 w-full rounded-md border border-theme bg-theme-input px-3 py-2 text-sm text-theme-primary placeholder:text-theme-muted placeholder:opacity-45 dark:placeholder:opacity-30 focus:border-[var(--borderFocusColor)] focus:outline-none transition-colors"
                         value={form.data.password}
                         onChange={(event) => form.setData('password', event.target.value)}
                         autoComplete="current-password"

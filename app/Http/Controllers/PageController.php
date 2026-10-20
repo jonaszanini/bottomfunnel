@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Page;
 use App\Models\Track;
+use App\Services\Pages\Cloner\PageClonerService;
+use App\Services\Pages\Cloner\PageCrawlerService;
 use App\Services\Pages\Compiler\PresellCompilerEngine;
 use App\Services\Pages\HtmlDocument;
 use App\Services\Pages\HtmlRenderer;
@@ -114,6 +116,97 @@ class PageController extends Controller
             'success' => true,
             'compiledHtml' => $html,
         ]);
+    }
+
+    /**
+     * Crawl an external sales page and clone it with asset rewriting and affiliate link replacement.
+     */
+    public function crawlAndClone(Request $request, PageCrawlerService $crawler, PageClonerService $cloner): JsonResponse
+    {
+        $data = $request->validate([
+            'url' => ['required', 'url', 'max:2048'],
+            'affiliate_link' => ['required', 'url', 'max:2048'],
+            'product_name' => ['nullable', 'string', 'max:255'],
+            'force_browser' => ['boolean'],
+            'custom_head' => ['nullable', 'string', 'max:15000'],
+            'custom_body' => ['nullable', 'string', 'max:15000'],
+            'strip_trackers' => ['boolean'],
+            'optimize_images' => ['boolean'],
+            'enable_param_pass_through' => ['boolean'],
+        ]);
+
+        try {
+            $forceBrowser = (bool) ($data['force_browser'] ?? false);
+            $crawlResult = $crawler->crawl($data['url'], $forceBrowser, 25);
+
+            $cloneResult = $cloner->clone([
+                'rawHtml' => $crawlResult['html'],
+                'sourceUrl' => $crawlResult['finalUrl'],
+                'affiliateLink' => $data['affiliate_link'],
+                'customHeadScripts' => $data['custom_head'] ?? null,
+                'customBodyScripts' => $data['custom_body'] ?? null,
+                'stripTrackers' => $data['strip_trackers'] ?? true,
+                'optimizeImages' => $data['optimize_images'] ?? true,
+                'enableParamPassThrough' => $data['enable_param_pass_through'] ?? true,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'url' => $data['url'],
+                'finalUrl' => $crawlResult['finalUrl'],
+                'productName' => $data['product_name'] ?: ($crawlResult['title'] ?: 'Cloned Offer'),
+                'metadata' => [
+                    'title' => $crawlResult['title'],
+                    'description' => $crawlResult['description'],
+                    'image' => $crawlResult['image'],
+                    'priceRange' => $crawlResult['priceRange'],
+                    'detectedPlatform' => $crawlResult['detectedPlatform'],
+                ],
+                'renderedVia' => $crawlResult['renderedVia'],
+                'clonedHtml' => $cloneResult['clonedHtml'],
+                'stats' => $cloneResult['stats'],
+                'links' => $cloneResult['links'],
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Rapid extraction of product metadata and CTA links before cloning.
+     */
+    public function extractMetadata(Request $request, PageCrawlerService $crawler): JsonResponse
+    {
+        $data = $request->validate([
+            'url' => ['required', 'url', 'max:2048'],
+            'force_browser' => ['boolean'],
+        ]);
+
+        try {
+            $result = $crawler->crawl($data['url'], (bool) ($data['force_browser'] ?? false), 15);
+
+            return response()->json([
+                'success' => true,
+                'url' => $data['url'],
+                'finalUrl' => $result['finalUrl'],
+                'title' => $result['title'],
+                'description' => $result['description'],
+                'image' => $result['image'],
+                'priceRange' => $result['priceRange'],
+                'detectedPlatform' => $result['detectedPlatform'],
+                'ctaLinks' => $result['ctaLinks'],
+                'renderedVia' => $result['renderedVia'],
+                'stats' => $result['stats'],
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
     }
 
     /**

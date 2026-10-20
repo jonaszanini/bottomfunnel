@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Head, router } from '@inertiajs/react';
 import Layout, { button, quiet } from '../../Components/Layout';
 import StrategySelector from './Components/StrategySelector';
@@ -7,6 +7,7 @@ import VariationsMatrix from './Components/VariationsMatrix';
 import QuickParamEditor from './Components/QuickParamEditor';
 import FinalExporter from './Components/FinalExporter';
 import SavedPagesTable from './Components/SavedPagesTable';
+import PageClonerWizard from './Components/PageClonerWizard';
 
 function getCsrfToken() {
     const meta = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -16,8 +17,36 @@ function getCsrfToken() {
 }
 
 export default function Index({ pages = [], tracks = [], strategies = [], pageTypes = {}, languages = {} }) {
-    // Top Tab Switcher: 'studio' | 'saved'
-    const [activeTab, setActiveTab] = useState('studio');
+    // Parse URL query parameters if navigated from Watching Products or direct link
+    const [prefillCloner, setPrefillCloner] = useState(null);
+
+    // Top Tab Switcher: 'cloner' | 'studio' | 'saved'
+    const [activeTab, setActiveTab] = useState('cloner');
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const cloneUrl = params.get('clone_url') || params.get('url') || '';
+            const affLink = params.get('affiliate_link') || params.get('aff') || '';
+            const prodName = params.get('product_name') || params.get('name') || '';
+            const trackId = params.get('track_id') || '';
+            const requestedTab = params.get('tab') || '';
+
+            if (cloneUrl || affLink || requestedTab === 'cloner') {
+                setActiveTab('cloner');
+                setPrefillCloner({
+                    salesPageUrl: cloneUrl,
+                    affiliateLink: affLink,
+                    productName: prodName,
+                    trackId: trackId,
+                });
+            } else if (requestedTab === 'saved') {
+                setActiveTab('saved');
+            } else if (requestedTab === 'studio') {
+                setActiveTab('studio');
+            }
+        }
+    }, []);
 
     // Multi-Step Funnel: 1: Strategy -> 2: Config -> 3: Variations -> 4: QuickEdit -> 5: Export
     const [currentStep, setCurrentStep] = useState(1);
@@ -196,12 +225,33 @@ export default function Index({ pages = [], tracks = [], strategies = [], pageTy
                         </p>
                     </div>
 
-                    {/* View Switcher: Presell Studio vs Saved Pages */}
+                    {/* View Switcher: Cloner vs Studio vs Saved Pages */}
                     <div className="flex items-center rounded-lg border border-theme bg-theme-surface p-1 shadow-2xs">
                         <button
                             type="button"
+                            onClick={() => setActiveTab('cloner')}
+                            className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                                activeTab === 'cloner'
+                                    ? 'bg-[var(--accentColor)] text-white shadow-xs'
+                                    : 'text-theme-secondary hover:text-theme-primary'
+                            }`}
+                        >
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                <path d="M3 3v5h5" />
+                                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                <path d="M16 21h5v-5" />
+                            </svg>
+                            <span>1-Click Cloner</span>
+                            <span className="hidden sm:inline-block ml-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500 text-white">
+                                Live
+                            </span>
+                        </button>
+
+                        <button
+                            type="button"
                             onClick={() => setActiveTab('studio')}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                                 activeTab === 'studio'
                                     ? 'bg-[var(--accentColor)] text-white shadow-xs'
                                     : 'text-theme-secondary hover:text-theme-primary'
@@ -216,7 +266,7 @@ export default function Index({ pages = [], tracks = [], strategies = [], pageTy
                         <button
                             type="button"
                             onClick={() => setActiveTab('saved')}
-                            className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                            className={`px-3 py-1.5 rounded-md text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
                                 activeTab === 'saved'
                                     ? 'bg-[var(--accentColor)] text-white shadow-xs'
                                     : 'text-theme-secondary hover:text-theme-primary'
@@ -231,7 +281,15 @@ export default function Index({ pages = [], tracks = [], strategies = [], pageTy
                     </div>
                 </div>
 
-                {activeTab === 'studio' ? (
+                {activeTab === 'cloner' ? (
+                    <PageClonerWizard
+                        tracks={tracks}
+                        prefillData={prefillCloner}
+                        onSaveToDb={handleSaveToDb}
+                        isSaving={isSaving}
+                        onCancel={() => setActiveTab('saved')}
+                    />
+                ) : activeTab === 'studio' ? (
                     <div className="space-y-6">
                         {/* Step Progress Tracker */}
                         <div className="hidden sm:block overflow-x-auto pb-2">

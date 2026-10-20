@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import Layout, { Field, button, control, quiet } from '../../Components/Layout';
 
 export default function Index({ products, filters, metrics, options }) {
@@ -13,6 +13,21 @@ export default function Index({ products, filters, metrics, options }) {
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
     const [deleteConfirmProduct, setDeleteConfirmProduct] = useState(null);
+
+    // Toast notification state
+    const [toastMessage, setToastMessage] = useState('');
+
+    const showToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(''), 2500);
+    };
+
+    const handleCopyText = (text, label) => {
+        if (!text) return;
+        navigator.clipboard.writeText(text).then(() => {
+            showToast(`Copied ${label} to clipboard!`);
+        });
+    };
 
     // Form handling for create / edit
     const form = useForm({
@@ -467,8 +482,9 @@ export default function Index({ products, filters, metrics, options }) {
                         </div>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-theme text-left text-sm">
+                    <>
+                        <div className="hidden md:block overflow-x-auto">
+                            <table className="min-w-full divide-y divide-theme text-left text-sm">
                             <thead className="bg-theme-subtle/40 text-xs font-semibold uppercase tracking-wider text-theme-muted">
                                 <tr>
                                     <th scope="col" className="px-4 py-3">Product Name</th>
@@ -621,6 +637,51 @@ export default function Index({ products, filters, metrics, options }) {
                                         {/* Actions */}
                                         <td className="px-4 py-3 whitespace-nowrap text-right">
                                             <div className="flex items-center justify-end gap-1.5">
+                                                {product.sales_page_url ? (
+                                                    <Link
+                                                        href={`/pages?tab=cloner&clone_url=${encodeURIComponent(product.sales_page_url)}&affiliate_link=${encodeURIComponent(product.affiliate_link || '')}&product_name=${encodeURIComponent(product.name)}`}
+                                                        className="px-2 py-1 rounded-md text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 transition-colors flex items-center gap-1 text-xs font-semibold"
+                                                        title="Clone Sales Page with 1 Click"
+                                                    >
+                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                            <path d="M3 3v5h5" />
+                                                            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                                            <path d="M16 21h5v-5" />
+                                                        </svg>
+                                                        <span>Clone</span>
+                                                    </Link>
+                                                ) : null}
+
+                                                {product.sales_page_url && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyText(product.sales_page_url, 'Sales Page URL')}
+                                                        className="p-1.5 rounded-lg text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle transition-colors cursor-pointer"
+                                                        title="Copy Sales Page URL"
+                                                    >
+                                                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                            <circle cx="12" cy="12" r="10" />
+                                                            <line x1="2" y1="12" x2="22" y2="12" />
+                                                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" />
+                                                        </svg>
+                                                    </button>
+                                                )}
+
+                                                {product.affiliate_link && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleCopyText(product.affiliate_link, 'Affiliate Link')}
+                                                        className="p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                                                        title="Copy Affiliate Link"
+                                                    >
+                                                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                                            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                                        </svg>
+                                                    </button>
+                                                )}
+
                                                 <button
                                                     type="button"
                                                     onClick={() => openEditDrawer(product)}
@@ -653,6 +714,157 @@ export default function Index({ products, filters, metrics, options }) {
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Mobile Stacked Responsive Cards (< 768px) */}
+                    <div className="md:hidden divide-y divide-theme">
+                        {products.map((product) => (
+                            <div key={product.id} className="p-4 space-y-3 hover:bg-theme-subtle/20 transition-colors">
+                                {/* Card Header: Product name & Quick Status */}
+                                <div className="flex items-start justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                        <button
+                                            type="button"
+                                            onClick={() => openEditDrawer(product)}
+                                            className="text-left font-bold text-base text-theme-primary hover:text-theme-accent transition-colors cursor-pointer truncate block"
+                                        >
+                                            {product.name}
+                                        </button>
+                                        <div className="mt-1 flex items-center gap-2 text-xs text-theme-muted">
+                                            <span className="font-medium text-theme-secondary">{product.page_type || 'General'}</span>
+                                            {product.approval_required && (
+                                                <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                                                    Approval Req
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Status Dropdown with min 44px touch target */}
+                                    <div className="shrink-0 min-h-[44px] flex items-center">
+                                        <select
+                                            value={product.status}
+                                            onChange={(e) => handleQuickStatusChange(product, e.target.value)}
+                                            className={`rounded-lg border px-3 py-2 text-xs font-semibold cursor-pointer focus:outline-none min-h-[40px] ${getStatusBadge(product.status)}`}
+                                            aria-label={`Change status for ${product.name}`}
+                                        >
+                                            <option value="test">Test</option>
+                                            <option value="watch">Watch</option>
+                                            <option value="rejected">Rejected</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                {/* Metrics & Badges Row */}
+                                <div className="grid grid-cols-2 gap-2 text-xs bg-theme-subtle/30 p-2.5 rounded-lg border border-theme">
+                                    <div>
+                                        <span className="text-[11px] text-theme-muted block">Payout CAD:</span>
+                                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                                            {formatCad(product.payout_cad)}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-[11px] text-theme-muted block">Brand Bidding:</span>
+                                        <span className={`inline-block rounded px-1.5 py-0.2 text-[11px] font-medium border ${getBrandBiddingBadge(product.brand_bidding)}`}>
+                                            {product.brand_bidding_label}
+                                        </span>
+                                    </div>
+                                    <div className="col-span-2 flex flex-wrap items-center gap-1.5 pt-1 border-t border-theme/50">
+                                        <span className="text-[11px] text-theme-muted">Platforms:</span>
+                                        {product.platforms && product.platforms.length > 0 ? (
+                                            product.platforms.map((p, idx) => (
+                                                <span key={idx} className="rounded bg-theme-subtle px-1.5 py-0.2 text-[10px] font-semibold text-theme-primary border border-theme">
+                                                    {p}
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <span className="text-[11px] text-theme-muted">None</span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Quick Actions Bar with >= 44x44px Touch Targets */}
+                                <div className="flex items-center gap-2 pt-1 flex-wrap">
+                                    {/* 1-Click Clone Page */}
+                                    {product.sales_page_url ? (
+                                        <Link
+                                            href={`/pages?tab=cloner&clone_url=${encodeURIComponent(product.sales_page_url)}&affiliate_link=${encodeURIComponent(product.affiliate_link || '')}&product_name=${encodeURIComponent(product.name)}`}
+                                            className="flex-1 min-h-[44px] rounded-lg bg-emerald-600 text-white font-semibold text-xs flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shadow-2xs"
+                                        >
+                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                <path d="M3 3v5h5" />
+                                                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                                <path d="M16 21h5v-5" />
+                                            </svg>
+                                            <span>Clone Page</span>
+                                        </Link>
+                                    ) : null}
+
+                                    {/* Copy Sales URL */}
+                                    {product.sales_page_url && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopyText(product.sales_page_url, 'Sales Page URL')}
+                                            className="min-h-[44px] min-w-[44px] rounded-lg border border-theme bg-theme-surface flex items-center justify-center text-theme-secondary hover:text-theme-primary cursor-pointer"
+                                            title="Copy Sales Page URL"
+                                            aria-label="Copy Sales Page URL"
+                                        >
+                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <circle cx="12" cy="12" r="10" />
+                                                <line x1="2" y1="12" x2="22" y2="12" />
+                                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                            </svg>
+                                        </button>
+                                    )}
+
+                                    {/* Copy Affiliate Link */}
+                                    {product.affiliate_link && (
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopyText(product.affiliate_link, 'Affiliate Link')}
+                                            className="min-h-[44px] min-w-[44px] rounded-lg border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 cursor-pointer"
+                                            title="Copy Affiliate Link"
+                                            aria-label="Copy Affiliate Link"
+                                        >
+                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                            </svg>
+                                        </button>
+                                    )}
+
+                                    {/* Edit Button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => openEditDrawer(product)}
+                                        className="min-h-[44px] min-w-[44px] rounded-lg border border-theme bg-theme-surface flex items-center justify-center text-theme-secondary hover:text-theme-primary cursor-pointer"
+                                        title="Edit Product"
+                                        aria-label={`Edit ${product.name}`}
+                                    >
+                                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M12 20h9" />
+                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                        </svg>
+                                    </button>
+
+                                    {/* Delete Button */}
+                                    <button
+                                        type="button"
+                                        onClick={() => confirmDelete(product)}
+                                        className="min-h-[44px] min-w-[44px] rounded-lg border border-rose-500/20 bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 cursor-pointer"
+                                        title="Delete Product"
+                                        aria-label={`Delete ${product.name}`}
+                                    >
+                                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <polyline points="3 6 5 6 21 6" />
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </>
                 )}
             </div>
 
@@ -956,6 +1168,19 @@ export default function Index({ products, filters, metrics, options }) {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Toast Notification */}
+            {toastMessage && (
+                <div
+                    role="status"
+                    className="fixed bottom-5 right-5 z-50 rounded-xl bg-theme-surface border border-emerald-500/40 text-theme-primary px-4 py-3 shadow-2xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-bottom-2 duration-200"
+                >
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] font-bold">
+                        ✓
+                    </span>
+                    <span>{toastMessage}</span>
                 </div>
             )}
         </Layout>

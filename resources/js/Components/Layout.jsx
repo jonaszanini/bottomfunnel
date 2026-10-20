@@ -101,6 +101,6 @@ export function Field({ label, error, children }) {
     );
 }
 
-export const control = 'w-full rounded-md border border-theme bg-theme-input px-3 py-2 text-sm text-theme-primary placeholder:text-theme-muted focus:border-[var(--borderFocusColor)] focus:outline-none transition-colors';
+export const control = 'w-full rounded-md border border-theme bg-theme-input px-3 py-2 text-sm text-theme-primary placeholder:text-theme-muted placeholder:opacity-45 dark:placeholder:opacity-30 focus:border-[var(--borderFocusColor)] focus:outline-none transition-colors';
 export const button = 'rounded-md bg-[var(--accentColor)] px-3 py-2 text-sm font-medium text-[var(--accentTextColor)] hover:bg-[var(--accentHoverColor)] active:bg-[var(--accentActiveColor)] transition-colors focus:ring-2 focus:ring-[var(--accentFocusRing)] cursor-pointer disabled:opacity-50';
 export const quiet = 'rounded-md border border-theme bg-theme-surface px-3 py-2 text-sm text-theme-primary hover:border-theme-hover transition-colors cursor-pointer';

@@ -244,6 +244,78 @@ html, body {
 }
 
 /* ==========================================================================
+   Global Placeholder Transparency Across the Entire Website
+   Ensures placeholders look distinctly transparent/ghosted (subtle watermark)
+   so they are never mistaken for pre-filled form fields.
+   ========================================================================== */
+input::placeholder,
+textarea::placeholder,
+select::placeholder,
+::placeholder {
+    color: var(--mutedTextColor) !important;
+    opacity: 0.45 !important;
+}
+
+::-webkit-input-placeholder {
+    color: var(--mutedTextColor) !important;
+    opacity: 0.45 !important;
+}
+
+::-moz-placeholder {
+    color: var(--mutedTextColor) !important;
+    opacity: 0.45 !important;
+}
+
+:-ms-input-placeholder {
+    color: var(--mutedTextColor) !important;
+    opacity: 0.45 !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder,
+html.dark select::placeholder,
+html.dark ::placeholder,
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder,
+[data-theme="dark"] select::placeholder,
+[data-theme="dark"] ::placeholder {
+    color: var(--mutedTextColor) !important;
+    opacity: 0.28 !important;
+}
+
+html.dark ::-webkit-input-placeholder,
+[data-theme="dark"] ::-webkit-input-placeholder {
+    color: var(--mutedTextColor) !important;
+    opacity: 0.28 !important;
+}
+
+html.dark ::-moz-placeholder,
+[data-theme="dark"] ::-moz-placeholder {
+    color: var(--mutedTextColor) !important;
+    opacity: 0.28 !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not(.light):not([data-theme="light"]) input::placeholder,
+    :root:not(.light):not([data-theme="light"]) textarea::placeholder,
+    :root:not(.light):not([data-theme="light"]) select::placeholder,
+    :root:not(.light):not([data-theme="light"]) ::placeholder {
+        color: var(--mutedTextColor) !important;
+        opacity: 0.28 !important;
+    }
+
+    :root:not(.light):not([data-theme="light"]) ::-webkit-input-placeholder {
+        color: var(--mutedTextColor) !important;
+        opacity: 0.28 !important;
+    }
+
+    :root:not(.light):not([data-theme="light"]) ::-moz-placeholder {
+        color: var(--mutedTextColor) !important;
+        opacity: 0.28 !important;
+    }
+}
+
+/* ==========================================================================
    Accessible Theme Toggle Component Styles (Segmented Pill Control)
    ========================================================================== */
 .theme-toggle-segmented {

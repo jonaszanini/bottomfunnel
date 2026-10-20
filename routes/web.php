@@ -37,6 +37,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/pages', [PageController::class, 'index'])->name('pages.index');
     Route::post('/pages', [PageController::class, 'store'])->name('pages.store');
+    Route::post('/pages/crawl-and-clone', [PageController::class, 'crawlAndClone'])->name('pages.crawl-and-clone');
+    Route::post('/pages/extract-metadata', [PageController::class, 'extractMetadata'])->name('pages.extract-metadata');
     Route::post('/pages/generate-variations', [PageController::class, 'generateVariations'])->name('pages.generate-variations');
     Route::post('/pages/compile', [PageController::class, 'compile'])->name('pages.compile');
     Route::post('/pages/export-direct', [PageController::class, 'exportDirect'])->name('pages.export-direct');
