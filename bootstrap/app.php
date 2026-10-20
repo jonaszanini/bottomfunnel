@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'hooks/*',
             't/collect',
             'theme',
+            'api/copy/*',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

@@ -16,7 +16,8 @@ export default function Show({ track, conversions, visits, spend }) {
                     <h1 className="text-2xl font-semibold text-theme-primary">{track.product_name}</h1>
                     <p className="text-sm text-theme-secondary">{track.platform_label} · {track.page_type} · {track.strategy}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    <Link className={quiet} href={`/copy?url=${encodeURIComponent(track.affiliate_url || '')}&product=${encodeURIComponent(track.product_name || '')}&lang=${encodeURIComponent(track.language || 'en')}`}>Generate Ad Copy for this Offer</Link>
                     <Link className={quiet} href={`/tracks/${track.id}/edit`}>Edit</Link>
                     <Link className={button} href="/pages">Generate a page</Link>
                 </div>

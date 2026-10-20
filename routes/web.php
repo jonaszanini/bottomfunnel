@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CopyStudioController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GoogleAdsController;
 use App\Http\Controllers\HookController;
@@ -35,6 +36,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/conversions/{conversion}/retry', [TrackController::class, 'retry'])->name('conversions.retry');
 
     Route::get('/pages', [PageController::class, 'index'])->name('pages.index');
+    Route::post('/pages', [PageController::class, 'store'])->name('pages.store');
+    Route::post('/pages/generate-variations', [PageController::class, 'generateVariations'])->name('pages.generate-variations');
+    Route::post('/pages/compile', [PageController::class, 'compile'])->name('pages.compile');
+    Route::post('/pages/export-direct', [PageController::class, 'exportDirect'])->name('pages.export-direct');
     Route::post('/pages/generate', [PageController::class, 'generate'])->name('pages.generate');
     Route::get('/pages/{page}/edit', [PageController::class, 'edit'])->name('pages.edit');
     Route::put('/pages/{page}', [PageController::class, 'update'])->name('pages.update');
@@ -59,4 +64,9 @@ Route::middleware('auth')->group(function () {
     Route::delete('/watching-products/{watchedProduct}', [WatchedProductController::class, 'destroy'])->name('watching-products.destroy');
     Route::post('/watching-products/{watchedProduct}/review', [WatchedProductController::class, 'review'])->name('watching-products.review');
     Route::patch('/watching-products/{watchedProduct}/status', [WatchedProductController::class, 'updateStatus'])->name('watching-products.status');
+
+    Route::get('/copy', [CopyStudioController::class, 'index'])->name('copy.index');
+    Route::post('/api/copy/generate-base', [CopyStudioController::class, 'generateBase'])->name('copy.generate-base');
+    Route::post('/api/copy/shorten', [CopyStudioController::class, 'shorten'])->name('copy.shorten');
+    Route::post('/api/copy/refine-with-screenshot', [CopyStudioController::class, 'refineWithScreenshot'])->name('copy.refine-with-screenshot');
 });
