@@ -39,6 +39,8 @@
     /* Borders & Lines */
     --borderColor: #e7e5e4;               /* stone-200 card and table border */
     --borderHoverColor: #d6d3d1;          /* stone-300 hover state */
+    --inputBorderColor: #d1d5db;          /* stone/gray-300 crisp contrasted input border */
+    --inputBorderHoverColor: #9ca3af;     /* stone/gray-400 hover input border */
     --borderFocusColor: #0f766e;          /* focused element outline */
     --dividerColor: #e7e5e4;              /* horizontal rules and dividers */
 
@@ -77,7 +79,7 @@ html.dark,
     --cardBackgroundColor: #1c1917;       /* stone-900 card background */
     --elevatedBackgroundColor: #292524;   /* stone-800 elevated dialogs */
     --subtleBackgroundColor: #132a27;     /* dark teal luminous highlight */
-    --inputBackgroundColor: #1c1917;      /* stone-900 input controls */
+    --inputBackgroundColor: #141210;      /* stone-925 recessed input field background */
     --headerBackgroundColor: #141211;     /* high-end dark navbar */
 
     /* Typography & Text */
@@ -95,10 +97,12 @@ html.dark,
     --accentFocusRing: rgba(20, 184, 166, 0.45);
 
     /* Borders & Lines */
-    --borderColor: #292524;               /* stone-800 clean subtle divider */
-    --borderHoverColor: #44403c;          /* stone-700 hover border */
+    --borderColor: #383532;               /* stone-750 clean card & container separation */
+    --borderHoverColor: #4e4945;          /* stone-700 hover border */
+    --inputBorderColor: #57534e;          /* stone-600 high-contrast prominent field border */
+    --inputBorderHoverColor: #78716c;     /* stone-500 hover input border */
     --borderFocusColor: #14b8a6;          /* focused border */
-    --dividerColor: #292524;
+    --dividerColor: #383532;
 
     /* Feedback & Status */
     --successColor: #5eead4;              /* teal-300 */
@@ -130,7 +134,7 @@ html.dark,
         --cardBackgroundColor: #1c1917;
         --elevatedBackgroundColor: #292524;
         --subtleBackgroundColor: #132a27;
-        --inputBackgroundColor: #1c1917;
+        --inputBackgroundColor: #141210;
         --headerBackgroundColor: #141211;
 
         --primaryTextColor: #f5f5f4;
@@ -145,10 +149,12 @@ html.dark,
         --accentTextColor: #042f2e;
         --accentFocusRing: rgba(20, 184, 166, 0.45);
 
-        --borderColor: #292524;
-        --borderHoverColor: #44403c;
+        --borderColor: #383532;
+        --borderHoverColor: #4e4945;
+        --inputBorderColor: #57534e;
+        --inputBorderHoverColor: #78716c;
         --borderFocusColor: #14b8a6;
-        --dividerColor: #292524;
+        --dividerColor: #383532;
 
         --successColor: #5eead4;
         --successBackgroundColor: rgba(19, 78, 74, 0.4);
@@ -197,6 +203,7 @@ html.dark,
     --color-theme-border: var(--borderColor);
     --color-theme-border-hover: var(--borderHoverColor);
     --color-theme-border-focus: var(--borderFocusColor);
+    --color-theme-border-input: var(--inputBorderColor);
 
     --color-theme-success: var(--successColor);
     --color-theme-success-bg: var(--successBackgroundColor);
@@ -313,6 +320,28 @@ html.dark ::-moz-placeholder,
         color: var(--mutedTextColor) !important;
         opacity: 0.28 !important;
     }
+}
+
+/* ==========================================================================
+   Contrasted Form Field Borders (Inputs, Textareas, Selects)
+   Ensures all form fields have crisp, well-defined boundaries across the app.
+   ========================================================================== */
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]):not([class*="border-emerald"]):not([class*="border-red"]):not([class*="border-amber"]):not([class*="border-green"]):not([class*="border-teal"]),
+textarea:not([class*="border-emerald"]):not([class*="border-red"]):not([class*="border-amber"]):not([class*="border-green"]):not([class*="border-teal"]),
+select:not([class*="border-emerald"]):not([class*="border-red"]):not([class*="border-amber"]):not([class*="border-green"]):not([class*="border-teal"]) {
+    border-color: var(--inputBorderColor) !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]):not([class*="border-emerald"]):not([class*="border-red"]):not([class*="border-amber"]):not([class*="border-green"]):not([class*="border-teal"]):hover,
+textarea:not([class*="border-emerald"]):not([class*="border-red"]):not([class*="border-amber"]):not([class*="border-green"]):not([class*="border-teal"]):hover,
+select:not([class*="border-emerald"]):not([class*="border-red"]):not([class*="border-amber"]):not([class*="border-green"]):not([class*="border-teal"]):hover {
+    border-color: var(--inputBorderHoverColor) !important;
+}
+
+input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="range"]):focus,
+textarea:focus,
+select:focus {
+    border-color: var(--borderFocusColor) !important;
 }
 
 /* ==========================================================================

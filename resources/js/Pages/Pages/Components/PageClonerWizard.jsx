@@ -438,7 +438,7 @@ export default function PageClonerWizard({
                                         type="url"
                                         required
                                         placeholder="https://hop.clickbank.net/?affiliate=YOURID&vendor=VENDOR or https://buygoods.com/aff/..."
-                                        className={`${control} pl-9 font-mono text-xs sm:text-sm border-emerald-500/40 focus:border-emerald-500`}
+                                        className={`${control} pl-9 font-mono text-xs sm:text-sm !border-emerald-500/80 dark:!border-emerald-400/80 focus:!border-emerald-500 dark:focus:!border-emerald-400`}
                                         value={form.affiliateLink}
                                         onChange={(e) => setForm({ ...form, affiliateLink: e.target.value })}
                                     />
