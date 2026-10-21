@@ -45,8 +45,8 @@ if [ -f artisan ]; then
   mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
   chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
-  "$PHP_BIN" artisan optimize:clear
   "$PHP_BIN" artisan migrate --force
+  "$PHP_BIN" artisan optimize:clear
   "$PHP_BIN" artisan config:cache
   "$PHP_BIN" artisan route:clear
   "$PHP_BIN" artisan view:cache
