@@ -5,6 +5,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GoogleAdsController;
 use App\Http\Controllers\HookController;
 use App\Http\Controllers\IpBlockController;
+use App\Http\Controllers\LegalController;
 use App\Http\Controllers\LoginController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\ThemeController;
@@ -17,6 +18,11 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/theme', [ThemeController::class, 'update'])->name('theme.update');
 Route::view('/welcome', 'welcome')->name('welcome');
+
+Route::get('/terms-of-service', [LegalController::class, 'terms'])->name('terms.show');
+Route::redirect('/terms', '/terms-of-service');
+Route::get('/privacy-policy', [LegalController::class, 'privacy'])->name('privacy.show');
+Route::redirect('/privacy', '/privacy-policy');
 
 Route::post('/hooks/{platform}/{secret}', HookController::class)->middleware('throttle:60,1');
 Route::post('/t/collect', TrackingController::class)->middleware('throttle:120,1');

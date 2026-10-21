@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import ThemeToggle from '../Components/ThemeToggle';
 
 export default function Login() {
@@ -81,6 +81,16 @@ export default function Login() {
                     {form.processing ? 'Signing in...' : 'Log in'}
                 </button>
             </form>
+
+            <div className="mt-6 flex items-center justify-center gap-4 text-xs text-theme-secondary">
+                <Link href="/privacy-policy" className="hover:text-theme-primary transition-colors">
+                    Privacy Policy
+                </Link>
+                <span className="text-theme-muted">·</span>
+                <Link href="/terms-of-service" className="hover:text-theme-primary transition-colors">
+                    Terms of Service
+                </Link>
+            </div>
         </div>
     );
 }
