@@ -1,5 +1,37 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+
+// Ensure a dedicated, guaranteed writable temporary directory inside the project
+const projectRoot = path.resolve(__dirname, '../../../../../');
+let customTempDir = path.join(projectRoot, 'storage', 'app', 'playwright_temp');
+
+try {
+    fs.mkdirSync(customTempDir, { recursive: true });
+} catch (e) {
+    customTempDir = path.join(__dirname, '.temp');
+    try {
+        fs.mkdirSync(customTempDir, { recursive: true });
+    } catch (err) {}
+}
+
+// Explicitly populate missing Windows and Node environment variables before Playwright initializes
+process.env.TEMP = customTempDir;
+process.env.TMP = customTempDir;
+process.env.TMPDIR = customTempDir;
+
+const userHome = os.homedir() || 'C:\\Users\\Default';
+if (!process.env.USERPROFILE || process.env.USERPROFILE === 'undefined') {
+    process.env.USERPROFILE = userHome;
+}
+
+if (!process.env.LOCALAPPDATA || process.env.LOCALAPPDATA === 'undefined') {
+    process.env.LOCALAPPDATA = path.join(userHome, 'AppData', 'Local');
+}
+
+if (!process.env.APPDATA || process.env.APPDATA === 'undefined') {
+    process.env.APPDATA = path.join(userHome, 'AppData', 'Roaming');
+}
 
 // Resolve Playwright or Puppeteer
 function resolveBrowserEngine() {
@@ -65,13 +97,20 @@ async function run() {
             const { chromium } = engineInfo.engine;
             const browser = await chromium.launch({
                 headless: true,
-                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+                tracesDir: customTempDir,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--ignore-certificate-errors',
+                ]
             });
 
             const context = await browser.newContext({
                 userAgent: userAgent,
                 viewport: { width: 1280, height: 900 },
                 locale: 'en-US',
+                ignoreHTTPSErrors: true,
                 extraHTTPHeaders: {
                     'Accept-Language': 'en-US,en;q=0.9,pt-BR;q=0.8,pt;q=0.7',
                     'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
@@ -176,7 +215,13 @@ async function run() {
             const puppeteer = engineInfo.engine;
             const browser = await puppeteer.launch({
                 headless: 'new',
-                args: ['--no-sandbox', '--disable-setuid-sandbox']
+                ignoreHTTPSErrors: true,
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--ignore-certificate-errors',
+                ]
             });
 
             const page = await browser.newPage();

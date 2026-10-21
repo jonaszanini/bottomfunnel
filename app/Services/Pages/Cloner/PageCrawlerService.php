@@ -118,7 +118,7 @@ class PageCrawlerService
     }
 
     /**
-     * Tier 1: Fast HTTP request with authentic browser headers & automatic redirect following.
+     * Tier 1: Fast HTTP request with authentic browser headers, SSL verification disabled, & automatic redirect following.
      *
      * @return array{html: string, finalUrl: string, status: int}
      */
@@ -138,12 +138,29 @@ class PageCrawlerService
             'Upgrade-Insecure-Requests' => '1',
         ];
 
-        $response = Http::withHeaders($headers)
-            ->timeout($timeoutSeconds)
-            ->retry(2, 300, function (Throwable $exception): bool {
-                return true;
-            }, throw: false)
-            ->get($url);
+        // Disable SSL certificate verification ('verify' => false) to prevent cURL error 60
+        // on local Windows XAMPP environments and misconfigured vendor SSL certificates.
+        $client = Http::withoutVerifying()
+            ->withOptions([
+                'verify' => false,
+                'allow_redirects' => [
+                    'max' => 10,
+                    'strict' => false,
+                    'referer' => true,
+                    'protocols' => ['http', 'https'],
+                    'track_redirects' => true,
+                ],
+                'curl' => [
+                    CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYHOST => 0,
+                ],
+            ])
+            ->withHeaders($headers)
+            ->timeout($timeoutSeconds);
+
+        $response = $client->retry(2, 300, function (Throwable $exception): bool {
+            return true;
+        }, throw: false)->get($url);
 
         if (! $response->successful()) {
             throw new RuntimeException("HTTP request returned status code {$response->status()}");
@@ -184,7 +201,43 @@ class PageCrawlerService
             $optionsJson,
         ];
 
-        $processResult = Process::timeout($timeoutSeconds + 10)->run($command);
+        $tempDir = storage_path('app/playwright_temp');
+        if (! is_dir($tempDir)) {
+            @mkdir($tempDir, 0777, true);
+        }
+
+        // Inherit essential Windows environment variables so Node/Playwright never receives 'undefined'
+        $systemRoot = getenv('SystemRoot') ?: getenv('WINDIR') ?: 'C:\\Windows';
+        $pathEnv = getenv('PATH') ?: ($systemRoot.'\\system32;'.$systemRoot.';'.$systemRoot.'\\System32\\Wbem');
+        $userProfile = getenv('USERPROFILE') ?: (getenv('HOMEDRIVE') && getenv('HOMEPATH') ? getenv('HOMEDRIVE').getenv('HOMEPATH') : 'C:\\Users\\jonas');
+        $localAppData = getenv('LOCALAPPDATA') ?: ($userProfile ? $userProfile.'\\AppData\\Local' : $tempDir);
+        $appData = getenv('APPDATA') ?: ($userProfile ? $userProfile.'\\AppData\\Roaming' : $tempDir);
+
+        $env = [
+            'PATH' => $pathEnv,
+            'SystemRoot' => $systemRoot,
+            'WINDIR' => $systemRoot,
+            'TEMP' => $tempDir,
+            'TMP' => $tempDir,
+            'TMPDIR' => $tempDir,
+            'USERPROFILE' => $userProfile,
+            'LOCALAPPDATA' => $localAppData,
+            'APPDATA' => $appData,
+            'PLAYWRIGHT_BROWSERS_PATH' => getenv('PLAYWRIGHT_BROWSERS_PATH') ?: ($localAppData.'\\ms-playwright'),
+            'NODE_ENV' => 'production',
+        ];
+
+        // Sanitize: filter out null and literal 'undefined' strings
+        $sanitizedEnv = [];
+        foreach ($env as $k => $v) {
+            if ($v !== null && $v !== '' && $v !== 'undefined') {
+                $sanitizedEnv[$k] = (string) $v;
+            }
+        }
+
+        $processResult = Process::env($sanitizedEnv)
+            ->timeout($timeoutSeconds + 10)
+            ->run($command);
 
         if (! $processResult->successful()) {
             $err = trim($processResult->errorOutput());
