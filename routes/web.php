@@ -12,6 +12,7 @@ use App\Http\Controllers\TrackController;
 use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\TrackScriptController;
 use App\Http\Controllers\WatchedProductController;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/theme', [ThemeController::class, 'update'])->name('theme.update');
@@ -20,6 +21,23 @@ Route::view('/welcome', 'welcome')->name('welcome');
 Route::post('/hooks/{platform}/{secret}', HookController::class)->middleware('throttle:60,1');
 Route::post('/t/collect', TrackingController::class)->middleware('throttle:120,1');
 Route::get('/t.js', TrackScriptController::class);
+
+Route::get('/cron/run', function () {
+    $token = request()->query('token');
+    $expected = config('app.cron_token');
+
+    if (! $token || $token !== $expected) {
+        abort(403, 'Invalid cron token');
+    }
+
+    Artisan::call('schedule:run');
+
+    return response()->json([
+        'ok' => true,
+        'output' => Artisan::output(),
+        'time' => now()->toIso8601String(),
+    ]);
+})->name('cron.run');
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');
@@ -62,10 +80,17 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/watching-products', [WatchedProductController::class, 'index'])->name('watching-products.index');
     Route::post('/watching-products', [WatchedProductController::class, 'store'])->name('watching-products.store');
+    Route::get('/watching-products/{watchedProduct}', [WatchedProductController::class, 'show'])->name('watching-products.show');
     Route::put('/watching-products/{watchedProduct}', [WatchedProductController::class, 'update'])->name('watching-products.update');
     Route::delete('/watching-products/{watchedProduct}', [WatchedProductController::class, 'destroy'])->name('watching-products.destroy');
     Route::post('/watching-products/{watchedProduct}/review', [WatchedProductController::class, 'review'])->name('watching-products.review');
     Route::patch('/watching-products/{watchedProduct}/status', [WatchedProductController::class, 'updateStatus'])->name('watching-products.status');
+    Route::post('/watching-products/{watchedProduct}/refresh-now', [WatchedProductController::class, 'refreshNow'])->name('watching-products.refresh-now');
+    Route::post('/watching-products/{watchedProduct}/strategy', [WatchedProductController::class, 'updateStrategy'])->name('watching-products.strategy.update');
+    Route::post('/watching-products/{watchedProduct}/negatives', [WatchedProductController::class, 'storeNegative'])->name('watching-products.negatives.store');
+    Route::patch('/watching-products/{watchedProduct}/negatives/{negativeKeyword}', [WatchedProductController::class, 'updateNegative'])->name('watching-products.negatives.update');
+    Route::delete('/watching-products/{watchedProduct}/negatives/{negativeKeyword}', [WatchedProductController::class, 'destroyNegative'])->name('watching-products.negatives.destroy');
+    Route::get('/watching-products/{watchedProduct}/negatives/export', [WatchedProductController::class, 'exportNegatives'])->name('watching-products.negatives.export');
 
     Route::get('/copy', [CopyStudioController::class, 'index'])->name('copy.index');
     Route::post('/api/copy/generate-base', [CopyStudioController::class, 'generateBase'])->name('copy.generate-base');

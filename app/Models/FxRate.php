@@ -10,6 +10,7 @@ class FxRate extends Model
         'rate_date',
         'currency',
         'cad_per_unit',
+        'source',
     ];
 
     protected function casts(): array

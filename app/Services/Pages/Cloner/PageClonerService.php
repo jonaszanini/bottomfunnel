@@ -4,7 +4,6 @@ namespace App\Services\Pages\Cloner;
 
 use DOMDocument;
 use DOMElement;
-use DOMNode;
 use DOMXPath;
 
 class PageClonerService

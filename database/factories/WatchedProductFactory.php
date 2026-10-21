@@ -3,6 +3,9 @@
 namespace Database\Factories;
 
 use App\Enums\BrandBiddingStatus;
+use App\Enums\ProductKind;
+use App\Enums\Strategy;
+use App\Enums\StrategySource;
 use App\Enums\TrueBofStatus;
 use App\Enums\WatchedProductStatus;
 use App\Models\WatchedProduct;
@@ -21,9 +24,14 @@ class WatchedProductFactory extends Factory
             'name' => fake()->words(3, true).' Metabolic Support',
             'status' => fake()->randomElement(WatchedProductStatus::cases()),
             'platforms' => fake()->randomElements(['SmartAdv', 'ClickBank', 'MaxWeb', 'BuyGoods', 'Digistore24'], 2),
+            'payout_amount' => 100.00,
+            'payout_currency' => 'USD',
             'payout_cad' => fake()->randomFloat(2, 40, 250),
             'payout_notes' => 'Tiered: $40/1, $100/3, $150/6 bottles',
             'page_type' => fake()->randomElement(['TSL', 'DTC', 'Advertorial', 'VSL', 'Quiz']),
+            'product_kind' => ProductKind::Nutra,
+            'strategy' => Strategy::BofDirect,
+            'strategy_source' => StrategySource::Auto,
             'brand_bidding' => fake()->randomElement(BrandBiddingStatus::cases()),
             'true_bof' => fake()->randomElement(TrueBofStatus::cases()),
             'geos' => ['US', 'CA', 'UK'],
