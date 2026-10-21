@@ -7,6 +7,16 @@ APP_DIR="${DEPLOY_ROOT:?DEPLOY_ROOT is required}"
 echo "[remote] Running deploy commands in: ${APP_DIR}"
 cd "${APP_DIR}"
 
+# Hostinger SSH defaults to an older PHP CLI; use the site's PHP 8.3+ binary.
+PHP_BIN="${PHP_BIN:-}"
+if [ -z "$PHP_BIN" ]; then
+  for v in 85 84 83; do
+    if [ -x "/opt/alt/php${v}/usr/bin/php" ]; then PHP_BIN="/opt/alt/php${v}/usr/bin/php"; break; fi
+  done
+fi
+PHP_BIN="${PHP_BIN:-php}"
+echo "[php] using $PHP_BIN ($("$PHP_BIN" -r 'echo PHP_VERSION;'))"
+
 if command -v composer >/dev/null 2>&1 && [ -f composer.lock ]; then
   LOCK_HASH_FILE="${APP_DIR}/.deploy-composer-lock-hash"
   CURRENT_HASH="$(md5sum composer.lock 2>/dev/null | awk '{print $1}' || true)"
@@ -14,7 +24,7 @@ if command -v composer >/dev/null 2>&1 && [ -f composer.lock ]; then
     echo "[composer] composer.lock unchanged, skipping install"
   else
     echo "[composer] installing dependencies..."
-    composer install --no-dev --prefer-dist --no-interaction --optimize-autoloader
+    "$PHP_BIN" "$(command -v composer)" install --no-dev --prefer-dist --no-interaction --optimize-autoloader
     [ -n "${CURRENT_HASH}" ] && echo "${CURRENT_HASH}" > "${LOCK_HASH_FILE}"
   fi
 else
@@ -25,7 +35,7 @@ if [ -f artisan ]; then
   [ -f .env ] || { echo "ERROR: ${APP_DIR}/.env is missing."; exit 1; }
 
   echo "[artisan] linking public storage..."
-  php artisan storage:link 2>/dev/null || true
+  "$PHP_BIN" artisan storage:link 2>/dev/null || true
   mkdir -p public/storage
   if [ -d storage/app/public ]; then
     rsync -a storage/app/public/ public/storage/ 2>/dev/null || cp -R storage/app/public/. public/storage/ 2>/dev/null || true
@@ -35,11 +45,11 @@ if [ -f artisan ]; then
   mkdir -p storage/framework/{cache,sessions,views} storage/logs bootstrap/cache
   chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
-  php artisan optimize:clear
-  php artisan migrate --force
-  php artisan config:cache
-  php artisan route:clear
-  php artisan view:cache
+  "$PHP_BIN" artisan optimize:clear
+  "$PHP_BIN" artisan migrate --force
+  "$PHP_BIN" artisan config:cache
+  "$PHP_BIN" artisan route:clear
+  "$PHP_BIN" artisan view:cache
 fi
 
 echo "[remote] Deploy commands completed successfully"
