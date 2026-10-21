@@ -14,7 +14,7 @@ export default function Index({ accounts, pending }) {
                     <h1 className="text-2xl font-semibold text-theme-primary">Google Ads</h1>
                     <p className="text-sm text-theme-secondary">Link the account a Track uses. Flow Hub uploads conversions and manages IP exclusions. It does not create campaigns or change bids.</p>
                 </div>
-                <button className={button} type="button" onClick={() => router.get('/google-ads/connect')}>Link Google Ads</button>
+                <button className={button} type="button" onClick={() => { window.location.href = '/google-ads/connect'; }}>Link Google Ads</button>
             </div>
 
             {pending.length > 0 && (
