@@ -1,0 +1,31 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Block phpinfo/debug scripts and sensitive files/dirs
+    RewriteRule ^(?:public/)?(test|info|phpinfo)\.php$ - [R=404,L]
+    RewriteRule (^|/)\.(?!well-known/) - [R=404,L]
+    RewriteRule ^(app|bootstrap|config|database|resources|routes|storage|tests|vendor|node_modules)(/|$) - [R=404,L]
+    RewriteRule ^(composer\.(json|lock)|package(-lock)?\.json|artisan|phpunit\.xml|vite\.config\.js|boost\.json|AGENTS\.md|CLAUDE\.md|README\.md)$ - [R=404,L]
+
+    # www -> apex
+    RewriteCond %{HTTP_HOST} ^www\.bottomfunnel\.app$ [NC]
+    RewriteRule ^(.*?)/?$ https://bottomfunnel.app/$1 [R=301,L]
+
+    # Externally requested /public/... -> clean URL
+    RewriteCond %{THE_REQUEST} \s/public(/[^\s?]*)?[\s?] [NC]
+    RewriteRule ^public/?(.*?)/?$ https://bottomfunnel.app/$1 [R=301,L]
+
+    # Externally requested /index.php -> clean URL
+    RewriteCond %{THE_REQUEST} \s/index\.php [NC]
+    RewriteRule ^index\.php/?(.*)$ https://bottomfunnel.app/$1 [R=301,L]
+
+    # Serve Laravel from public/ without changing the browser address
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ /public/$1 [L]
+</IfModule>
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+Options -Indexes

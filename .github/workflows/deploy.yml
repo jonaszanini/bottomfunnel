@@ -1,0 +1,84 @@
+name: Deploy to Hostinger (Production)
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  require-tests:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Require a successful Tests run for this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 90); do
+            payload="$(gh run list --repo "$REPO" --workflow Tests --commit "$SHA" --json conclusion,status)"
+            conclusion="$(printf '%s' "$payload" | jq -r '[.[] | select(.status=="completed")] | .[0].conclusion // empty')"
+            if [ "$conclusion" = "success" ]; then exit 0; fi
+            if [ "$conclusion" = "failure" ] || [ "$conclusion" = "cancelled" ] || [ "$conclusion" = "timed_out" ]; then echo "Tests ${conclusion}; refusing deploy"; exit 1; fi
+            echo "Waiting for Tests on ${SHA} (attempt ${i})"; sleep 20
+          done
+          echo "Timed out waiting for Tests"; exit 1
+
+  deploy:
+    needs: [require-tests]
+    if: ${{ always() && ((github.event_name == 'workflow_dispatch' && needs.require-tests.result == 'success') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.event == 'push')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: PROD
+    env:
+      DEPLOY_ROOT: /home/u372714627/domains/bottomfunnel.app/public_html
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Build frontend assets (Vite)
+        run: |
+          npm ci
+          npm run build
+
+      - name: Configure SSH known hosts
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf "%s\n" "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to server
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          set -euo pipefail
+          SSH_ARGS="-p ${SSH_PORT} -o ConnectTimeout=60 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes"
+          RSYNC_EXCLUDES=(
+            --exclude ".git/" --exclude ".github/" --exclude ".env"
+            --exclude "node_modules/" --exclude "storage/framework/" --exclude "storage/logs/"
+            --exclude ".agents/"
+          )
+          ssh ${SSH_ARGS} "${SSH_USER}@${SSH_HOST}" "test -d '${DEPLOY_ROOT}'"
+          rsync -az --timeout=120 "${RSYNC_EXCLUDES[@]}" -e "ssh ${SSH_ARGS}" ./ "${SSH_USER}@${SSH_HOST}:${DEPLOY_ROOT}/"
+          rsync -az --delete --timeout=120 -e "ssh ${SSH_ARGS}" ./database/migrations/ "${SSH_USER}@${SSH_HOST}:${DEPLOY_ROOT}/database/migrations/"
+          ssh ${SSH_ARGS} "${SSH_USER}@${SSH_HOST}" "rm -f '${DEPLOY_ROOT}/public/test.php' '${DEPLOY_ROOT}/public/info.php' '${DEPLOY_ROOT}/public/phpinfo.php' '${DEPLOY_ROOT}/test.php' '${DEPLOY_ROOT}/info.php' '${DEPLOY_ROOT}/phpinfo.php'"
+          ssh ${SSH_ARGS} "${SSH_USER}@${SSH_HOST}" "export DEPLOY_ROOT='${DEPLOY_ROOT}'; bash -s" < .github/scripts/remote-laravel-deploy.sh
+          echo "Deploy completed successfully."
