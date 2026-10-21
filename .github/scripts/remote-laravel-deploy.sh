@@ -10,7 +10,7 @@ cd "${APP_DIR}"
 # Hostinger SSH defaults to an older PHP CLI; use the site's PHP 8.3+ binary.
 PHP_BIN="${PHP_BIN:-}"
 if [ -z "$PHP_BIN" ]; then
-  for v in 85 84 83; do
+  for v in 83 84 85; do
     if [ -x "/opt/alt/php${v}/usr/bin/php" ]; then PHP_BIN="/opt/alt/php${v}/usr/bin/php"; break; fi
   done
 fi
