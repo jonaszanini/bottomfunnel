@@ -281,8 +281,11 @@ class GoogleAdsClient
         $version = (string) config('flowhub.google_ads.version', 'v22');
         $headers = [
             'Authorization' => 'Bearer '.$accessToken,
-            'developer-token' => (string) config('flowhub.google_ads.developer_token'),
         ];
+        $developerToken = config('flowhub.google_ads.developer_token');
+        if (is_string($developerToken) && $developerToken !== '') {
+            $headers['developer-token'] = $developerToken;
+        }
         $login = $this->digits((string) $loginCustomerId);
         if ($login !== '') {
             $headers['login-customer-id'] = $login;
@@ -377,9 +380,7 @@ class GoogleAdsClient
     private function assertDeveloperToken(): void
     {
         $this->assertOauthConfigured();
-        if (! config('flowhub.google_ads.developer_token')) {
-            throw new GoogleRequestException('Google Ads is not configured. Set GOOGLE_ADS_DEVELOPER_TOKEN. Conversion upload through Data Manager does not use this token, but account linking, conversion actions, and IP exclusions do.');
-        }
+        // Developer token is optional after the September 2026 sunset.
     }
 
     public function digits(string $value): string

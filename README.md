@@ -21,7 +21,7 @@ php artisan queue:work
 
 Sign in with `FLOW_HUB_USERNAME` and `FLOW_HUB_PASSWORD` from `.env`. There is no registration.
 
-Set `OPENAI_API_KEY` before generating a page. Set `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, and `GOOGLE_ADS_DEVELOPER_TOKEN` before linking an account. The OAuth redirect is `GOOGLE_ADS_REDIRECT_URI`. Data Manager conversion upload uses the same Google login and does not use the developer token. Missing credentials stop that call with an error.
+Set `OPENAI_API_KEY` before generating a page. Set `GOOGLE_ADS_CLIENT_ID` and `GOOGLE_ADS_CLIENT_SECRET` before linking an account (`GOOGLE_ADS_DEVELOPER_TOKEN` is optional following Google's September 2026 sunset). The OAuth redirect is `GOOGLE_ADS_REDIRECT_URI`. Data Manager conversion upload uses the same Google login and does not use the developer token. Missing credentials stop that call with an error.
 
 `GOOGLE_ADS_API_VERSION` defaults to `v22`.
 
