@@ -7,6 +7,84 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
     const [previewHtml, setPreviewHtml] = useState('');
     const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
+    // Table Sorting State
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+    const handleSort = (key) => {
+        setSortConfig((prev) => {
+            if (prev.key === key) {
+                return {
+                    key,
+                    direction: prev.direction === 'asc' ? 'desc' : 'asc',
+                };
+            }
+            return {
+                key,
+                direction: 'asc',
+            };
+        });
+    };
+
+    const sortedPages = React.useMemo(() => {
+        if (!sortConfig.key) return pages;
+
+        return [...pages].sort((a, b) => {
+            let aVal = a[sortConfig.key] || '';
+            let bVal = b[sortConfig.key] || '';
+
+            if (sortConfig.key === 'updated_at') {
+                const aTime = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+                const bTime = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+                return sortConfig.direction === 'asc' ? aTime - bTime : bTime - aTime;
+            }
+
+            if (typeof aVal === 'string' && typeof bVal === 'string') {
+                const cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
+                return sortConfig.direction === 'asc' ? cmp : -cmp;
+            }
+
+            if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }, [pages, sortConfig]);
+
+    const renderSortTh = (label, columnKey, className = '') => {
+        const isActive = sortConfig.key === columnKey;
+        const isAsc = isActive && sortConfig.direction === 'asc';
+
+        return (
+            <th
+                scope="col"
+                onClick={() => handleSort(columnKey)}
+                className={`px-4 py-3 select-none cursor-pointer group transition-colors hover:text-theme-primary ${isActive ? 'text-theme-accent font-bold bg-theme-subtle/50' : ''} ${className}`}
+                title={`Sort by ${label} (${isActive && isAsc ? 'Descending' : 'Ascending'})`}
+                aria-sort={isActive ? (isAsc ? 'ascending' : 'descending') : 'none'}
+            >
+                <div className={`flex items-center gap-1.5 ${className.includes('text-right') ? 'justify-end' : ''}`}>
+                    <span>{label}</span>
+                    <span className="inline-flex shrink-0">
+                        {isActive ? (
+                            isAsc ? (
+                                <svg className="w-3.5 h-3.5 text-theme-accent stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                </svg>
+                            ) : (
+                                <svg className="w-3.5 h-3.5 text-theme-accent stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            )
+                        ) : (
+                            <svg className="w-3.5 h-3.5 text-theme-muted/40 group-hover:text-theme-muted transition-colors stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                            </svg>
+                        )}
+                    </span>
+                </div>
+            </th>
+        );
+    };
+
     function handleOpenPreview(page) {
         setPreviewingPage(page);
         setIsLoadingPreview(true);
@@ -82,15 +160,15 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
                             <table className="w-full text-left text-xs">
                                 <thead className="border-b border-theme bg-theme-card/60 text-theme-secondary uppercase tracking-wider font-semibold">
                                     <tr>
-                                        <th className="px-4 py-3">Page Name</th>
-                                        <th className="px-4 py-3">Linked Offer / Track</th>
-                                        <th className="px-4 py-3">Strategy / Format</th>
-                                        <th className="px-4 py-3">Updated</th>
-                                        <th className="px-4 py-3 text-right">Actions</th>
+                                        {renderSortTh('Page Name', 'name')}
+                                        {renderSortTh('Linked Offer / Track', 'product_name')}
+                                        {renderSortTh('Strategy / Format', 'page_type')}
+                                        {renderSortTh('Updated', 'updated_at')}
+                                        <th className="px-4 py-3 text-right select-none">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-theme">
-                                    {pages.map((p) => (
+                                    {sortedPages.map((p) => (
                                         <tr key={p.id} className="hover:bg-theme-subtle/40 transition-colors">
                                             <td className="px-4 py-3 font-semibold text-theme-primary">
                                                 {p.name}
@@ -145,7 +223,7 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
 
                         {/* Mobile Stacked Responsive Cards (< 768px) */}
                         <div className="md:hidden divide-y divide-theme">
-                            {pages.map((p) => (
+                            {sortedPages.map((p) => (
                                 <div key={p.id} className="p-4 space-y-3 hover:bg-theme-subtle/20 transition-colors">
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="flex-1 min-w-0">

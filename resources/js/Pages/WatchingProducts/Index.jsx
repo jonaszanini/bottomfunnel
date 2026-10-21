@@ -29,6 +29,107 @@ export default function Index({ products, filters, metrics, options }) {
         });
     };
 
+    // Table Sorting State (Up-Down / Down-Up)
+    const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+
+    const handleSort = (key) => {
+        setSortConfig((prev) => {
+            if (prev.key === key) {
+                return {
+                    key,
+                    direction: prev.direction === 'asc' ? 'desc' : 'asc',
+                };
+            }
+            return {
+                key,
+                direction: 'asc',
+            };
+        });
+    };
+
+    const sortedProducts = useMemo(() => {
+        if (!sortConfig.key) return products;
+
+        return [...products].sort((a, b) => {
+            let aVal = a[sortConfig.key];
+            let bVal = b[sortConfig.key];
+
+            if (sortConfig.key === 'platforms') {
+                aVal = Array.isArray(a.platforms) ? a.platforms.join(', ') : (a.platforms || '');
+                bVal = Array.isArray(b.platforms) ? b.platforms.join(', ') : (b.platforms || '');
+            } else if (sortConfig.key === 'geos') {
+                aVal = Array.isArray(a.geos) ? a.geos.join(', ') : (a.geos || '');
+                bVal = Array.isArray(b.geos) ? b.geos.join(', ') : (b.geos || '');
+            } else if (sortConfig.key === 'payout_cad') {
+                const aNum = a.payout_cad !== null && a.payout_cad !== undefined ? Number(a.payout_cad) : -Infinity;
+                const bNum = b.payout_cad !== null && b.payout_cad !== undefined ? Number(b.payout_cad) : -Infinity;
+                return sortConfig.direction === 'asc' ? aNum - bNum : bNum - aNum;
+            } else if (sortConfig.key === 'last_reviewed_at') {
+                const aTime = a.last_reviewed_at ? new Date(a.last_reviewed_at).getTime() : 0;
+                const bTime = b.last_reviewed_at ? new Date(b.last_reviewed_at).getTime() : 0;
+                return sortConfig.direction === 'asc' ? aTime - bTime : bTime - aTime;
+            } else if (sortConfig.key === 'status') {
+                const priority = { test: 1, watch: 2, rejected: 3 };
+                const aPriority = priority[a.status] || 99;
+                const bPriority = priority[b.status] || 99;
+                if (aPriority !== bPriority) {
+                    return sortConfig.direction === 'asc' ? aPriority - bPriority : bPriority - aPriority;
+                }
+            } else if (sortConfig.key === 'brand_bidding') {
+                aVal = a.brand_bidding_label || a.brand_bidding || '';
+                bVal = b.brand_bidding_label || b.brand_bidding || '';
+            } else if (sortConfig.key === 'true_bof') {
+                aVal = a.true_bof_label || a.true_bof || '';
+                bVal = b.true_bof_label || b.true_bof || '';
+            }
+
+            if (typeof aVal === 'string' && typeof bVal === 'string') {
+                const cmp = aVal.localeCompare(bVal, undefined, { numeric: true, sensitivity: 'base' });
+                return sortConfig.direction === 'asc' ? cmp : -cmp;
+            }
+
+            if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+    }, [products, sortConfig]);
+
+    const renderSortTh = (label, columnKey, className = '') => {
+        const isActive = sortConfig.key === columnKey;
+        const isAsc = isActive && sortConfig.direction === 'asc';
+
+        return (
+            <th
+                scope="col"
+                onClick={() => handleSort(columnKey)}
+                className={`px-4 py-3 select-none cursor-pointer group transition-colors hover:text-theme-primary ${isActive ? 'text-theme-accent font-bold bg-theme-subtle/50' : ''} ${className}`}
+                title={`Sort by ${label} (${isActive && isAsc ? 'Descending' : 'Ascending'})`}
+                aria-sort={isActive ? (isAsc ? 'ascending' : 'descending') : 'none'}
+            >
+                <div className={`flex items-center gap-1.5 ${className.includes('text-right') ? 'justify-end' : ''}`}>
+                    <span>{label}</span>
+                    <span className="inline-flex shrink-0">
+                        {isActive ? (
+                            isAsc ? (
+                                <svg className="w-3.5 h-3.5 text-theme-accent stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+                                </svg>
+                            ) : (
+                                <svg className="w-3.5 h-3.5 text-theme-accent stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                                </svg>
+                            )
+                        ) : (
+                            <svg className="w-3.5 h-3.5 text-theme-muted/40 group-hover:text-theme-muted transition-colors stroke-2" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+                            </svg>
+                        )}
+                    </span>
+                </div>
+            </th>
+        );
+    };
+
     // Form handling for create / edit
     const form = useForm({
         name: '',
@@ -487,19 +588,19 @@ export default function Index({ products, filters, metrics, options }) {
                             <table className="min-w-full divide-y divide-theme text-left text-sm">
                             <thead className="bg-theme-subtle/40 text-xs font-semibold uppercase tracking-wider text-theme-muted">
                                 <tr>
-                                    <th scope="col" className="px-4 py-3">Product Name</th>
-                                    <th scope="col" className="px-4 py-3">Status</th>
-                                    <th scope="col" className="px-4 py-3">Platforms</th>
-                                    <th scope="col" className="px-4 py-3">Payout</th>
-                                    <th scope="col" className="px-4 py-3">Brand Bidding</th>
-                                    <th scope="col" className="px-4 py-3">True BoF</th>
-                                    <th scope="col" className="px-4 py-3">Geos</th>
-                                    <th scope="col" className="px-4 py-3">Last Reviewed</th>
-                                    <th scope="col" className="px-4 py-3 text-right">Actions</th>
+                                    {renderSortTh('Product Name', 'name')}
+                                    {renderSortTh('Status', 'status')}
+                                    {renderSortTh('Platforms', 'platforms')}
+                                    {renderSortTh('Payout', 'payout_cad')}
+                                    {renderSortTh('Brand Bidding', 'brand_bidding')}
+                                    {renderSortTh('True BoF', 'true_bof')}
+                                    {renderSortTh('Geos', 'geos')}
+                                    {renderSortTh('Last Reviewed', 'last_reviewed_at')}
+                                    <th scope="col" className="px-4 py-3 text-right select-none">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-theme">
-                                {products.map((product) => (
+                                {sortedProducts.map((product) => (
                                     <tr
                                         key={product.id}
                                         className="hover:bg-theme-subtle/30 transition-colors"
@@ -716,8 +817,41 @@ export default function Index({ products, filters, metrics, options }) {
                     </div>
 
                     {/* Mobile Stacked Responsive Cards (< 768px) */}
-                    <div className="md:hidden divide-y divide-theme">
-                        {products.map((product) => (
+                    <div className="md:hidden">
+                        {/* Mobile Sort Bar */}
+                        <div className="px-4 py-2.5 bg-theme-subtle/30 border-b border-theme flex items-center justify-between text-xs">
+                            <span className="text-theme-muted font-medium">
+                                {sortedProducts.length} {sortedProducts.length === 1 ? 'product' : 'products'}
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                                <span className="text-theme-muted text-[11px]">Sort:</span>
+                                <select
+                                    value={sortConfig.key ? `${sortConfig.key}:${sortConfig.direction}` : ''}
+                                    onChange={(e) => {
+                                        if (!e.target.value) {
+                                            setSortConfig({ key: null, direction: 'asc' });
+                                        } else {
+                                            const [k, d] = e.target.value.split(':');
+                                            setSortConfig({ key: k, direction: d });
+                                        }
+                                    }}
+                                    className="rounded border border-theme bg-theme-input px-2 py-1 text-xs text-theme-primary focus:outline-none focus:border-theme-accent cursor-pointer"
+                                    aria-label="Sort products on mobile"
+                                >
+                                    <option value="">Default (Recent)</option>
+                                    <option value="name:asc">Name (A &rarr; Z)</option>
+                                    <option value="name:desc">Name (Z &rarr; A)</option>
+                                    <option value="payout_cad:desc">Payout (High &rarr; Low)</option>
+                                    <option value="payout_cad:asc">Payout (Low &rarr; High)</option>
+                                    <option value="status:asc">Status (Test &gt; Watch)</option>
+                                    <option value="last_reviewed_at:asc">Review (Oldest)</option>
+                                    <option value="last_reviewed_at:desc">Review (Newest)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="divide-y divide-theme">
+                            {sortedProducts.map((product) => (
                             <div key={product.id} className="p-4 space-y-3 hover:bg-theme-subtle/20 transition-colors">
                                 {/* Card Header: Product name & Quick Status */}
                                 <div className="flex items-start justify-between gap-2">
@@ -863,6 +997,7 @@ export default function Index({ products, filters, metrics, options }) {
                                 </div>
                             </div>
                         ))}
+                        </div>
                     </div>
                 </>
                 )}
