@@ -15,6 +15,7 @@ return [
     'serpapi_monthly_cap' => (int) env('SERPAPI_MONTHLY_CAP', 230),
     'serpapi_total_limit' => 250,
     'serpapi_reserve' => 20,
+    'serpapi_gl' => env('SERPAPI_GL', 'ca'),
 
     /*
     |--------------------------------------------------------------------------

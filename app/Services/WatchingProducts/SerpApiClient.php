@@ -12,14 +12,15 @@ use Throwable;
 class SerpApiClient
 {
     public function __construct(
-        protected QuotaBudget $budget = new QuotaBudget
+        protected QuotaBudget $budget = new QuotaBudget,
+        protected BofChecker $bofChecker = new BofChecker
     ) {}
 
     /**
      * Fetch Trends and Search data for a product.
      * Returns array of extracted values without throwing on API errors.
      *
-     * @return array{trends: array<string, mixed>, serp: array<string, mixed>, success: bool, error: ?string}
+     * @return array{trends: array<string, mixed>, serp: array<string, mixed>, bof: array{bof_vpn_serp: bool, bof_image_match_pct: int, bof_translation: bool}, success: bool, error: ?string}
      */
     public function fetchProductData(WatchedProduct $product): array
     {
@@ -30,6 +31,7 @@ class SerpApiClient
             return [
                 'trends' => [],
                 'serp' => [],
+                'bof' => $this->bofChecker->check($product, []),
                 'success' => false,
                 'error' => 'No API key configured',
             ];
@@ -37,12 +39,14 @@ class SerpApiClient
 
         $trendsData = $this->fetchGoogleTrends($product->name, $apiKey);
         $serpData = $this->fetchGoogleSerp($product->name, $apiKey);
+        $bofData = $this->bofChecker->check($product, $serpData);
 
         $success = ! empty($trendsData) || ! empty($serpData);
 
         return [
             'trends' => $trendsData,
             'serp' => $serpData,
+            'bof' => $bofData,
             'success' => $success,
             'error' => $success ? null : 'API calls returned empty or failed',
         ];
@@ -100,13 +104,14 @@ class SerpApiClient
      *
      * @return array<string, mixed>
      */
-    public function fetchGoogleSerp(string $query, ?string $apiKey = null, string $gl = 'us'): array
+    public function fetchGoogleSerp(string $query, ?string $apiKey = null, ?string $gl = null): array
     {
         $apiKey ??= config('watching.serpapi_key');
         if (empty($apiKey)) {
             return [];
         }
 
+        $gl ??= config('watching.serpapi_gl', 'ca');
         $cacheKey = 'serpapi_search_'.md5(strtolower(trim($query)).'_'.$gl);
 
         return Cache::remember($cacheKey, now()->addDays(7), function () use ($query, $apiKey, $gl) {
@@ -224,26 +229,67 @@ class SerpApiClient
         // Organic results: titles and domains
         $organicTitles = [];
         $organicDomains = [];
+        $organicResults = [];
         foreach ($json['organic_results'] ?? [] as $item) {
-            if (! empty($item['title'])) {
-                $organicTitles[] = (string) $item['title'];
+            $title = (string) ($item['title'] ?? '');
+            if ($title !== '') {
+                $organicTitles[] = $title;
             }
-            if (! empty($item['link'])) {
-                $host = parse_url($item['link'], PHP_URL_HOST);
+            $link = (string) ($item['link'] ?? '');
+            if ($link !== '') {
+                $host = parse_url($link, PHP_URL_HOST);
                 if ($host) {
                     $organicDomains[] = str_ireplace('www.', '', $host);
                 }
             }
+            $organicResults[] = [
+                'title' => $title,
+                'snippet' => (string) ($item['snippet'] ?? ''),
+                'link' => $link,
+                'thumbnail' => $item['thumbnail'] ?? null,
+                'rich_snippet' => $item['rich_snippet'] ?? null,
+            ];
         }
 
-        // Ads count
+        // Ads count and domains/titles
         $ads = $json['ads'] ?? [];
         $advertiserCount = count($ads);
+        $adDomains = [];
+        $adTitles = [];
+        $adsList = [];
+        foreach ($ads as $ad) {
+            $adTitle = (string) ($ad['title'] ?? '');
+            if ($adTitle !== '') {
+                $adTitles[] = $adTitle;
+            }
+            $adLink = (string) ($ad['link'] ?? $ad['tracking_link'] ?? $ad['displayed_link'] ?? '');
+            if (! empty($ad['displayed_link'])) {
+                $dispLink = (string) $ad['displayed_link'];
+                $host = parse_url(str_starts_with($dispLink, 'http') ? $dispLink : 'https://'.$dispLink, PHP_URL_HOST) ?: $dispLink;
+                $adDomains[] = str_ireplace('www.', '', (string) $host);
+            } elseif ($adLink !== '') {
+                $host = parse_url($adLink, PHP_URL_HOST);
+                if ($host) {
+                    $adDomains[] = str_ireplace('www.', '', $host);
+                }
+            }
+            $adsList[] = [
+                'title' => $adTitle,
+                'snippet' => (string) ($ad['snippet'] ?? ''),
+                'link' => $adLink,
+            ];
+        }
 
         return [
             'related_searches' => array_values(array_unique($relatedSearches)),
             'organic_titles' => $organicTitles,
             'organic_domains' => array_values(array_unique($organicDomains)),
+            'organic_results' => $organicResults,
+            'ad_titles' => array_values(array_unique($adTitles)),
+            'ad_domains' => array_values(array_unique($adDomains)),
+            'ads' => $adsList,
+            'inline_images' => $json['inline_images'] ?? [],
+            'shopping_results' => $json['shopping_results'] ?? $json['inline_shopping'] ?? [],
             'advertiser_count' => $advertiserCount,
         ];
     }

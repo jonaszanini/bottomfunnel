@@ -17,6 +17,7 @@ use App\Enums\WatchedProductStatus;
 use App\Models\ProductNegativeKeyword;
 use App\Models\ProductScoreHistory;
 use App\Models\WatchedProduct;
+use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\CampaignGuidance;
 use App\Services\WatchingProducts\Fx\FrankfurterFx;
 use App\Services\WatchingProducts\Money;
@@ -42,7 +43,8 @@ class WatchedProductController extends Controller
         protected CampaignGuidance $guidance = new CampaignGuidance,
         protected QuotaBudget $budget = new QuotaBudget,
         protected NegativeKeywordGenerator $negativeGenerator = new NegativeKeywordGenerator,
-        protected RankService $rankService = new RankService
+        protected RankService $rankService = new RankService,
+        protected BofChecker $bofChecker = new BofChecker
     ) {}
 
     /**
@@ -98,6 +100,11 @@ class WatchedProductController extends Controller
                 'brand_bidding_label' => $product->brand_bidding->label(),
                 'true_bof' => $product->true_bof->value,
                 'true_bof_label' => $product->true_bof->label(),
+                'bof_translation' => (bool) $product->bof_translation,
+                'bof_vpn_serp' => (bool) $product->bof_vpn_serp,
+                'bof_image_match_pct' => (int) ($product->bof_image_match_pct ?? 0),
+                'bof_qualifier' => $product->bof_qualifier,
+                'bof_homonym' => (bool) $product->bof_homonym,
                 'geos' => $product->geos ?? [],
                 'platforms' => $product->platforms ?? [],
                 'platform' => $product->platform,
@@ -209,6 +216,11 @@ class WatchedProductController extends Controller
                 'date' => $h->created_at->format('M d H:i'),
                 'created_at' => $h->created_at->toIso8601String(),
             ]);
+
+        // Ensure base seeds are populated if missing
+        if ($watchedProduct->negativeKeywords()->where('source', NegativeKeywordSource::Base)->doesntExist()) {
+            $this->negativeGenerator->generateForProduct($watchedProduct);
+        }
 
         // Negative keywords
         $negatives = $watchedProduct->negativeKeywords()
@@ -385,6 +397,24 @@ class WatchedProductController extends Controller
             'scored_at' => now(),
         ]);
 
+        ProductScoreHistory::query()->create([
+            'product_id' => $watchedProduct->id,
+            'score' => $scoreResult['score'],
+            'breakdown' => $scoreResult['breakdown'],
+            'flags' => $scoreResult['flags'],
+            'inputs_snapshot' => [
+                'name' => $watchedProduct->name,
+                'payout_amount' => $watchedProduct->payout_amount,
+                'payout_currency' => $watchedProduct->payout_currency,
+                'page_type' => $watchedProduct->page_type,
+                'strategy' => $watchedProduct->strategy?->value,
+                'bof_translation' => (bool) $watchedProduct->bof_translation,
+                'bof_vpn_serp' => (bool) $watchedProduct->bof_vpn_serp,
+                'bof_image_match_pct' => (int) ($watchedProduct->bof_image_match_pct ?? 0),
+            ],
+            'created_at' => now(),
+        ]);
+
         $this->rankService->recalculateRanks();
 
         if ($request->header('Referer') && str_contains((string) $request->header('Referer'), '/watching-products/')) {
@@ -460,9 +490,23 @@ class WatchedProductController extends Controller
 
             if (! empty($data['serp'])) {
                 $watchedProduct->advertiser_count = $data['serp']['advertiser_count'] ?? $watchedProduct->advertiser_count;
-                $this->negativeGenerator->syncSerpData($watchedProduct, $data['serp']);
+            }
+
+            if (! empty($data['bof'])) {
+                $watchedProduct->bof_vpn_serp = $data['bof']['bof_vpn_serp'];
+                $watchedProduct->bof_image_match_pct = $data['bof']['bof_image_match_pct'];
+                if ($data['bof']['bof_translation']) {
+                    $watchedProduct->bof_translation = true;
+                }
+            }
+        } else {
+            if (! $watchedProduct->bof_translation && $this->bofChecker->detectTranslationPass($watchedProduct->name)) {
+                $watchedProduct->bof_translation = true;
             }
         }
+
+        // Generate and sync base seeds, qualifier rules, and clean SERP data
+        $this->negativeGenerator->generateForProduct($watchedProduct, $data['serp'] ?? []);
 
         $watchedProduct->last_refreshed_at = now();
         $watchedProduct->save();
@@ -487,6 +531,9 @@ class WatchedProductController extends Controller
                 'payout_currency' => $watchedProduct->payout_currency,
                 'page_type' => $watchedProduct->page_type,
                 'strategy' => $watchedProduct->strategy?->value,
+                'bof_translation' => (bool) $watchedProduct->bof_translation,
+                'bof_vpn_serp' => (bool) $watchedProduct->bof_vpn_serp,
+                'bof_image_match_pct' => (int) ($watchedProduct->bof_image_match_pct ?? 0),
             ],
             'created_at' => now(),
         ]);

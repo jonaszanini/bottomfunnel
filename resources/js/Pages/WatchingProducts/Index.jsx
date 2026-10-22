@@ -1031,9 +1031,14 @@ export default function Index({ products, filters, metrics, options }) {
                                 Sub-Score Component Breakdown
                             </div>
                             <div className="grid grid-cols-2 gap-2">
-                                <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
-                                    <span>BoF Name Triad:</span>
-                                    <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.bof_name ?? 0} / 20</strong>
+                                <div className="p-2 rounded bg-theme-subtle border border-theme flex flex-col gap-0.5">
+                                    <div className="flex justify-between">
+                                        <span>BoF Name Triad:</span>
+                                        <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.bof_name ?? 0} / 20</strong>
+                                    </div>
+                                    <div className="text-[10px] text-theme-muted">
+                                        Images: {scoreModalProduct.bof_image_match_pct ?? 0}% • Trans: {scoreModalProduct.bof_translation ? '✓' : '✗'} • VPN: {scoreModalProduct.bof_vpn_serp ? '✓' : '✗'}
+                                    </div>
                                 </div>
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
                                     <span>Demand & Trends:</span>

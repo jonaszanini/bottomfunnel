@@ -233,4 +233,49 @@ class PotentialScoreServiceTest extends TestCase
         $this->assertEquals('green', $getBand(76));
         $this->assertEquals('green', $getBand(100));
     }
+
+    public function test_product_with_all_three_triad_checks_passing_receives_full_20_points_on_bof_component(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'bof_translation' => true,
+            'bof_vpn_serp' => true,
+            'bof_image_match_pct' => 90, // Minimum for full credit is 90
+            'bof_homonym' => false,
+        ]);
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertEquals(20, $result['breakdown']['bof_name']);
+        $this->assertArrayNotHasKey('false_bof', $result['flags']);
+    }
+
+    public function test_product_with_image_match_below_90_does_not_receive_full_20_points(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'bof_translation' => true,
+            'bof_vpn_serp' => true,
+            'bof_image_match_pct' => 89, // Below 90 threshold
+            'bof_homonym' => false,
+        ]);
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertLessThan(20, $result['breakdown']['bof_name']);
+        $this->assertEquals(14, $result['breakdown']['bof_name']); // round(0.89 * 10) + 3 + 2 = 9 + 5 = 14
+    }
+
+    public function test_product_with_missing_vpn_serp_does_not_receive_full_20_points(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'bof_translation' => true,
+            'bof_vpn_serp' => false,
+            'bof_image_match_pct' => 95,
+            'bof_homonym' => false,
+        ]);
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertLessThan(20, $result['breakdown']['bof_name']);
+        $this->assertEquals(13, $result['breakdown']['bof_name']); // round(0.95 * 10) + 3 = 10 + 3 = 13
+    }
 }

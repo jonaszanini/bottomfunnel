@@ -10,9 +10,12 @@ class NegativeKeywordSeedSeeder extends Seeder
     /**
      * Run the database seeds.
      */
-    public function run(): void
+    /**
+     * @return list<string>
+     */
+    public static function reviewBuyerTerms(): array
     {
-        $reviewBuyerTerms = [
+        return [
             'review',
             'reviews',
             'real reviews',
@@ -30,7 +33,13 @@ class NegativeKeywordSeedSeeder extends Seeder
             'result',
             'results',
         ];
+    }
 
+    /**
+     * @return list<string>
+     */
+    public static function allSeeds(): array
+    {
         $baseSeeds = [
             'affiliate',
             'affilliates',
@@ -240,6 +249,16 @@ class NegativeKeywordSeedSeeder extends Seeder
 
         sort($allSeeds);
 
+        return $allSeeds;
+    }
+
+    /**
+     * Run the database seeds.
+     */
+    public function run(): void
+    {
+        $reviewBuyerTerms = self::reviewBuyerTerms();
+        $allSeeds = self::allSeeds();
         $now = now();
 
         foreach ($allSeeds as $term) {

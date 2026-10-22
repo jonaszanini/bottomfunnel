@@ -455,13 +455,15 @@ export default function Show({
                                     className={control}
                                     value={editForm.data.bof_qualifier}
                                     onChange={(e) => editForm.setData('bof_qualifier', e.target.value)}
-                                    placeholder="e.g. Supplement, Drops"
+                                    placeholder="e.g. Supplement, Drops (12 pts)"
                                 />
                             </Field>
 
-                            <Field label="Image Match %" error={editForm.errors.bof_image_match_pct}>
+                            <Field label="Image Match % (min. 90% for 20 pts)" error={editForm.errors.bof_image_match_pct}>
                                 <input
                                     type="number"
+                                    min="0"
+                                    max="100"
                                     className={control}
                                     value={editForm.data.bof_image_match_pct}
                                     onChange={(e) => editForm.setData('bof_image_match_pct', e.target.value)}
@@ -489,7 +491,7 @@ export default function Show({
                         </div>
 
                         <div className="flex flex-wrap gap-4 pt-2">
-                            <label className="flex items-center gap-2 cursor-pointer">
+                            <label className="flex items-center gap-2 cursor-pointer" title="Auto-detected or manual override: name in target language without translation issues">
                                 <input
                                     type="checkbox"
                                     className="rounded border-theme"
@@ -499,7 +501,7 @@ export default function Show({
                                 <span className="text-theme-secondary font-medium">BoF Translation Passes</span>
                             </label>
 
-                            <label className="flex items-center gap-2 cursor-pointer">
+                            <label className="flex items-center gap-2 cursor-pointer" title="Auto-detected via CA/VPN SERP: brand appears in organic or ads results with commercial intent">
                                 <input
                                     type="checkbox"
                                     className="rounded border-theme"
@@ -624,8 +626,20 @@ export default function Show({
                                         style={{ width: `${((product.score_breakdown?.bof_name ?? 0) / 20) * 100}%` }}
                                     />
                                 </div>
-                                <div className="text-[11px] text-theme-muted">
-                                    Images: {product.bof_image_match_pct}%, Trans: {product.bof_translation ? '✓' : '✗'}, VPN: {product.bof_vpn_serp ? '✓' : '✗'}
+                                <div className="text-[11px] text-theme-muted space-y-0.5">
+                                    <div>
+                                        Images: <span className="font-semibold text-theme-primary">{product.bof_image_match_pct}%</span> (min. 90%) • Trans: <span className={product.bof_translation ? 'text-emerald-500 font-medium' : 'text-rose-500 font-medium'}>{product.bof_translation ? '✓ Pass' : '✗ Fail'}</span> • VPN: <span className={product.bof_vpn_serp ? 'text-emerald-500 font-medium' : 'text-rose-500 font-medium'}>{product.bof_vpn_serp ? '✓ Pass' : '✗ Fail'}</span>
+                                    </div>
+                                    {product.bof_qualifier && (
+                                        <div className="text-amber-500">
+                                            Qualifier: &quot;{product.bof_qualifier}&quot; (12 pts partial credit)
+                                        </div>
+                                    )}
+                                    {product.bof_homonym && (
+                                        <div className="text-rose-500 font-semibold">
+                                            Homonym detected (0 pts)
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 

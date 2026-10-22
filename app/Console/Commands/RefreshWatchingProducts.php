@@ -6,6 +6,7 @@ use App\Enums\StrategySource;
 use App\Enums\WatchedProductStatus;
 use App\Models\ProductScoreHistory;
 use App\Models\WatchedProduct;
+use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\Fx\FrankfurterFx;
 use App\Services\WatchingProducts\ListingChecker;
 use App\Services\WatchingProducts\NegativeKeywordGenerator;
@@ -47,7 +48,8 @@ class RefreshWatchingProducts extends Command
         PotentialScoreService $scoreService,
         StrategyRecommender $strategyRecommender,
         NegativeKeywordGenerator $negativeGenerator,
-        RankService $rankService
+        RankService $rankService,
+        BofChecker $bofChecker
     ): int {
         $isDryRun = (bool) $this->option('dry-run');
         $noSerp = (bool) $this->option('no-serp');
@@ -122,6 +124,10 @@ class RefreshWatchingProducts extends Command
             if ($checkResult['brand_bidding'] && $product->brand_bidding->value === 'unknown') {
                 $product->brand_bidding = $checkResult['brand_bidding'];
             }
+            // Auto-detect bof_translation if not set and name passes target language checks
+            if (! $product->bof_translation && $bofChecker->detectTranslationPass($product->name)) {
+                $product->bof_translation = true;
+            }
             $product->saveQuietly();
         }
 
@@ -151,7 +157,22 @@ class RefreshWatchingProducts extends Command
 
                     if (! empty($data['serp'])) {
                         $product->advertiser_count = $data['serp']['advertiser_count'] ?? $product->advertiser_count;
-                        $negativeGenerator->syncSerpData($product, $data['serp']);
+                    }
+
+                    if (! empty($data['bof'])) {
+                        $product->bof_vpn_serp = $data['bof']['bof_vpn_serp'];
+                        $product->bof_image_match_pct = $data['bof']['bof_image_match_pct'];
+                        if ($data['bof']['bof_translation']) {
+                            $product->bof_translation = true;
+                        }
+                    }
+
+                    $negativeGenerator->generateForProduct($product, $data['serp'] ?? []);
+                } else {
+                    // Even if SerpApi fails or 429, ensure base seeds, rules, and translation are synced
+                    $negativeGenerator->generateForProduct($product, []);
+                    if (! $product->bof_translation && $bofChecker->detectTranslationPass($product->name)) {
+                        $product->bof_translation = true;
                     }
                 }
 

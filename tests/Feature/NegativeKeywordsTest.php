@@ -6,6 +6,7 @@ use App\Enums\NegativeKeywordMatchType;
 use App\Enums\NegativeKeywordSource;
 use App\Enums\Strategy;
 use App\Enums\StrategySource;
+use App\Models\NegativeKeywordSeed;
 use App\Models\ProductNegativeKeyword;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\NegativeKeywordGenerator;
@@ -258,5 +259,161 @@ class NegativeKeywordsTest extends TestCase
         // 'complaints' still stays false
         $complaintsKw->refresh();
         $this->assertFalse($complaintsKw->enabled);
+    }
+
+    public function test_garbage_competitor_strings_are_filtered_out(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'name' => 'Audifort',
+            'strategy' => Strategy::BofDirect,
+        ]);
+
+        $generator = app(NegativeKeywordGenerator::class);
+        $generator->syncSerpData($product, [
+            'organic_domains' => [
+                'audifort--audifort.com',
+                'en-en--en-audifort.com',
+                'audifortaudifort.com',
+                'cortexi.com',
+                'zeneara-official.org',
+                '12345.com',
+                'google.com',
+                'wikipedia.org',
+            ],
+            'organic_titles' => [
+                'Audifort Review - Scam or Real?',
+                'Cortexi vs Audifort Hearing Formula',
+            ],
+            'related_searches' => [
+                'audifort official site',
+                'audifort vs quietum plus',
+                'hearing support alternatives',
+            ],
+        ]);
+
+        // Clean competitors are extracted
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'cortexi',
+            'source' => NegativeKeywordSource::Competitor->value,
+        ]);
+
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'zeneara',
+            'source' => NegativeKeywordSource::Competitor->value,
+        ]);
+
+        // Comparison competitor from search query is extracted
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'quietum plus',
+            'source' => NegativeKeywordSource::Competitor->value,
+        ]);
+
+        // Intruder search query is captured
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'hearing support alternatives',
+            'source' => NegativeKeywordSource::SerpIntruder->value,
+        ]);
+
+        // Garbage variants are strictly excluded
+        $this->assertDatabaseMissing('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'audifort--audifort',
+        ]);
+        $this->assertDatabaseMissing('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'en-en--en-audifort',
+        ]);
+        $this->assertDatabaseMissing('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'audifortaudifort',
+        ]);
+        $this->assertDatabaseMissing('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => '12345',
+        ]);
+        $this->assertDatabaseMissing('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'google',
+        ]);
+        $this->assertDatabaseMissing('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'audifort',
+            'source' => NegativeKeywordSource::Competitor->value,
+        ]);
+    }
+
+    public function test_seeds_are_populated_even_if_seeds_table_was_empty(): void
+    {
+        // Truncate seed table to simulate fresh / unseeded environment
+        NegativeKeywordSeed::query()->truncate();
+        $this->assertEquals(0, NegativeKeywordSeed::query()->count());
+
+        $product = WatchedProduct::factory()->create([
+            'name' => 'Unseeded Environment Product',
+            'page_type' => 'TSL',
+            'strategy' => Strategy::BofDirect,
+            'strategy_source' => StrategySource::Manual,
+        ]);
+
+        // Asserts base seeds are populated via fallback/auto-seed
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'affiliate',
+            'source' => NegativeKeywordSource::Base->value,
+            'enabled' => 1,
+        ]);
+
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'discount',
+            'source' => NegativeKeywordSource::Base->value,
+            'enabled' => 1,
+        ]);
+    }
+
+    public function test_pre_existing_garbage_competitor_terms_are_purged_on_sync(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'name' => 'Audifort',
+            'strategy' => Strategy::BofDirect,
+        ]);
+
+        // Insert legacy garbage competitor keyword
+        $garbage = ProductNegativeKeyword::query()->create([
+            'product_id' => $product->id,
+            'term' => 'audifort--audifort',
+            'match_type' => NegativeKeywordMatchType::Broad,
+            'source' => NegativeKeywordSource::Competitor,
+            'enabled' => true,
+            'manually_overridden' => false,
+        ]);
+
+        // Insert manual keyword that user purposefully kept
+        $manual = ProductNegativeKeyword::query()->create([
+            'product_id' => $product->id,
+            'term' => 'audifort--custom-manual',
+            'match_type' => NegativeKeywordMatchType::Exact,
+            'source' => NegativeKeywordSource::Manual,
+            'enabled' => true,
+            'manually_overridden' => true,
+        ]);
+
+        $generator = app(NegativeKeywordGenerator::class);
+        $generator->syncSerpData($product, []);
+
+        // Garbage non-manual term is deleted
+        $this->assertDatabaseMissing('product_negative_keywords', [
+            'id' => $garbage->id,
+        ]);
+
+        // User manual term is preserved
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'id' => $manual->id,
+            'term' => 'audifort--custom-manual',
+        ]);
     }
 }
