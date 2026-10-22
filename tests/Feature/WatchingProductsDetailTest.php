@@ -7,9 +7,11 @@ use App\Enums\NegativeKeywordSource;
 use App\Enums\Strategy;
 use App\Enums\StrategySource;
 use App\Enums\WatchedProductStatus;
+use App\Models\ApiUsage;
 use App\Models\ProductNegativeKeyword;
 use App\Models\User;
 use App\Models\WatchedProduct;
+use App\Services\WatchingProducts\QuotaBudget;
 use Database\Seeders\NegativeKeywordSeedSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -60,7 +62,7 @@ class WatchingProductsDetailTest extends TestCase
             );
     }
 
-    public function test_refresh_now_endpoint_executes_refresh_and_redirects(): void
+    public function test_refresh_now_endpoint_executes_refresh_and_increments_serpapi_quota(): void
     {
         config(['watching.serpapi_key' => 'test_serp_key']);
 
@@ -84,20 +86,46 @@ class WatchingProductsDetailTest extends TestCase
             '*' => Http::response('OK', 200),
         ]);
 
+        $budget = app(QuotaBudget::class);
+        $this->assertEquals(0, $budget->callsUsedThisMonth());
+
         $product = WatchedProduct::factory()->create([
             'name' => 'Fimavyn Blood Sugar Formula',
             'status' => WatchedProductStatus::Watch,
             'payout_amount' => 120.00,
         ]);
 
+        // First UI refresh: consumes 2 SerpApi calls (trends + google search)
         $response = $this->actingAs($this->user)
             ->post("/watching-products/{$product->id}/refresh-now");
 
         $response->assertRedirect();
-        $response->assertSessionHas('success');
+        $response->assertSessionHas('success', 'Product data refreshed via SerpApi. Total calls used this month: 2/250.');
 
         $product->refresh();
         $this->assertNotNull($product->last_refreshed_at);
+        $this->assertEquals(2, $budget->callsUsedThisMonth());
+
+        $apiUsage = ApiUsage::query()
+            ->where('provider', 'serpapi')
+            ->where('period', $budget->currentPeriod())
+            ->first();
+        $this->assertNotNull($apiUsage);
+        $this->assertEquals(2, $apiUsage->calls);
+
+        // Second UI refresh: must bypass cache (forceFresh = true) and consume another 2 calls
+        $response2 = $this->actingAs($this->user)
+            ->post("/watching-products/{$product->id}/refresh-now");
+
+        $response2->assertRedirect();
+        $response2->assertSessionHas('success', 'Product data refreshed via SerpApi. Total calls used this month: 4/250.');
+        $this->assertEquals(4, $budget->callsUsedThisMonth());
+
+        // Artisan command refresh also increments by 2 calls on the same budget/usage table
+        $this->artisan('watching:refresh --product='.$product->id)
+            ->assertSuccessful();
+
+        $this->assertEquals(6, $budget->callsUsedThisMonth());
     }
 
     public function test_update_strategy_endpoint_updates_strategy_and_syncs_rules(): void

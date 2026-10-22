@@ -120,14 +120,28 @@ class PotentialScoreServiceTest extends TestCase
             'bof_vpn_serp' => true,
             'bof_image_match_pct' => 95,
             'trends_trend' => TrendsTrend::DeadPostPeak,
+            'trends_7d' => 4.5,
+            'trends_30d' => 8.2,
+            'trends_90d' => 52.0,
             'payout_amount' => 100.00,
         ]);
 
         $result = $this->scoreService->score($product);
 
-        $this->assertLessThanOrEqual(20, $result['score']);
+        // BoF Triad component is 20/20 intact
+        $this->assertEquals(20, $result['breakdown']['bof_name']);
+        // Demand component drops to 0
         $this->assertEquals(0, $result['breakdown']['demand']);
+        // Hard gate caps overall score at exactly 20
+        $this->assertEquals(20, $result['score']);
+        // Flags and audit data are populated
         $this->assertTrue($result['flags']['dead_post_peak'] ?? false);
+        $this->assertArrayHasKey('dead_post_peak_audit', $result['flags']);
+        $this->assertEquals(4.5, $result['flags']['dead_post_peak_audit']['trends_7d']);
+        $this->assertEquals(8.2, $result['flags']['dead_post_peak_audit']['trends_30d']);
+        $this->assertEquals(52.0, $result['flags']['dead_post_peak_audit']['trends_90d']);
+        $this->assertStringContainsString('Demand collapsed post-peak', $result['flags']['dead_post_peak_audit']['reason']);
+        $this->assertContains('dead_post_peak', $result['flags']['hard_gates_hit']);
     }
 
     public function test_pure_vsl_caps_score_at_20(): void

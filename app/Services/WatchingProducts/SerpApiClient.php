@@ -220,7 +220,7 @@ class SerpApiClient
             $trend = TrendsTrend::Falling;
         }
 
-        Log::info("SerpApiClient Trends analyzed: query='{$query}', 7d=".round($avg7d, 2).", 30d=".round($avg30d, 2).", 90d=".round($avg90d, 2).", peak={$maxVal} at idx={$peakIndex}/{$totalPoints}, is_dead_post_peak=".($isDeadPostPeak ? 'yes' : 'no').", trend={$trend->value}");
+        Log::info("SerpApiClient Trends analyzed: query='{$query}', 7d=".round($avg7d, 2).', 30d='.round($avg30d, 2).', 90d='.round($avg90d, 2).", peak={$maxVal} at idx={$peakIndex}/{$totalPoints}, is_dead_post_peak=".($isDeadPostPeak ? 'yes' : 'no').", trend={$trend->value}");
 
         return [
             'trends_7d' => round($avg7d, 2),

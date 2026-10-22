@@ -91,16 +91,33 @@ class WatchedProductObserver
             $this->negativeGenerator->syncStrategyRules($product, $product->strategy);
         }
 
-        // When BoF triad fields change without an explicit score change, trigger rescore
-        $triadFields = [
+        // When scoring fields change without an explicit score change, trigger rescore
+        $scoringFields = [
             'bof_translation',
             'bof_vpn_serp',
             'bof_image_match_pct',
             'bof_qualifier',
             'bof_homonym',
+            'trends_trend',
+            'trends_7d',
+            'trends_30d',
+            'trends_90d',
+            'flowspy_traffic_trend',
+            'payout_amount',
+            'payout_currency',
+            'payout_model',
+            'page_type',
+            'brand_bidding',
+            'advertiser_count',
+            'vendor_bids_brand',
+            'kp_volume',
+            'cancel_rate',
+            'listing_status',
+            'restricted_category',
+            'approval_required',
         ];
 
-        if ($product->wasChanged($triadFields) && ! $product->wasChanged('score')) {
+        if ($product->wasChanged($scoringFields) && ! $product->wasChanged('score')) {
             $scoreResult = $this->scoreService->score($product);
             $product->score = $scoreResult['score'];
             $product->score_breakdown = $scoreResult['breakdown'];
@@ -122,6 +139,10 @@ class WatchedProductObserver
                     'bof_translation' => (bool) $product->bof_translation,
                     'bof_vpn_serp' => (bool) $product->bof_vpn_serp,
                     'bof_image_match_pct' => (int) ($product->bof_image_match_pct ?? 0),
+                    'trends_trend' => $product->trends_trend?->value,
+                    'trends_7d' => $product->trends_7d,
+                    'trends_30d' => $product->trends_30d,
+                    'trends_90d' => $product->trends_90d,
                 ],
                 'created_at' => now(),
             ]);
@@ -129,7 +150,7 @@ class WatchedProductObserver
             $this->rankService->recalculateRanks();
         }
 
-        // When relevant scoring attributes change, recalculate rank
+        // When relevant ranking attributes change, recalculate rank
         if ($product->wasChanged(['score', 'trends_30d', 'kp_volume', 'payout_amount', 'status'])) {
             $this->rankService->recalculateRanks();
         }

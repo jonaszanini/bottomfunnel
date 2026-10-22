@@ -83,6 +83,10 @@ export default function Show({
         bof_image_match_pct: product.bof_image_match_pct || 0,
         bof_qualifier: product.bof_qualifier || '',
         bof_homonym: Boolean(product.bof_homonym),
+        trends_trend: product.trends_trend || 'stable',
+        trends_7d: product.trends_7d !== null ? product.trends_7d : '',
+        trends_30d: product.trends_30d !== null ? product.trends_30d : '',
+        trends_90d: product.trends_90d !== null ? product.trends_90d : '',
         gravity: product.gravity !== null ? product.gravity : '',
         cancel_rate: product.cancel_rate !== null ? product.cancel_rate : '',
         listing_url: product.listing_url || '',
@@ -490,6 +494,59 @@ export default function Show({
                             </Field>
                         </div>
 
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            <Field label="Demand Trend (Google Trends)" error={editForm.errors.trends_trend}>
+                                <select
+                                    className={control}
+                                    value={editForm.data.trends_trend}
+                                    onChange={(e) => editForm.setData('trends_trend', e.target.value)}
+                                >
+                                    {options.trends_trends?.map((t) => (
+                                        <option key={t.value} value={t.value}>{t.label}</option>
+                                    ))}
+                                </select>
+                            </Field>
+
+                            <Field label="Trends 7d" error={editForm.errors.trends_7d}>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    max="100"
+                                    className={control}
+                                    value={editForm.data.trends_7d}
+                                    onChange={(e) => editForm.setData('trends_7d', e.target.value)}
+                                    placeholder="0 - 100"
+                                />
+                            </Field>
+
+                            <Field label="Trends 30d" error={editForm.errors.trends_30d}>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    max="100"
+                                    className={control}
+                                    value={editForm.data.trends_30d}
+                                    onChange={(e) => editForm.setData('trends_30d', e.target.value)}
+                                    placeholder="0 - 100"
+                                />
+                            </Field>
+
+                            <Field label="Trends 90d" error={editForm.errors.trends_90d}>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    max="100"
+                                    className={control}
+                                    value={editForm.data.trends_90d}
+                                    onChange={(e) => editForm.setData('trends_90d', e.target.value)}
+                                    placeholder="0 - 100"
+                                />
+                            </Field>
+                        </div>
+
                         <div className="flex flex-wrap gap-4 pt-2">
                             <label className="flex items-center gap-2 cursor-pointer" title="Auto-detected or manual override: name in target language without translation issues">
                                 <input
@@ -651,12 +708,25 @@ export default function Show({
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="bg-emerald-500 h-2 rounded-full transition-all"
+                                        className={`${product.score_flags?.dead_post_peak ? 'bg-rose-500' : 'bg-emerald-500'} h-2 rounded-full transition-all`}
                                         style={{ width: `${((product.score_breakdown?.demand ?? 0) / 20) * 100}%` }}
                                     />
                                 </div>
-                                <div className="text-[11px] text-theme-muted">
-                                    Trends 30d: {product.trends_30d ?? 0}, Trend: {product.trends_trend_label || 'Stable'}
+                                <div className="text-[11px] text-theme-muted space-y-0.5">
+                                    <div>
+                                        7d: <span className="font-semibold text-theme-primary">{product.trends_7d ?? '—'}</span> • 30d: <span className="font-semibold text-theme-primary">{product.trends_30d ?? '—'}</span> • 90d: <span className="font-semibold text-theme-primary">{product.trends_90d ?? '—'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span>Trend:</span>
+                                        <span className={`font-semibold ${product.score_flags?.dead_post_peak ? 'text-rose-500 font-bold' : 'text-theme-primary'}`}>
+                                            {product.trends_trend_label || 'Stable'}
+                                        </span>
+                                    </div>
+                                    {product.score_flags?.dead_post_peak && (
+                                        <div className="text-[10px] text-rose-500 font-semibold">
+                                            ⚠️ Hard Gate: Cap 20 (post-peak collapse)
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -803,9 +873,14 @@ export default function Show({
                                         </span>
                                     )}
                                     {product.score_flags.dead_post_peak && (
-                                        <span className="rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 px-2.5 py-1 text-xs font-semibold">
-                                            ⚠️ Dead Post Peak Demand (Cap 20)
-                                        </span>
+                                        <div className="rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 p-2.5 text-xs w-full">
+                                            <div className="font-bold flex items-center gap-1.5">
+                                                <span>⚠️ Dead Post Peak Demand (Cap 20)</span>
+                                            </div>
+                                            <div className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">
+                                                {product.score_flags.dead_post_peak_audit?.reason || `Demand collapsed post-peak (7d: ${product.trends_7d ?? 0}, 30d: ${product.trends_30d ?? 0}, 90d: ${product.trends_90d ?? 0}). Hard gate caps overall score at 20.`}
+                                            </div>
+                                        </div>
                                     )}
                                     {product.score_flags.high_cancel_rate && (
                                         <span className="rounded-lg bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30 px-2.5 py-1 text-xs font-semibold">

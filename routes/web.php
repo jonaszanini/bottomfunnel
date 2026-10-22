@@ -4,6 +4,7 @@ use App\Http\Controllers\CopyStudioController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GoogleAdsController;
 use App\Http\Controllers\HookController;
+use App\Http\Controllers\InternalGoogleAdsController;
 use App\Http\Controllers\IpBlockController;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\LoginController;
@@ -79,6 +80,18 @@ Route::middleware('auth')->group(function () {
     Route::post('/google-ads/accounts', [GoogleAdsController::class, 'store'])->name('google.store');
     Route::delete('/google-ads/accounts/{account}', [GoogleAdsController::class, 'destroy'])->name('google.destroy');
     Route::get('/google-ads/accounts/{account}/options', [GoogleAdsController::class, 'options'])->name('google.options');
+
+    // Internal & Bot API for Google Ads management
+    Route::post('/internal/google-ads/campaigns', [InternalGoogleAdsController::class, 'createCampaign'])->name('internal.google.campaigns.store');
+    Route::post('/internal/google-ads/campaigns/{campaign}/ad-groups', [InternalGoogleAdsController::class, 'createAdGroup'])->name('internal.google.ad-groups.store');
+    Route::post('/internal/google-ads/ad-groups/{adGroup}/keywords', [InternalGoogleAdsController::class, 'addKeywords'])->name('internal.google.keywords.store');
+    Route::post('/internal/google-ads/campaigns/{campaign}/negative-keywords', [InternalGoogleAdsController::class, 'addNegativeKeywords'])->name('internal.google.negatives.store');
+    Route::post('/internal/google-ads/ad-groups/{adGroup}/responsive-search-ads', [InternalGoogleAdsController::class, 'createResponsiveSearchAd'])->name('internal.google.rsa.store');
+    Route::patch('/internal/google-ads/campaigns/{campaign}/status', [InternalGoogleAdsController::class, 'updateCampaignStatus'])->name('internal.google.campaigns.status');
+    Route::patch('/internal/google-ads/budgets/{budget}', [InternalGoogleAdsController::class, 'updateCampaignBudget'])->name('internal.google.budgets.update');
+    Route::get('/internal/google-ads/campaigns/{campaign}/ad-groups', [InternalGoogleAdsController::class, 'listAdGroups'])->name('internal.google.ad-groups.index');
+    Route::get('/internal/google-ads/ad-groups/{adGroup}/keywords', [InternalGoogleAdsController::class, 'listKeywords'])->name('internal.google.keywords.index');
+    Route::get('/internal/google-ads/ad-groups/{adGroup}/ads', [InternalGoogleAdsController::class, 'listAds'])->name('internal.google.ads.index');
 
     Route::get('/ip-blocks', [IpBlockController::class, 'index'])->name('blocks.index');
     Route::post('/ip-blocks/{ipBlock}/unblock', [IpBlockController::class, 'unblock'])->name('blocks.unblock');

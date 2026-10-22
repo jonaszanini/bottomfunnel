@@ -9,6 +9,7 @@ use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\QuotaBudget;
 use App\Services\WatchingProducts\SerpApiClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -174,5 +175,106 @@ class QuotaBudgetTest extends TestCase
         $product->refresh();
         $this->assertNotNull($product->rank);
         $this->assertNotNull($product->score);
+    }
+
+    public function test_trends_dead_post_peak_detection_rules(): void
+    {
+        config(['watching.serpapi_key' => 'test_key']);
+        $client = app(SerpApiClient::class);
+
+        // Case 1: Clear post-peak collapse (Peak 85 in week 2, 7d and 30d have cratered)
+        // 13 points: [20, 85, 60, 40, 25, 20, 15, 10, 8, 7, 6, 5, 4]
+        // 7d (last 1 point) = 4 (< 85 * 0.15 = 12.75)
+        // 30d (last 4 points) = (7+6+5+4)/4 = 5.5 (< 85 * 0.25 = 21.25)
+        Http::fake(function (Request $request) {
+            $q = $request->data()['q'] ?? '';
+
+            if ($q === 'Dead Product Collapse') {
+                return Http::response([
+                    'interest_over_time' => [
+                        'timeline_data' => [
+                            ['values' => [['extracted_value' => 20]]],
+                            ['values' => [['extracted_value' => 85]]],
+                            ['values' => [['extracted_value' => 60]]],
+                            ['values' => [['extracted_value' => 40]]],
+                            ['values' => [['extracted_value' => 25]]],
+                            ['values' => [['extracted_value' => 20]]],
+                            ['values' => [['extracted_value' => 15]]],
+                            ['values' => [['extracted_value' => 10]]],
+                            ['values' => [['extracted_value' => 8]]],
+                            ['values' => [['extracted_value' => 7]]],
+                            ['values' => [['extracted_value' => 6]]],
+                            ['values' => [['extracted_value' => 5]]],
+                            ['values' => [['extracted_value' => 4]]],
+                        ],
+                    ],
+                ], 200);
+            }
+
+            if ($q === 'Healthy Product Dip') {
+                return Http::response([
+                    'interest_over_time' => [
+                        'timeline_data' => [
+                            ['values' => [['extracted_value' => 30]]],
+                            ['values' => [['extracted_value' => 80]]],
+                            ['values' => [['extracted_value' => 65]]],
+                            ['values' => [['extracted_value' => 55]]],
+                            ['values' => [['extracted_value' => 50]]],
+                            ['values' => [['extracted_value' => 45]]],
+                            ['values' => [['extracted_value' => 40]]],
+                            ['values' => [['extracted_value' => 42]]],
+                            ['values' => [['extracted_value' => 38]]],
+                            ['values' => [['extracted_value' => 40]]],
+                            ['values' => [['extracted_value' => 45]]],
+                            ['values' => [['extracted_value' => 35]]],
+                            ['values' => [['extracted_value' => 10]]],
+                        ],
+                    ],
+                ], 200);
+            }
+
+            if ($q === 'Flat Low Product') {
+                return Http::response([
+                    'interest_over_time' => [
+                        'timeline_data' => [
+                            ['values' => [['extracted_value' => 12]]],
+                            ['values' => [['extracted_value' => 15]]],
+                            ['values' => [['extracted_value' => 14]]],
+                            ['values' => [['extracted_value' => 11]]],
+                            ['values' => [['extracted_value' => 10]]],
+                            ['values' => [['extracted_value' => 12]]],
+                            ['values' => [['extracted_value' => 9]]],
+                            ['values' => [['extracted_value' => 13]]],
+                            ['values' => [['extracted_value' => 11]]],
+                            ['values' => [['extracted_value' => 10]]],
+                            ['values' => [['extracted_value' => 8]]],
+                            ['values' => [['extracted_value' => 9]]],
+                            ['values' => [['extracted_value' => 7]]],
+                        ],
+                    ],
+                ], 200);
+            }
+
+            return Http::response('OK', 200);
+        });
+
+        // Case 1: Clear post-peak collapse (Peak 85 in week 2, 7d and 30d have cratered)
+        // 13 points: [20, 85, 60, 40, 25, 20, 15, 10, 8, 7, 6, 5, 4]
+        // 7d (last 1 point) = 4 (< 85 * 0.15 = 12.75)
+        // 30d (last 4 points) = (7+6+5+4)/4 = 5.5 (< 85 * 0.25 = 21.25)
+        $res1 = $client->fetchGoogleTrends('Dead Product Collapse', forceFresh: true);
+        $this->assertTrue($res1['is_dead_post_peak']);
+        $this->assertEquals('dead_post_peak', $res1['trends_trend']);
+
+        // Case 2: Healthy sustained volume with only a single low recent point (NOT dead post peak)
+        // Peak 80 in week 2, but recent 4 weeks are [40, 45, 35, 10] -> 30d avg = 32.5 (> 80 * 0.25 = 20)
+        $res2 = $client->fetchGoogleTrends('Healthy Product Dip', forceFresh: true);
+        $this->assertFalse($res2['is_dead_post_peak']);
+        $this->assertNotEquals('dead_post_peak', $res2['trends_trend']);
+
+        // Case 3: Flat normal low volume throughout (max 15 < min_peak 60) (NOT dead post peak)
+        $res3 = $client->fetchGoogleTrends('Flat Low Product', forceFresh: true);
+        $this->assertFalse($res3['is_dead_post_peak']);
+        $this->assertNotEquals('dead_post_peak', $res3['trends_trend']);
     }
 }
