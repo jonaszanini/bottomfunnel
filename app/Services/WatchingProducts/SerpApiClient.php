@@ -22,7 +22,7 @@ class SerpApiClient
      *
      * @return array{trends: array<string, mixed>, serp: array<string, mixed>, bof: array{bof_vpn_serp: bool, bof_image_match_pct: int, bof_translation: bool}, success: bool, error: ?string}
      */
-    public function fetchProductData(WatchedProduct $product): array
+    public function fetchProductData(WatchedProduct $product, bool $forceFresh = false): array
     {
         $apiKey = config('watching.serpapi_key');
         if (empty($apiKey)) {
@@ -37,8 +37,8 @@ class SerpApiClient
             ];
         }
 
-        $trendsData = $this->fetchGoogleTrends($product->name, $apiKey);
-        $serpData = $this->fetchGoogleSerp($product->name, $apiKey);
+        $trendsData = $this->fetchGoogleTrends($product->name, $apiKey, forceFresh: $forceFresh);
+        $serpData = $this->fetchGoogleSerp($product->name, $apiKey, forceFresh: $forceFresh);
         $bofData = $this->bofChecker->check($product, $serpData);
 
         $success = ! empty($trendsData) || ! empty($serpData);
@@ -57,7 +57,7 @@ class SerpApiClient
      *
      * @return array<string, mixed>
      */
-    public function fetchGoogleTrends(string $query, ?string $apiKey = null): array
+    public function fetchGoogleTrends(string $query, ?string $apiKey = null, bool $forceFresh = false): array
     {
         $apiKey ??= config('watching.serpapi_key');
         if (empty($apiKey)) {
@@ -65,6 +65,9 @@ class SerpApiClient
         }
 
         $cacheKey = 'serpapi_trends_'.md5(strtolower(trim($query)));
+        if ($forceFresh) {
+            Cache::forget($cacheKey);
+        }
 
         return Cache::remember($cacheKey, now()->addDays(7), function () use ($query, $apiKey) {
             try {
@@ -90,7 +93,7 @@ class SerpApiClient
                     return [];
                 }
 
-                return $this->parseTrendsResponse($response->json());
+                return $this->parseTrendsResponse($response->json(), $query);
             } catch (Throwable $e) {
                 Log::warning("SerpApiClient error fetching Trends for '{$query}': {$e->getMessage()}");
 
@@ -104,7 +107,7 @@ class SerpApiClient
      *
      * @return array<string, mixed>
      */
-    public function fetchGoogleSerp(string $query, ?string $apiKey = null, ?string $gl = null): array
+    public function fetchGoogleSerp(string $query, ?string $apiKey = null, ?string $gl = null, bool $forceFresh = false): array
     {
         $apiKey ??= config('watching.serpapi_key');
         if (empty($apiKey)) {
@@ -113,6 +116,9 @@ class SerpApiClient
 
         $gl ??= config('watching.serpapi_gl', 'ca');
         $cacheKey = 'serpapi_search_'.md5(strtolower(trim($query)).'_'.$gl);
+        if ($forceFresh) {
+            Cache::forget($cacheKey);
+        }
 
         return Cache::remember($cacheKey, now()->addDays(7), function () use ($query, $apiKey, $gl) {
             try {
@@ -152,7 +158,7 @@ class SerpApiClient
      * @param  array<string, mixed>  $json
      * @return array<string, mixed>
      */
-    protected function parseTrendsResponse(array $json): array
+    protected function parseTrendsResponse(array $json, string $query = ''): array
     {
         $timelineData = $json['interest_over_time']['timeline_data'] ?? [];
         if (empty($timelineData) || ! is_array($timelineData)) {
@@ -188,8 +194,20 @@ class SerpApiClient
         $peakIndex = array_search($maxVal, $values, true);
         $isDeadPostPeak = false;
 
-        // If max was in first half and recent 7d is less than 15% of peak
-        if ($maxVal >= 60 && $peakIndex < ($totalPoints * 0.5) && $avg7d < ($maxVal * 0.15)) {
+        $minPeak = (float) config('watching.thresholds.dead_post_peak_min_peak', 60.0);
+        $ratio7d = (float) config('watching.thresholds.dead_post_peak_7d_ratio', 0.15);
+        $ratio30d = (float) config('watching.thresholds.dead_post_peak_30d_ratio', 0.25);
+
+        // A true post-peak collapse requires:
+        // 1. A significant historical peak (maxVal >= minPeak, default 60)
+        // 2. The peak occurred in the first half of the 90d window ($peakIndex < $totalPoints * 0.5)
+        // 3. Both recent 7d (<15% of peak) AND 30d (<25% of peak) have collapsed.
+        // Flat low or moderate volume throughout is NOT dead_post_peak.
+        if ($maxVal >= $minPeak
+            && $peakIndex < ($totalPoints * 0.5)
+            && $avg7d < ($maxVal * $ratio7d)
+            && $avg30d < ($maxVal * $ratio30d)
+        ) {
             $isDeadPostPeak = true;
         }
 
@@ -202,11 +220,17 @@ class SerpApiClient
             $trend = TrendsTrend::Falling;
         }
 
+        Log::info("SerpApiClient Trends analyzed: query='{$query}', 7d=".round($avg7d, 2).", 30d=".round($avg30d, 2).", 90d=".round($avg90d, 2).", peak={$maxVal} at idx={$peakIndex}/{$totalPoints}, is_dead_post_peak=".($isDeadPostPeak ? 'yes' : 'no').", trend={$trend->value}");
+
         return [
             'trends_7d' => round($avg7d, 2),
             'trends_30d' => round($avg30d, 2),
             'trends_90d' => round($avg90d, 2),
             'trends_trend' => $trend->value,
+            'trends_peak' => round($maxVal, 2),
+            'trends_peak_index' => $peakIndex,
+            'trends_total_points' => $totalPoints,
+            'is_dead_post_peak' => $isDeadPostPeak,
         ];
     }
 

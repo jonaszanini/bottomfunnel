@@ -350,6 +350,7 @@ class WatchedProductController extends Controller
                 'sources' => array_map(fn (NegativeKeywordSource $src) => ['value' => $src->value, 'label' => $src->label()], NegativeKeywordSource::cases()),
                 'currencies' => ['USD', 'CAD', 'EUR', 'GBP', 'BRL'],
                 'payout_models' => array_map(fn (PayoutModel $m) => ['value' => $m->value, 'label' => $m->label()], PayoutModel::cases()),
+                'trends_trends' => array_map(fn (TrendsTrend $t) => ['value' => $t->value, 'label' => $t->label()], TrendsTrend::cases()),
             ],
         ]);
     }
@@ -476,7 +477,7 @@ class WatchedProductController extends Controller
             return redirect()->back()->with('error', 'SerpApi monthly quota limit (250 calls) has been reached.');
         }
 
-        $data = $serpClient->fetchProductData($watchedProduct);
+        $data = $serpClient->fetchProductData($watchedProduct, forceFresh: true);
 
         if ($data['success']) {
             if (! empty($data['trends'])) {

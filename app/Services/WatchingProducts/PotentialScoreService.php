@@ -216,6 +216,12 @@ class PotentialScoreService
 
         if ($trend === TrendsTrend::DeadPostPeak) {
             $flags['dead_post_peak'] = true;
+            $flags['dead_post_peak_audit'] = [
+                'trends_7d' => $product->trends_7d !== null ? (float) $product->trends_7d : 0.0,
+                'trends_30d' => $product->trends_30d !== null ? (float) $product->trends_30d : 0.0,
+                'trends_90d' => $product->trends_90d !== null ? (float) $product->trends_90d : 0.0,
+                'reason' => "Demand collapsed post-peak (7d: {$product->trends_7d}, 30d: {$product->trends_30d}, 90d: {$product->trends_90d}). Hard gate caps score at 20.",
+            ];
 
             return ['score' => 0, 'flags' => $flags];
         }

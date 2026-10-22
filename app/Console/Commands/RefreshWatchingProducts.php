@@ -142,7 +142,7 @@ class RefreshWatchingProducts extends Command
                     break;
                 }
 
-                $data = $serpClient->fetchProductData($product);
+                $data = $serpClient->fetchProductData($product, forceFresh: true);
                 $serpCallsMade += 2;
 
                 if ($data['success']) {

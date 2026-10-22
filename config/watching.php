@@ -59,6 +59,12 @@ return [
         'restricted_category_cap' => 50,
         'hard_gate_cap' => 20,
         'kp_cpc_audit_floor_brl' => 4.0, // R$3-4 equivalent triggers audit_false_bof
+        // Dead Post Peak detection: requires genuine historical spike (>= 60) in first half of 90d
+        // followed by a sustained collapse where both 7d (<15% of peak) and 30d (<25% of peak) cratered.
+        // Products with flat low volume or temporary single-week dips are NOT dead_post_peak.
+        'dead_post_peak_min_peak' => (float) env('WATCHING_DEAD_POST_PEAK_MIN_PEAK', 60.0),
+        'dead_post_peak_7d_ratio' => (float) env('WATCHING_DEAD_POST_PEAK_7D_RATIO', 0.15),
+        'dead_post_peak_30d_ratio' => (float) env('WATCHING_DEAD_POST_PEAK_30D_RATIO', 0.25),
     ],
 
     /*
