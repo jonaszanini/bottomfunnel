@@ -48,21 +48,23 @@ class WatchedProductObserver
             $product->strategy_source = StrategySource::Auto;
         }
 
-        // Calculate score
-        $scoreResult = $this->scoreService->score($product);
-        $product->score = $scoreResult['score'];
-        $product->score_breakdown = $scoreResult['breakdown'];
-        $product->score_flags = $scoreResult['flags'];
-        $product->scored_at = now();
+        // Calculate score if not already explicitly provided
+        if ($product->score === null) {
+            $scoreResult = $this->scoreService->score($product);
+            $product->score = $scoreResult['score'];
+            $product->score_breakdown = $scoreResult['breakdown'];
+            $product->score_flags = $scoreResult['flags'];
+            $product->scored_at = now();
 
-        $product->saveQuietly();
+            $product->saveQuietly();
+        }
 
         // Write score history
         ProductScoreHistory::query()->create([
             'product_id' => $product->id,
-            'score' => $scoreResult['score'],
-            'breakdown' => $scoreResult['breakdown'],
-            'flags' => $scoreResult['flags'],
+            'score' => $product->score ?? 0,
+            'breakdown' => $product->score_breakdown ?? [],
+            'flags' => $product->score_flags ?? [],
             'inputs_snapshot' => [
                 'name' => $product->name,
                 'payout_amount' => $product->payout_amount,
@@ -90,9 +92,9 @@ class WatchedProductObserver
             $this->negativeGenerator->syncStrategyRules($product, $product->strategy);
         }
 
-        // Auto-generate campaign negatives when promoted to Test status (ready for campaign)
+        // Auto-generate campaign negatives when promoted to Test status (cached SERP only; never synchronous HTTP)
         if ($product->wasChanged('status') && $product->status === WatchedProductStatus::Test) {
-            $this->negativeGenerator->generateCampaign($product);
+            $this->negativeGenerator->generateCampaign($product, serpData: [], allowExternalHttp: false);
         }
 
         // When scoring fields change without an explicit score change, trigger rescore

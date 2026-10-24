@@ -2,12 +2,15 @@
 
 namespace App\Jobs;
 
+use App\Models\Page;
 use App\Services\Pages\Cloner\PageClonerService;
 use App\Services\Pages\Cloner\PageCrawlerService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 class ClonePageJob implements ShouldQueue
@@ -16,7 +19,9 @@ class ClonePageJob implements ShouldQueue
 
     public int $tries = 2;
 
-    public int $timeout = 60;
+    public int $timeout = 90;
+
+    public array $backoff = [15, 45];
 
     /**
      * @param  array<string, mixed>  $payload
@@ -25,6 +30,22 @@ class ClonePageJob implements ShouldQueue
         public string $jobId,
         public array $payload,
     ) {}
+
+    /**
+     * Prevent duplicate concurrent executions for the same target page or URL.
+     *
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        $targetKey = (string) ($this->payload['page_id'] ?? $this->payload['url'] ?? $this->jobId);
+
+        return [
+            (new WithoutOverlapping($targetKey))
+                ->releaseAfter(15)
+                ->expireAfter(120),
+        ];
+    }
 
     public function handle(PageCrawlerService $crawler, PageClonerService $cloner): void
     {
@@ -42,6 +63,13 @@ class ClonePageJob implements ShouldQueue
             'status' => 'processing',
             'started_at' => now()->toIso8601String(),
         ], now()->addHours(2));
+
+        if (! empty($this->payload['page_id'])) {
+            Page::query()->where('id', $this->payload['page_id'])->update([
+                'status' => 'processing',
+                'error_message' => null,
+            ]);
+        }
 
         try {
             $forceBrowser = (bool) ($this->payload['force_browser'] ?? false);
@@ -82,6 +110,27 @@ class ClonePageJob implements ShouldQueue
                 'result' => $result,
                 'completed_at' => now()->toIso8601String(),
             ], now()->addHours(2));
+
+            if (! empty($this->payload['page_id'])) {
+                $page = Page::query()->find($this->payload['page_id']);
+                if ($page) {
+                    $page->update([
+                        'status' => 'completed',
+                        'error_message' => null,
+                        'html' => $cloneResult['clonedHtml'],
+                        'structure_json' => array_merge(
+                            is_array($page->structure_json) ? $page->structure_json : [],
+                            [
+                                'status' => 'completed',
+                                'renderedVia' => $crawlResult['renderedVia'],
+                                'stats' => $cloneResult['stats'],
+                                'links' => $cloneResult['links'],
+                                'completed_at' => now()->toIso8601String(),
+                            ]
+                        ),
+                    ]);
+                }
+            }
         } catch (Throwable $e) {
             Log::error("ClonePageJob failed for job {$this->jobId} (URL: {$this->payload['url']}): {$e->getMessage()}", [
                 'job_id' => $this->jobId,
@@ -89,13 +138,72 @@ class ClonePageJob implements ShouldQueue
                 'exception' => $e,
             ]);
 
+            $userMessage = Str::limit($e->getMessage(), 250);
+
             Cache::put($cacheKey, [
                 'status' => 'failed',
-                'error' => $e->getMessage(),
+                'error' => $userMessage,
                 'failed_at' => now()->toIso8601String(),
             ], now()->addHours(2));
 
+            if (! empty($this->payload['page_id'])) {
+                $page = Page::query()->find($this->payload['page_id']);
+                if ($page) {
+                    $page->update([
+                        'status' => 'failed',
+                        'error_message' => $userMessage,
+                        'structure_json' => array_merge(
+                            is_array($page->structure_json) ? $page->structure_json : [],
+                            [
+                                'status' => 'failed',
+                                'error' => $userMessage,
+                                'failed_at' => now()->toIso8601String(),
+                            ]
+                        ),
+                    ]);
+                }
+            }
+
             throw $e;
+        }
+    }
+
+    /**
+     * Handle a permanent job failure.
+     */
+    public function failed(Throwable $exception): void
+    {
+        Log::error("ClonePageJob permanently failed for job {$this->jobId} (URL: ".($this->payload['url'] ?? 'none')."): {$exception->getMessage()}", [
+            'job_id' => $this->jobId,
+            'payload' => $this->payload,
+            'exception' => $exception,
+        ]);
+
+        $userMessage = Str::limit($exception->getMessage(), 250);
+        $cacheKey = "clone_job:{$this->jobId}";
+
+        Cache::put($cacheKey, [
+            'status' => 'failed',
+            'error' => $userMessage,
+            'failed_at' => now()->toIso8601String(),
+        ], now()->addHours(2));
+
+        if (! empty($this->payload['page_id'])) {
+            $page = Page::query()->find($this->payload['page_id']);
+            if ($page) {
+                $page->update([
+                    'status' => 'failed',
+                    'error_message' => $userMessage,
+                    'structure_json' => array_merge(
+                        is_array($page->structure_json) ? $page->structure_json : [],
+                        [
+                            'status' => 'failed',
+                            'error' => $userMessage,
+                            'failed_at' => now()->toIso8601String(),
+                        ]
+                    ),
+                ]);
+            }
         }
     }
 }

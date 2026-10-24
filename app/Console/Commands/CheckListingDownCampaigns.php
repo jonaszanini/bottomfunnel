@@ -47,6 +47,7 @@ class CheckListingDownCampaigns extends Command
         $rows = [];
         $pausedCount = 0;
         $alertCount = 0;
+        $transientWarningCount = 0;
 
         foreach ($results as $item) {
             $actionsSummary = [];
@@ -60,6 +61,11 @@ class CheckListingDownCampaigns extends Command
                 $actionsSummary[] = "Campaign {$action['campaign_id']}: {$statusText}";
             }
 
+            if (($item['is_transient'] ?? false) && ($item['listing_status'] !== 'expired')) {
+                $transientWarningCount++;
+                $actionsSummary[] = "Transient warning ({$item['consecutive_failures']}/{$item['required_failures']} runs - held active)";
+            }
+
             $rows[] = [
                 $item['product_id'],
                 $item['product_name'],
@@ -70,13 +76,17 @@ class CheckListingDownCampaigns extends Command
 
         $this->table(['Product ID', 'Product Name', 'Listing Status', 'Campaign Actions'], $rows);
 
+        if ($transientWarningCount > 0) {
+            $this->warn("Transient errors detected on {$transientWarningCount} listing(s). Multi-step confirmation held campaign pauses.");
+        }
+
         if ($alertCount > 0) {
             $this->warn("Total safety alerts raised: {$alertCount} (Campaigns NOT paused; auto-pause disabled)");
         }
 
         if ($pausedCount > 0) {
             $this->warn('Total campaigns '.($dryRun ? 'flagged to pause (dry run)' : 'paused').": {$pausedCount}");
-        } elseif ($alertCount === 0) {
+        } elseif ($alertCount === 0 && $transientWarningCount === 0) {
             $this->info('All checked listings are active. No alerts or pauses required.');
         }
 

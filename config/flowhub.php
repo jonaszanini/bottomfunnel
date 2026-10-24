@@ -79,15 +79,19 @@ return [
         'listing_down' => [
             'enabled' => (bool) env('SAFETY_LISTING_DOWN_ENABLED', true),
             'action' => env('SAFETY_LISTING_DOWN_ACTION', 'alert'), // 'alert' or 'pause'
+            'consecutive_failures_required' => (int) env('SAFETY_LISTING_CONSECUTIVE_FAILURES', 2),
         ],
         'bleeder' => [
             'enabled' => (bool) env('SAFETY_BLEEDER_ENABLED', true),
             'spend_payout_multiplier' => (float) env('SAFETY_BLEEDER_MULTIPLIER', 1.5),
             'window_days' => (int) env('SAFETY_BLEEDER_WINDOW_DAYS', 7),
+            'min_clicks' => (int) env('SAFETY_BLEEDER_MIN_CLICKS', 20),
+            'postback_buffer_hours' => (int) env('SAFETY_BLEEDER_POSTBACK_BUFFER_HOURS', 3),
             'action' => env('SAFETY_BLEEDER_ACTION', 'alert'), // 'alert' or 'pause'
         ],
     ],
 
     'cron_token' => env('CRON_TOKEN', 'hgytrsd543T4564FGHf7tgfs635GGf'),
     'cron_url' => env('CRON_URL', 'https://bottomfunnel.app/cron/run?token='.env('CRON_TOKEN', 'hgytrsd543T4564FGHf7tgfs635GGf')),
+    'serpapi_cache_ttl_hours' => (int) env('SERPAPI_CACHE_TTL_HOURS', 12),
 ];

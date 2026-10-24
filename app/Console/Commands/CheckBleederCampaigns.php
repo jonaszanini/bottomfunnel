@@ -17,7 +17,9 @@ class CheckBleederCampaigns extends Command
                             {--suggest : Suggest pause in logs instead of mutating campaigns}
                             {--multiplier= : Spend to typical payout multiplier threshold}
                             {--days= : Evaluation window in days}
-                            {--track= : Specific Track ID to evaluate}';
+                            {--track= : Specific Track ID to evaluate}
+                            {--min-clicks= : Minimum clicks threshold required before flagging bleeder}
+                            {--postback-hours= : Attribution lag buffer window in hours}';
 
     /**
      * The console command description.
@@ -36,6 +38,8 @@ class CheckBleederCampaigns extends Command
         $multiplier = $this->option('multiplier') !== null ? (float) $this->option('multiplier') : null;
         $days = $this->option('days') !== null ? (int) $this->option('days') : null;
         $trackId = $this->option('track') !== null ? (int) $this->option('track') : null;
+        $minClicks = $this->option('min-clicks') !== null ? (int) $this->option('min-clicks') : null;
+        $postbackHours = $this->option('postback-hours') !== null ? (int) $this->option('postback-hours') : null;
 
         $this->info('=== Campaign Safety: Spend-without-Conversion Bleeder Check ===');
         if ($dryRun) {
@@ -49,7 +53,9 @@ class CheckBleederCampaigns extends Command
             spendMultiplier: $multiplier,
             windowDays: $days,
             suggestOnly: $suggestOnly,
-            trackId: $trackId
+            trackId: $trackId,
+            minClicks: $minClicks,
+            postbackBufferHours: $postbackHours
         );
 
         if (empty($results)) {
@@ -58,13 +64,17 @@ class CheckBleederCampaigns extends Command
             return self::SUCCESS;
         }
 
-        $headers = ['Track ID', 'Product Name', 'Spend (CAD)', 'Payout (CAD)', 'Threshold (CAD)', 'Conversions', 'Bleeder?', 'Action Taken'];
+        $headers = ['Track ID', 'Product Name', 'Spend (CAD)', 'Payout (CAD)', 'Threshold (CAD)', 'Clicks', 'Conversions', 'Bleeder?', 'Action Taken'];
         $rows = [];
         $bleederCount = 0;
+        $postbackBufferCount = 0;
 
         foreach ($results as $eval) {
             if ($eval['is_bleeder']) {
                 $bleederCount++;
+            }
+            if ($eval['action_taken'] === 'postback_buffer_held') {
+                $postbackBufferCount++;
             }
 
             $rows[] = [
@@ -73,6 +83,7 @@ class CheckBleederCampaigns extends Command
                 number_format($eval['spend_cad'], 2),
                 number_format($eval['payout_cad'], 2),
                 number_format($eval['threshold_cad'], 2),
+                $eval['clicks_count'] ?? 0,
                 $eval['conversions_count'],
                 $eval['is_bleeder'] ? 'YES' : 'No',
                 $eval['action_taken'],
@@ -80,6 +91,10 @@ class CheckBleederCampaigns extends Command
         }
 
         $this->table($headers, $rows);
+
+        if ($postbackBufferCount > 0) {
+            $this->warn("Postback buffer active for {$postbackBufferCount} track(s): recent clicks or pending postbacks occurred within buffer window; auto-pauses deferred.");
+        }
 
         if ($bleederCount > 0) {
             $this->warn("Total bleeder tracks detected: {$bleederCount}");

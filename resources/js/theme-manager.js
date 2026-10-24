@@ -227,9 +227,10 @@ class ThemeManager {
 
     /**
      * Synchronize all toggle controls rendered in the document.
+     * Skips React-managed toggle components to prevent conflicting DOM mutations and duplicate event listeners.
      */
     syncAllToggles() {
-        const toggleElements = document.querySelectorAll('[data-theme-toggle]');
+        const toggleElements = document.querySelectorAll('[data-theme-toggle]:not([data-react]):not(#app [data-theme-toggle])');
         toggleElements.forEach((toggleEl) => this.initToggle(toggleEl));
     }
 
@@ -238,7 +239,7 @@ class ThemeManager {
      * @param {HTMLElement} container 
      */
     initToggle(container) {
-        if (!container) return;
+        if (!container || container.hasAttribute('data-react') || container.closest('#app')) return;
 
         const preference = this.getPreference();
         const buttons = Array.from(container.querySelectorAll('[data-theme-option]'));

@@ -6,6 +6,32 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
     const [previewingPage, setPreviewingPage] = useState(null);
     const [previewHtml, setPreviewHtml] = useState('');
     const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+    const [retryingId, setRetryingId] = useState(null);
+
+    // Auto-poll if any page is in processing state
+    React.useEffect(() => {
+        const hasProcessing = pages.some((p) => p.status === 'processing');
+        if (!hasProcessing) return;
+
+        const interval = setInterval(() => {
+            router.reload({
+                only: ['pages', 'currentPage', 'jobStatus'],
+                preserveState: true,
+                preserveScroll: true,
+            });
+        }, 2500);
+
+        return () => clearInterval(interval);
+    }, [pages]);
+
+    function handleRetry(p) {
+        setRetryingId(p.id);
+        router.post(`/pages/${p.id}/retry`, {}, {
+            preserveState: true,
+            preserveScroll: true,
+            onFinish: () => setRetryingId(null),
+        });
+    }
 
     // Table Sorting State
     const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
@@ -172,7 +198,25 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
                                     {sortedPages.map((p) => (
                                         <tr key={p.id} className="hover:bg-theme-subtle/40 transition-colors">
                                             <td className="px-4 py-3 font-semibold text-theme-primary">
-                                                {p.name}
+                                                <div className="flex items-center gap-2">
+                                                    <span>{p.name}</span>
+                                                    {p.status === 'processing' && (
+                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 animate-pulse">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                                            Processing...
+                                                        </span>
+                                                    )}
+                                                    {p.status === 'failed' && (
+                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                                                            Failed
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {p.status === 'failed' && (p.error || p.failure_reason) && (
+                                                    <div className="text-[11px] text-rose-600 dark:text-rose-400 font-mono mt-1 font-normal max-w-sm truncate" title={p.error || p.failure_reason}>
+                                                        Reason: {p.error || p.failure_reason}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-theme-secondary">
                                                 {p.track_id ? (
@@ -220,6 +264,21 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                                 <div className="inline-flex items-center gap-1.5">
+                                                    {p.status === 'failed' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleRetry(p)}
+                                                            disabled={retryingId === p.id}
+                                                            className="py-1 px-2.5 rounded bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-semibold flex items-center gap-1 shadow-2xs cursor-pointer disabled:opacity-50"
+                                                            title="Retry failed page generation"
+                                                        >
+                                                            <svg className={`w-3 h-3 ${retryingId === p.id ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                                <path d="M3 3v5h5" />
+                                                            </svg>
+                                                            <span>{retryingId === p.id ? 'Retrying...' : 'Retry'}</span>
+                                                        </button>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={() => handleOpenPreview(p)}
@@ -243,7 +302,7 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
                                                     <button
                                                         type="button"
                                                         onClick={() => handleDelete(p.id, p.name)}
-                                                        className="py-1 px-2 text-[11px] text-red-600 hover:text-red-700 dark:text-red-400 hover:underline"
+                                                        className="py-1 px-2 text-[11px] text-red-600 hover:text-red-700 dark:text-red-400 hover:underline cursor-pointer"
                                                     >
                                                         Delete
                                                     </button>
@@ -261,9 +320,26 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
                                 <div key={p.id} className="p-4 space-y-3 hover:bg-theme-subtle/20 transition-colors">
                                     <div className="flex items-start justify-between gap-2">
                                         <div className="flex-1 min-w-0">
-                                            <h4 className="font-bold text-sm text-theme-primary truncate">
-                                                {p.name}
-                                            </h4>
+                                            <div className="flex items-center gap-2">
+                                                <h4 className="font-bold text-sm text-theme-primary truncate">
+                                                    {p.name}
+                                                </h4>
+                                                {p.status === 'processing' && (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0 animate-pulse">
+                                                        Processing...
+                                                    </span>
+                                                )}
+                                                {p.status === 'failed' && (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30 shrink-0">
+                                                        Failed
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {p.status === 'failed' && (p.error || p.failure_reason) && (
+                                                <div className="text-[11px] text-rose-600 dark:text-rose-400 font-mono mt-1 font-normal break-words">
+                                                    Reason: {p.error || p.failure_reason}
+                                                </div>
+                                            )}
                                             <div className="mt-0.5 text-xs text-theme-muted">
                                                 {p.track_id ? (
                                                     <Link
@@ -296,6 +372,20 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
 
                                     {/* Mobile Touch Actions (min 44px height) */}
                                     <div className="grid grid-cols-2 gap-2 pt-1">
+                                        {p.status === 'failed' && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRetry(p)}
+                                                disabled={retryingId === p.id}
+                                                className="col-span-2 min-h-[44px] rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer disabled:opacity-50"
+                                            >
+                                                <svg className={`w-4 h-4 ${retryingId === p.id ? 'animate-spin' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                    <path d="M3 3v5h5" />
+                                                </svg>
+                                                <span>{retryingId === p.id ? 'Retrying...' : 'Retry Generation'}</span>
+                                            </button>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() => handleOpenPreview(p)}

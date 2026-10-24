@@ -17,12 +17,26 @@ class FrankfurterFxTest extends TestCase
     public function test_faked_frankfurter_call_fetches_and_caches_rate(): void
     {
         Http::fake([
+            'api.frankfurter.app/latest*' => Http::response([
+                'amount' => 1.0,
+                'base' => 'USD',
+                'date' => today()->toDateString(),
+                'rates' => ['CAD' => 1.3850],
+            ], 200),
             'https://api.frankfurter.app/latest*' => Http::response([
                 'amount' => 1.0,
                 'base' => 'USD',
-                'date' => '2026-10-21',
+                'date' => today()->toDateString(),
                 'rates' => ['CAD' => 1.3850],
             ], 200),
+            '*api.frankfurter.app/latest*' => Http::response([
+                'amount' => 1.0,
+                'base' => 'USD',
+                'date' => today()->toDateString(),
+                'rates' => ['CAD' => 1.3850],
+            ], 200),
+            '*bankofcanada.ca/*' => Http::response('Not found', 404),
+            'https://www.bankofcanada.ca/*' => Http::response('Not found', 404),
         ]);
 
         $fx = app(FrankfurterFx::class);

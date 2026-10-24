@@ -4,71 +4,50 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\View;
 use Tests\TestCase;
 
 class SidebarLayoutTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_sidebar_partial_renders_brand_and_navigation_links(): void
+    public function test_authenticated_user_accesses_inertia_dashboard_and_receives_shared_props(): void
     {
         $user = User::factory()->create([
             'username' => 'owner',
         ]);
 
-        $this->actingAs($user);
+        $response = $this->actingAs($user)->get('/');
 
-        $html = View::make('partials.sidebar')->render();
-
-        $this->assertStringContainsString('Flow Hub', $html);
-        $this->assertStringContainsString('Affiliate Engine', $html);
-        $this->assertStringContainsString('Dashboard', $html);
-        $this->assertStringContainsString('Watching Products', $html);
-        $this->assertStringContainsString('Tracks', $html);
-        $this->assertStringContainsString('Pages', $html);
-        $this->assertStringContainsString('Google Ads', $html);
-        $this->assertStringContainsString('IP blocks', $html);
-        $this->assertStringContainsString('owner', $html);
-        $this->assertStringContainsString('Log out of Flow Hub', $html);
-        $this->assertStringContainsString('theme-toggle-segmented', $html);
-        $this->assertStringContainsString('blade-desktop-sidebar', $html);
-        $this->assertStringContainsString('blade-mobile-sidebar-container', $html);
-        $this->assertStringContainsString('blade-mobile-sidebar-drawer', $html);
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Dashboard')
+            ->has('auth.user', fn ($page) => $page
+                ->where('username', 'owner')
+            )
+            ->has('theme', fn ($page) => $page
+                ->has('preference')
+                ->has('htmlClass')
+            )
+        );
     }
 
-    public function test_sidebar_component_renders_correctly(): void
+    public function test_unauthenticated_user_is_redirected_to_login(): void
     {
-        $user = User::factory()->create([
-            'username' => 'admin_user',
-        ]);
+        $response = $this->get('/');
 
-        $this->actingAs($user);
-
-        $html = View::make('components.sidebar')->render();
-
-        $this->assertStringContainsString('admin_user', $html);
-        $this->assertStringContainsString('AD', $html); // Initials
-        $this->assertStringContainsString('Flow Hub', $html);
+        $response->assertRedirect('/login');
     }
 
-    public function test_sidebar_layout_wrapper_offsets_desktop_content(): void
+    public function test_login_page_renders_inertia_root_with_theme_head(): void
     {
-        $user = User::factory()->create([
-            'username' => 'owner',
-        ]);
+        $response = $this->get('/login');
 
-        $this->actingAs($user);
+        $response->assertOk();
+        $content = $response->getContent();
 
-        $html = View::make('layouts.sidebar-layout', [
-            'title' => 'Test Dashboard',
-            'slot' => '<div id="test-content">Welcome Content</div>',
-        ])->render();
-
-        $this->assertStringContainsString('Test Dashboard', $html);
-        $this->assertStringContainsString('lg:pl-64', $html);
-        $this->assertStringContainsString('test-content', $html);
-        $this->assertStringContainsString('data-sidebar-toggle', $html);
+        $this->assertStringContainsString('id="app"', $content);
+        $this->assertStringContainsString('prefers-color-scheme: dark', $content);
+        $this->assertStringContainsString('Flow Hub', $content);
     }
 
     public function test_authenticated_user_accesses_inertia_dashboard_and_tracks_routes(): void

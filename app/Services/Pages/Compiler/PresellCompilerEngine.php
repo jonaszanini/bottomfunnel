@@ -2,10 +2,18 @@
 
 namespace App\Services\Pages\Compiler;
 
+use App\Services\Pages\HtmlSanitizer;
 use App\Support\CopyGuard;
 
 class PresellCompilerEngine
 {
+    protected HtmlSanitizer $sanitizer;
+
+    public function __construct(?HtmlSanitizer $sanitizer = null)
+    {
+        $this->sanitizer = $sanitizer ?: app(HtmlSanitizer::class);
+    }
+
     /**
      * Compile a variation and its overrides into a standalone, single-file HTML5 document.
      *
@@ -21,7 +29,15 @@ class PresellCompilerEngine
         $affiliateUrl = trim((string) ($variation['affiliateUrl'] ?? '#'));
         $strategyType = (string) ($variation['strategyType'] ?? 'flash_sale');
         $seoEnabled = (bool) ($variation['seoEnabled'] ?? false);
-        $trackingCode = (string) ($variation['trackingCode'] ?? '');
+
+        // 1. Sanitization runs BEFORE injecting Flow Hub's TrackScript and affiliate hop links.
+        // Strip any competitor tracking pixels, GTM, GA, Meta, TikTok, and meta refresh tags.
+        $rawTracking = (string) ($variation['trackingCode'] ?? '');
+        $trackingCode = $rawTracking !== ''
+            ? $this->sanitizer->stripThirdPartyTrackers($rawTracking)
+            : '';
+
+        $flowhubTrackScript = trim((string) ($variation['flowhubTrackScript'] ?? $variation['trackScript'] ?? $variation['track_script'] ?? ''));
 
         // Extract theme tokens
         $theme = $variation['themeConfig'] ?? [];
@@ -115,7 +131,7 @@ HTML;
             $seoTags = "<title>{$metaTitle}</title>\n<meta name=\"robots\" content=\"noindex, nofollow\">";
         }
 
-        // Clean user tracking code
+        // Clean user tracking code (sanitized against competitor pixels)
         $headTracking = '';
         $bodyTracking = '';
         if ($trackingCode !== '') {
@@ -127,6 +143,11 @@ HTML;
             } else {
                 $headTracking = $trackingCode;
             }
+        }
+
+        // Flow Hub first-party TrackScript is appended after sanitization so it remains intact
+        if ($flowhubTrackScript !== '') {
+            $headTracking = ($headTracking !== '' ? $headTracking."\n" : '').$flowhubTrackScript;
         }
 
         return <<<HTML

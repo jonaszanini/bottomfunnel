@@ -1,26 +1,22 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { usePage } from '@inertiajs/react';
 import themeManager, { THEME_LIGHT, THEME_DARK, THEME_SYSTEM } from '../theme-manager';
 
 export default function ThemeToggle({ showLabels = false, className = '' }) {
-    const [preference, setPreference] = useState(() => themeManager.getPreference());
+    let initialPref = null;
+    try {
+        const page = usePage();
+        initialPref = page?.props?.theme?.preference;
+    } catch {
+        // Fallback when rendered outside Inertia context
+    }
+
+    const [preference, setPreference] = useState(() => initialPref || themeManager.getPreference());
     const [resolved, setResolved] = useState(() => themeManager.getResolvedTheme());
     const containerRef = useRef(null);
     const indicatorRef = useRef(null);
 
-    useEffect(() => {
-        const handleThemeChange = (event) => {
-            setPreference(event.detail.preference);
-            setResolved(event.detail.resolved);
-        };
-
-        window.addEventListener('themechange', handleThemeChange);
-
-        return () => {
-            window.removeEventListener('themechange', handleThemeChange);
-        };
-    }, []);
-
-    useEffect(() => {
+    const updateIndicator = useCallback(() => {
         if (!containerRef.current || !indicatorRef.current) return;
 
         const activeBtn = containerRef.current.querySelector('[data-theme-option].is-active');
@@ -36,7 +32,29 @@ export default function ThemeToggle({ showLabels = false, className = '' }) {
             indicatorRef.current.style.top = `${top}px`;
             indicatorRef.current.style.opacity = '1';
         }
-    }, [preference]);
+    }, []);
+
+    useEffect(() => {
+        const handleThemeChange = (event) => {
+            setPreference(event.detail.preference);
+            setResolved(event.detail.resolved);
+        };
+
+        window.addEventListener('themechange', handleThemeChange);
+
+        return () => {
+            window.removeEventListener('themechange', handleThemeChange);
+        };
+    }, []);
+
+    useEffect(() => {
+        updateIndicator();
+    }, [preference, updateIndicator]);
+
+    useEffect(() => {
+        window.addEventListener('resize', updateIndicator);
+        return () => window.removeEventListener('resize', updateIndicator);
+    }, [updateIndicator]);
 
     const options = [
         {
@@ -104,6 +122,7 @@ export default function ThemeToggle({ showLabels = false, className = '' }) {
             ref={containerRef}
             className={`theme-toggle-segmented ${className}`}
             data-theme-toggle
+            data-react="true"
             role="radiogroup"
             aria-label="Color theme selection"
         >

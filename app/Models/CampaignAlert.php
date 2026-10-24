@@ -70,6 +70,59 @@ class CampaignAlert extends Model
     }
 
     /**
+     * Scope query to un-dismissed active alerts (alias for active).
+     */
+    public function scopeOpen(Builder $query): Builder
+    {
+        return $query->whereNull('dismissed_at');
+    }
+
+    /**
+     * Scope query to a specific Google Ads campaign.
+     */
+    public function scopeForCampaign(Builder $query, string $campaignId): Builder
+    {
+        return $query->where('campaign_id', $campaignId);
+    }
+
+    /**
+     * Scope query to a specific Track.
+     */
+    public function scopeForTrack(Builder $query, int $trackId): Builder
+    {
+        return $query->where('track_id', $trackId);
+    }
+
+    /**
+     * Find an existing unresolved alert matching alert type and campaign/track/product.
+     */
+    public static function findOpenAlert(string $type, ?string $campaignId = null, ?int $trackId = null, ?int $productId = null): ?self
+    {
+        $query = static::query()->active()->where('type', $type);
+
+        if (! empty($campaignId)) {
+            $query->where('campaign_id', $campaignId);
+            if ($trackId !== null) {
+                $query->where('track_id', $trackId);
+            }
+        } elseif ($trackId !== null) {
+            $query->where('track_id', $trackId);
+        } elseif ($productId !== null) {
+            $query->where('product_id', $productId);
+        }
+
+        return $query->first();
+    }
+
+    /**
+     * Determine if alert is still open and unresolved.
+     */
+    public function isUnresolved(): bool
+    {
+        return $this->dismissed_at === null;
+    }
+
+    /**
      * Scope query to dismissed alerts.
      */
     public function scopeDismissed(Builder $query): Builder

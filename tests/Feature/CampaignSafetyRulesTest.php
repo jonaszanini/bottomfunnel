@@ -10,6 +10,7 @@ use App\Models\Conversion;
 use App\Models\GoogleAdsAccount;
 use App\Models\Track;
 use App\Models\User;
+use App\Models\Visit;
 use App\Models\WatchedProduct;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
@@ -33,9 +34,25 @@ class CampaignSafetyRulesTest extends TestCase
             'flowhub.safety_rules.bleeder.spend_payout_multiplier' => 1.5,
             'flowhub.safety_rules.bleeder.window_days' => 7,
             'flowhub.safety_rules.bleeder.action' => 'alert',
+            'flowhub.safety_rules.bleeder.min_clicks' => 20,
+            'flowhub.safety_rules.bleeder.postback_buffer_hours' => 3,
+            'flowhub.safety_rules.listing_down.consecutive_failures_required' => 2,
             'watching.auto_pause_enabled' => false,
             'flowhub.auto_pause_enabled' => false,
         ]);
+    }
+
+    protected function createVisits(Track $track, int $count = 25, int $daysAgo = 2): void
+    {
+        for ($i = 0; $i < $count; $i++) {
+            Visit::query()->create([
+                'session_id' => 'test-sess-'.$track->id.'-'.$i.'-'.uniqid(),
+                'track_id' => $track->id,
+                'page_type' => 'review',
+                'ip_address' => '127.0.0.1',
+                'landed_at' => now()->subDays($daysAgo)->subHours($i % 5),
+            ]);
+        }
     }
 
     protected function createAccount(string $customerId = '1234567890'): GoogleAdsAccount
@@ -279,6 +296,8 @@ class CampaignSafetyRulesTest extends TestCase
             'campaign_ids' => ['555666777'],
         ]);
 
+        $this->createVisits($track, 25);
+
         // Record spend of 80.00 CAD (> 75.00 CAD threshold) in past 3 days
         AdSpend::query()->create([
             'track_id' => $track->id,
@@ -330,6 +349,8 @@ class CampaignSafetyRulesTest extends TestCase
             'google_ads_account_id' => $account->id,
             'campaign_ids' => ['555666777'],
         ]);
+
+        $this->createVisits($track, 25);
 
         AdSpend::query()->create([
             'track_id' => $track->id,
@@ -457,6 +478,8 @@ class CampaignSafetyRulesTest extends TestCase
             'campaign_ids' => ['987654321'],
         ]);
 
+        $this->createVisits($track, 25);
+
         AdSpend::query()->create([
             'track_id' => $track->id,
             'start_date' => now()->subDays(2)->toDateString(),
@@ -487,6 +510,8 @@ class CampaignSafetyRulesTest extends TestCase
             'google_ads_account_id' => $account->id,
             'campaign_ids' => ['123123123'],
         ]);
+
+        $this->createVisits($track, 25);
 
         AdSpend::query()->create([
             'track_id' => $track->id,
@@ -578,5 +603,223 @@ class CampaignSafetyRulesTest extends TestCase
                 ->where('report.safety_alerts.0.reason', 'Spend without conversion')
                 ->where('report.safety_alerts.0.spend_cad', 150)
             );
+    }
+
+    public function test_listing_down_does_not_pause_on_single_transient_503_error(): void
+    {
+        config(['watching.auto_pause_enabled' => true, 'flowhub.auto_pause_enabled' => true]);
+
+        $account = $this->createAccount('1234567890');
+
+        Track::query()->create([
+            'product_name' => 'Transient 503 Offer',
+            'platform' => 'clickbank',
+            'affiliate_url' => 'https://hop.clickbank.net/?vendor=transient503',
+            'page_type' => 'review',
+            'strategy' => 'manual_cpc',
+            'typical_commission_cad' => 60.00,
+            'google_ads_account_id' => $account->id,
+            'campaign_ids' => ['888999000'],
+        ]);
+
+        $product = WatchedProduct::query()->create([
+            'name' => 'Transient 503 Offer',
+            'status' => WatchedProductStatus::Watch,
+            'listing_url' => 'https://example.com/503-page',
+            'listing_status' => ListingStatus::Active,
+        ]);
+
+        Http::fake([
+            'https://example.com/503-page' => Http::response('Service Unavailable', 503),
+        ]);
+
+        // Run 1: single transient 503 error
+        $this->artisan('campaigns:check-listing-down', ['--product' => $product->id])
+            ->assertSuccessful()
+            ->expectsOutputToContain('Transient errors detected on 1 listing(s)');
+
+        // Product listing status remains Active, NOT paused
+        $this->assertEquals(ListingStatus::Active, $product->fresh()->listing_status);
+        $this->assertEquals(0, CampaignAlert::query()->where('type', 'listing_down')->count());
+
+        Http::assertNotSent(function (Request $request) {
+            return str_contains($request->url(), 'campaigns:mutate');
+        });
+    }
+
+    public function test_listing_down_pauses_after_consecutive_failed_checks(): void
+    {
+        config(['watching.auto_pause_enabled' => true, 'flowhub.auto_pause_enabled' => true]);
+
+        $account = $this->createAccount('1234567890');
+
+        Track::query()->create([
+            'product_name' => 'Persistent 503 Offer',
+            'platform' => 'clickbank',
+            'affiliate_url' => 'https://hop.clickbank.net/?vendor=persistent503',
+            'page_type' => 'review',
+            'strategy' => 'manual_cpc',
+            'typical_commission_cad' => 60.00,
+            'google_ads_account_id' => $account->id,
+            'campaign_ids' => ['888999111'],
+        ]);
+
+        $product = WatchedProduct::query()->create([
+            'name' => 'Persistent 503 Offer',
+            'status' => WatchedProductStatus::Watch,
+            'listing_url' => 'https://example.com/persistent-503-page',
+            'listing_status' => ListingStatus::Active,
+        ]);
+
+        Http::fake([
+            'https://example.com/persistent-503-page' => Http::response('Service Unavailable', 503),
+            'https://googleads.googleapis.com/v22/customers/1234567890/campaigns:mutate' => Http::response([
+                'results' => [
+                    ['resourceName' => 'customers/1234567890/campaigns/888999111'],
+                ],
+            ], 200),
+        ]);
+
+        // Run 1: first failure (held)
+        $this->artisan('campaigns:check-listing-down', ['--product' => $product->id])
+            ->assertSuccessful();
+        $this->assertEquals(ListingStatus::Active, $product->fresh()->listing_status);
+
+        // Run 2: second consecutive failure confirms down status and pauses campaign
+        $this->artisan('campaigns:check-listing-down', ['--product' => $product->id])
+            ->assertSuccessful()
+            ->expectsOutputToContain('Total campaigns paused: 1');
+
+        $this->assertEquals(ListingStatus::Expired, $product->fresh()->listing_status);
+
+        Http::assertSent(function (Request $request) {
+            if (! str_contains($request->url(), 'campaigns:mutate')) {
+                return false;
+            }
+
+            $op = $request['operations'][0]['update'] ?? [];
+
+            return $op['status'] === 'PAUSED'
+                && $op['resourceName'] === 'customers/1234567890/campaigns/888999111';
+        });
+    }
+
+    public function test_bleeder_rule_does_not_alert_when_clicks_below_threshold(): void
+    {
+        $account = $this->createAccount('1234567890');
+
+        $track = Track::query()->create([
+            'product_name' => 'Low Traffic Offer',
+            'platform' => 'clickbank',
+            'affiliate_url' => 'https://hop.clickbank.net/?vendor=lowtraffic',
+            'page_type' => 'review',
+            'strategy' => 'manual_cpc',
+            'typical_commission_cad' => 50.00, // 1.5x threshold = 75.00 CAD
+            'google_ads_account_id' => $account->id,
+            'campaign_ids' => ['222333444'],
+        ]);
+
+        // Only 10 clicks (< 20 minimum clicks threshold)
+        $this->createVisits($track, count: 10, daysAgo: 2);
+
+        // Spend exceeds threshold (90 CAD > 75 CAD)
+        AdSpend::query()->create([
+            'track_id' => $track->id,
+            'start_date' => now()->subDays(2)->toDateString(),
+            'end_date' => now()->toDateString(),
+            'amount_cad' => 90.00,
+        ]);
+
+        $this->artisan('campaigns:check-bleeders')
+            ->assertSuccessful()
+            ->expectsOutputToContain('All evaluated campaigns are healthy within spend thresholds.');
+
+        $this->assertEquals(0, CampaignAlert::query()->where('type', 'bleeder')->count());
+    }
+
+    public function test_bleeder_rule_defers_auto_pause_when_clicks_within_postback_lag_window(): void
+    {
+        config(['watching.auto_pause_enabled' => true, 'flowhub.auto_pause_enabled' => true]);
+
+        $account = $this->createAccount('1234567890');
+
+        $track = Track::query()->create([
+            'product_name' => 'Active Traffic Offer',
+            'platform' => 'clickbank',
+            'affiliate_url' => 'https://hop.clickbank.net/?vendor=activetraffic',
+            'page_type' => 'review',
+            'strategy' => 'manual_cpc',
+            'typical_commission_cad' => 50.00,
+            'google_ads_account_id' => $account->id,
+            'campaign_ids' => ['333444555'],
+        ]);
+
+        // 20 visits from 2 days ago
+        $this->createVisits($track, count: 20, daysAgo: 2);
+
+        // 5 visits from 1 hour ago (within 3-hour postback buffer window)
+        for ($i = 0; $i < 5; $i++) {
+            Visit::query()->create([
+                'session_id' => 'recent-sess-'.$i.'-'.uniqid(),
+                'track_id' => $track->id,
+                'page_type' => 'review',
+                'ip_address' => '127.0.0.1',
+                'landed_at' => now()->subHours(1),
+            ]);
+        }
+
+        AdSpend::query()->create([
+            'track_id' => $track->id,
+            'start_date' => now()->subDays(2)->toDateString(),
+            'end_date' => now()->toDateString(),
+            'amount_cad' => 120.00,
+        ]);
+
+        $this->artisan('campaigns:check-bleeders')
+            ->assertSuccessful()
+            ->expectsOutputToContain('Postback buffer active');
+
+        // Alert was raised with postback_buffer_held
+        $alert = CampaignAlert::query()->where('type', 'bleeder')->first();
+        $this->assertNotNull($alert);
+        $this->assertEquals('postback_buffer_held', $alert->action_taken);
+
+        // Campaign was NOT mutated to PAUSED in Google Ads
+        Http::assertNotSent(function (Request $request) {
+            return str_contains($request->url(), 'campaigns:mutate');
+        });
+    }
+
+    public function test_alert_idempotency_prevents_duplicate_open_alerts(): void
+    {
+        $account = $this->createAccount('1234567890');
+
+        $track = Track::query()->create([
+            'product_name' => 'Deduplication Offer',
+            'platform' => 'clickbank',
+            'affiliate_url' => 'https://hop.clickbank.net/?vendor=dedup',
+            'page_type' => 'review',
+            'strategy' => 'manual_cpc',
+            'typical_commission_cad' => 50.00,
+            'google_ads_account_id' => $account->id,
+            'campaign_ids' => ['444333222'],
+        ]);
+
+        $this->createVisits($track, count: 25, daysAgo: 2);
+
+        AdSpend::query()->create([
+            'track_id' => $track->id,
+            'start_date' => now()->subDays(2)->toDateString(),
+            'end_date' => now()->toDateString(),
+            'amount_cad' => 100.00,
+        ]);
+
+        // First run creates the alert
+        $this->artisan('campaigns:check-bleeders')->assertSuccessful();
+        $this->assertEquals(1, CampaignAlert::query()->where('type', 'bleeder')->count());
+
+        // Second run updates the existing open alert without creating duplicates
+        $this->artisan('campaigns:check-bleeders')->assertSuccessful();
+        $this->assertEquals(1, CampaignAlert::query()->where('type', 'bleeder')->count());
     }
 }

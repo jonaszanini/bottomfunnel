@@ -48,7 +48,11 @@ class PotentialScoreService
         }
 
         // 4. Margin Headroom (max 10)
-        $breakdown['margin_headroom'] = $this->calculateMarginScore($product);
+        $marginResult = $this->calculateMarginScore($product);
+        $breakdown['margin_headroom'] = $marginResult['score'];
+        if (! empty($marginResult['flags'])) {
+            $flags = array_merge($flags, $marginResult['flags']);
+        }
 
         // 5. Page Type & Funnel (max 10)
         $pageTypeResult = $this->calculatePageTypeScore($product);
@@ -92,8 +96,7 @@ class PotentialScoreService
 
         // KP CPC audit floor: below R$3-4 equivalent triggers audit_false_bof
         if ($product->kp_cpc_amount !== null && (float) $product->kp_cpc_amount > 0) {
-            $kpCpcUsd = $this->fx->toUsd((float) $product->kp_cpc_amount, $product->kp_cpc_currency ?? 'USD');
-            $kpCpcBrl = $kpCpcUsd * 5.70; // Approx USD->BRL
+            $kpCpcBrl = Money::make((float) $product->kp_cpc_amount, $product->kp_cpc_currency ?? 'USD')->convertTo('BRL', $this->fx);
             if ($kpCpcBrl < 4.0) {
                 $flags['audit_false_bof'] = true;
             }
@@ -325,30 +328,54 @@ class PotentialScoreService
 
     /**
      * Margin Headroom component (max 10).
+     *
+     * @return array{score: int, flags: array<string, mixed>}
      */
-    protected function calculateMarginScore(WatchedProduct $product): int
+    protected function calculateMarginScore(WatchedProduct $product): array
     {
+        $flags = [];
+
         $amount = (float) ($product->payout_amount ?? $product->payout_cad ?? 0.0);
         $currency = $product->payout_currency ?? 'USD';
         $payoutUsd = Money::make($amount, $currency)->toUsd($this->fx);
 
-        $cvr = $product->est_cvr !== null ? (float) $product->est_cvr : 0.02;
+        $cvr = $product->est_cvr !== null && (float) $product->est_cvr > 0
+            ? (float) $product->est_cvr
+            : 0.02;
 
-        $brandCpc = (float) ($product->brand_cpc_amount ?? 0.0);
-        $brandCpcCurrency = $product->brand_cpc_currency ?? 'USD';
-        $brandCpcUsd = Money::make($brandCpc, $brandCpcCurrency)->toUsd($this->fx);
+        $brandCpcAmount = (float) ($product->brand_cpc_amount ?? $product->kp_cpc_amount ?? 0.0);
+        $brandCpcCurrency = $product->brand_cpc_currency ?? $product->kp_cpc_currency ?? 'USD';
+
+        $fallbackCpcCad = (float) config('watching.thresholds.fallback_cpc_floor_cad', 1.50);
+        $fallbackCpcUsd = Money::make($fallbackCpcCad, 'CAD')->toUsd($this->fx);
+
+        if ($brandCpcAmount <= 0.0) {
+            // Missing or zero auction data: apply conservative CAD fallback floor so ROI scores are not artificially inflated
+            $brandCpcUsd = $fallbackCpcUsd;
+            $flags['cpc_confidence'] = 'fallback';
+            $flags['fallback_cpc_applied'] = true;
+            $flags['fallback_cpc_cad'] = $fallbackCpcCad;
+        } else {
+            $rawCpcUsd = Money::make($brandCpcAmount, $brandCpcCurrency)->toUsd($this->fx);
+            // Defensive floor: auction CPC cannot be zero or unrealistically negligible
+            $brandCpcUsd = max($rawCpcUsd, $fallbackCpcUsd * 0.25);
+            $flags['cpc_confidence'] = 'high';
+        }
 
         // Margin per click: payout × est_cvr − brand_cpc
         $expectedMargin = ($payoutUsd * $cvr) - $brandCpcUsd;
 
         if ($expectedMargin <= 0.0) {
-            return 0;
+            return ['score' => 0, 'flags' => $flags];
         }
 
         // Map $0 to $1.50+ margin to 0-10
         $score = (int) round(($expectedMargin / 1.50) * 10);
 
-        return max(0, min(10, $score));
+        return [
+            'score' => max(0, min(10, $score)),
+            'flags' => $flags,
+        ];
     }
 
     /**

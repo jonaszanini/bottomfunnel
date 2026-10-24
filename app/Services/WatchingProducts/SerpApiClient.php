@@ -17,12 +17,32 @@ class SerpApiClient
     ) {}
 
     /**
+     * Build a deterministic cache key for a SerpApi query.
+     */
+    public function buildCacheKey(
+        string $type,
+        string $query,
+        ?string $gl = null,
+        ?string $hl = null,
+        ?string $device = null
+    ): string {
+        $cleanQuery = strtolower(trim($query));
+        $cleanGl = strtolower(trim($gl ?? (string) config('watching.serpapi_gl', 'ca')));
+        $cleanHl = strtolower(trim($hl ?? 'en'));
+        $cleanDevice = strtolower(trim($device ?? 'desktop'));
+
+        $hash = hash('sha256', "{$cleanQuery}|{$cleanGl}|{$cleanHl}|{$cleanDevice}");
+
+        return "serpapi_{$type}_{$hash}";
+    }
+
+    /**
      * Fetch Trends and Search data for a product.
      * Returns array of extracted values without throwing on API errors.
      *
      * @return array{trends: array<string, mixed>, serp: array<string, mixed>, bof: array{bof_vpn_serp: bool, bof_image_match_pct: int, bof_translation: bool}, success: bool, error: ?string}
      */
-    public function fetchProductData(WatchedProduct $product, bool $forceFresh = false): array
+    public function fetchProductData(WatchedProduct $product, bool $forceFresh = false, bool $isManual = false): array
     {
         $apiKey = config('watching.serpapi_key');
         if (empty($apiKey)) {
@@ -37,8 +57,24 @@ class SerpApiClient
             ];
         }
 
-        $trendsData = $this->fetchGoogleTrends($product->name, $apiKey, forceFresh: $forceFresh);
-        $serpData = $this->fetchGoogleSerp($product->name, $apiKey, forceFresh: $forceFresh);
+        $gl = (string) config('watching.serpapi_gl', 'ca');
+
+        $trendsData = $this->fetchGoogleTrends(
+            query: $product->name,
+            apiKey: $apiKey,
+            gl: $gl,
+            forceFresh: $forceFresh,
+            isManual: $isManual
+        );
+
+        $serpData = $this->fetchGoogleSerp(
+            query: $product->name,
+            apiKey: $apiKey,
+            gl: $gl,
+            forceFresh: $forceFresh,
+            isManual: $isManual
+        );
+
         $bofData = $this->bofChecker->check($product, $serpData);
 
         $success = ! empty($trendsData) || ! empty($serpData);
@@ -57,21 +93,34 @@ class SerpApiClient
      *
      * @return array<string, mixed>
      */
-    public function fetchGoogleTrends(string $query, ?string $apiKey = null, bool $forceFresh = false): array
-    {
+    public function fetchGoogleTrends(
+        string $query,
+        ?string $apiKey = null,
+        ?string $gl = null,
+        ?string $hl = null,
+        ?string $device = null,
+        bool $forceFresh = false,
+        bool $isManual = false
+    ): array {
         $apiKey ??= config('watching.serpapi_key');
         if (empty($apiKey)) {
             return [];
         }
 
-        $cacheKey = 'serpapi_trends_'.md5(strtolower(trim($query)));
+        $cacheKey = $this->buildCacheKey('trends', $query, $gl, $hl, $device);
         if ($forceFresh) {
             Cache::forget($cacheKey);
         }
 
-        return Cache::remember($cacheKey, now()->addDays(7), function () use ($query, $apiKey) {
+        $ttlHours = (int) config('watching.serpapi_cache_ttl_hours', 12);
+
+        return Cache::remember($cacheKey, now()->addHours($ttlHours), function () use ($query, $apiKey, $isManual) {
             try {
-                $this->budget->recordCall(1);
+                if (! $this->budget->atomicSpend(1, $isManual)) {
+                    Log::warning("SerpApiClient: SerpApi quota reached. Skipping Trends call for '{$query}'.");
+
+                    return [];
+                }
 
                 $response = Http::timeout(20)->get('https://serpapi.com/search.json', [
                     'engine' => 'google_trends',
@@ -107,22 +156,35 @@ class SerpApiClient
      *
      * @return array<string, mixed>
      */
-    public function fetchGoogleSerp(string $query, ?string $apiKey = null, ?string $gl = null, bool $forceFresh = false): array
-    {
+    public function fetchGoogleSerp(
+        string $query,
+        ?string $apiKey = null,
+        ?string $gl = null,
+        ?string $hl = null,
+        ?string $device = null,
+        bool $forceFresh = false,
+        bool $isManual = false
+    ): array {
         $apiKey ??= config('watching.serpapi_key');
         if (empty($apiKey)) {
             return [];
         }
 
         $gl ??= config('watching.serpapi_gl', 'ca');
-        $cacheKey = 'serpapi_search_'.md5(strtolower(trim($query)).'_'.$gl);
+        $cacheKey = $this->buildCacheKey('search', $query, $gl, $hl, $device);
         if ($forceFresh) {
             Cache::forget($cacheKey);
         }
 
-        return Cache::remember($cacheKey, now()->addDays(7), function () use ($query, $apiKey, $gl) {
+        $ttlHours = (int) config('watching.serpapi_cache_ttl_hours', 12);
+
+        return Cache::remember($cacheKey, now()->addHours($ttlHours), function () use ($query, $apiKey, $gl, $isManual) {
             try {
-                $this->budget->recordCall(1);
+                if (! $this->budget->atomicSpend(1, $isManual)) {
+                    Log::warning("SerpApiClient: SerpApi quota reached. Skipping Search call for '{$query}'.");
+
+                    return [];
+                }
 
                 $response = Http::timeout(20)->get('https://serpapi.com/search.json', [
                     'engine' => 'google',

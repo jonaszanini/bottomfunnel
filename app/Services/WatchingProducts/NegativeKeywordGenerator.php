@@ -56,7 +56,7 @@ class NegativeKeywordGenerator
      * @param  array<string, mixed>  $serpData
      * @return int Number of newly inserted campaign negative keywords
      */
-    public function generateCampaign(WatchedProduct $product, array $serpData = []): int
+    public function generateCampaign(WatchedProduct $product, array $serpData = [], bool $allowExternalHttp = true): int
     {
         // 1. Always ensure light base seeds and rule items are in place
         $this->generateBase($product);
@@ -64,16 +64,17 @@ class NegativeKeywordGenerator
         // 2. Resolve SERP data if not passed explicitly
         if (empty($serpData)) {
             $query = $product->name;
-            $gl = config('watching.serpapi_gl', 'ca');
-            $cacheKey = 'serpapi_search_'.md5(strtolower(trim($query)).'_'.$gl);
+            $gl = (string) config('watching.serpapi_gl', 'ca');
+            $cacheKey = $this->getSerpClient()->buildCacheKey('search', $query, $gl);
+            $legacyKey = 'serpapi_search_'.md5(strtolower(trim($query)).'_'.$gl);
 
-            $cached = Cache::get($cacheKey);
+            $cached = Cache::get($cacheKey) ?? Cache::get($legacyKey);
             if (! empty($cached) && is_array($cached)) {
                 $serpData = $cached;
-            } elseif ($this->getBudget()->canSpendManual(1)) {
+            } elseif ($allowExternalHttp && $this->getBudget()->canSpendManual(1)) {
                 $serpData = $this->getSerpClient()->fetchGoogleSerp($product->name, forceFresh: false);
             } else {
-                Log::warning("NegativeKeywordGenerator: SerpApi quota budget exceeded. Cannot fetch fresh SERP for product {$product->id}.");
+                Log::info("NegativeKeywordGenerator: Skipping external HTTP fetch for product {$product->id} (allowExternalHttp: ".($allowExternalHttp ? 'true' : 'false').').');
             }
         }
 

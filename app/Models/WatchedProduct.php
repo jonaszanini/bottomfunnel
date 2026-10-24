@@ -297,4 +297,19 @@ class WatchedProduct extends Model
             'last_reviewed_at' => $timestamp ?? now(),
         ]);
     }
+
+    public function isRefreshProcessing(): bool
+    {
+        return ($this->score_flags['refresh_status'] ?? null) === 'processing';
+    }
+
+    public function isRefreshFailed(): bool
+    {
+        return ($this->score_flags['refresh_status'] ?? null) === 'failed';
+    }
+
+    public function refreshError(): ?string
+    {
+        return $this->score_flags['refresh_error'] ?? null;
+    }
 }

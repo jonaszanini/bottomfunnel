@@ -1,1 +1,0 @@
-@include('components.theme-toggle')

@@ -21,7 +21,7 @@ class TrackingController extends Controller
         if (! is_array($payload)) {
             throw ValidationException::withMessages(['key' => 'Send a JSON object.']);
         }
-        $allowed = ['key', 'session_id', 'page_id', 'time_on_page', 'gclid', 'gbraid', 'wbraid', 'referrer', 'engagement'];
+        $allowed = ['key', 'session_id', 'page_id', 'time_on_page', 'gclid', 'gbraid', 'wbraid', 'referrer', 'engagement', 'presell_hop'];
         $extra = array_diff(array_keys($payload), $allowed);
         if ($extra !== []) {
             throw ValidationException::withMessages(['key' => 'The tracker payload has unknown fields.']);
@@ -30,7 +30,8 @@ class TrackingController extends Controller
         if (! is_array($engagement)) {
             throw ValidationException::withMessages(['engagement' => 'Engagement must be an object.']);
         }
-        $engagementExtra = array_diff(array_keys($engagement), ['scroll_depth', 'cta_clicks', 'button_clicks', 'form_interactions', 'exit_intent']);
+        $engagementAllowed = ['scroll_depth', 'cta_clicks', 'button_clicks', 'form_interactions', 'exit_intent', 'presell_hop'];
+        $engagementExtra = array_diff(array_keys($engagement), $engagementAllowed);
         if ($engagementExtra !== []) {
             throw ValidationException::withMessages(['engagement' => 'Engagement has unknown fields.']);
         }
@@ -44,11 +45,13 @@ class TrackingController extends Controller
             'gbraid' => ['nullable', 'string', 'max:255'],
             'wbraid' => ['nullable', 'string', 'max:255'],
             'referrer' => ['nullable', 'string', 'max:2000'],
+            'presell_hop' => ['nullable', 'boolean'],
             'engagement.scroll_depth' => ['nullable', 'integer', 'min:0', 'max:100'],
             'engagement.cta_clicks' => ['nullable', 'integer', 'min:0', 'max:10000'],
             'engagement.button_clicks' => ['nullable', 'integer', 'min:0', 'max:10000'],
             'engagement.form_interactions' => ['nullable', 'integer', 'min:0', 'max:10000'],
             'engagement.exit_intent' => ['nullable', 'boolean'],
+            'engagement.presell_hop' => ['nullable', 'boolean'],
         ]);
 
         $track = Track::query()->where('public_script_key', $data['key'])->first();
@@ -74,6 +77,12 @@ class TrackingController extends Controller
             ]);
         }
 
+        $hopped = ! empty($data['presell_hop'])
+            || ! empty($engagement['presell_hop'])
+            || ((int) ($engagement['cta_clicks'] ?? 0) > 0);
+        $isPresellHop = (bool) ($visit->presell_hop || $hopped);
+        $hoppedAt = $visit->hopped_at ?? ($isPresellHop ? now() : null);
+
         $visit->fill([
             'page_id' => $page?->id,
             'page_type' => $page?->page_type ?: $track->page_type,
@@ -83,6 +92,8 @@ class TrackingController extends Controller
             'ip_address' => (string) $request->ip(),
             'user_agent' => substr((string) $request->userAgent(), 0, 1000),
             'referrer' => $data['referrer'] ?? $visit->referrer,
+            'presell_hop' => $isPresellHop,
+            'hopped_at' => $hoppedAt,
             'time_on_page_seconds' => max((int) $visit->time_on_page_seconds, (int) ($data['time_on_page'] ?? 0)),
             'engagement' => [
                 'scroll_depth' => (int) ($engagement['scroll_depth'] ?? 0),
@@ -90,6 +101,7 @@ class TrackingController extends Controller
                 'button_clicks' => (int) ($engagement['button_clicks'] ?? 0),
                 'form_interactions' => (int) ($engagement['form_interactions'] ?? 0),
                 'exit_intent' => (bool) ($engagement['exit_intent'] ?? false),
+                'presell_hop' => $isPresellHop,
             ],
             'last_ping_at' => now(),
         ]);
@@ -103,14 +115,37 @@ class TrackingController extends Controller
             'auto_blocked' => $visit->auto_blocked || $score['block'],
         ]);
 
-        if ($score['block']) {
-            $already = IpBlock::query()
+        $isAutoBlock = $score['block'] || $score['score'] >= FraudScorer::AUTO_BLOCK_THRESHOLD;
+
+        if ($isAutoBlock) {
+            $isWhitelisted = IpBlock::query()
                 ->where('track_id', $track->id)
                 ->where('ip_address', $visit->ip_address)
-                ->whereIn('status', ['applied', 'whitelisted'])
+                ->where('status', 'whitelisted')
                 ->exists();
-            if (! $already) {
-                ApplyIpBlockJob::dispatch($track->id, $visit->ip_address, (string) $score['reason']);
+
+            if (! $isWhitelisted) {
+                $block = IpBlock::query()->firstOrCreate(
+                    [
+                        'track_id' => $track->id,
+                        'ip_address' => $visit->ip_address,
+                    ],
+                    [
+                        'google_ads_account_id' => $track->google_ads_account_id,
+                        'reason' => (string) ($score['reason'] ?: 'Automated fraud score threshold exceeded'),
+                        'campaign_id' => (string) ($track->campaign_ids[0] ?? ''),
+                        'status' => 'pending',
+                    ],
+                );
+
+                if (! in_array($block->status, ['applied', 'whitelisted'], true)) {
+                    $block->update([
+                        'reason' => (string) ($score['reason'] ?: $block->reason),
+                        'status' => 'pending',
+                    ]);
+                }
+
+                ApplyIpBlockJob::dispatch($track->id, $visit->ip_address, (string) ($score['reason'] ?: 'Automated fraud score threshold exceeded'));
             }
         }
 

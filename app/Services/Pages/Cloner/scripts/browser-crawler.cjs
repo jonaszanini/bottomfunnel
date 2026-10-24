@@ -1,6 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const dns = require('dns');
+const { promisify } = require('util');
+
+const dnsLookup = promisify(dns.lookup);
+const dnsCache = new Map();
 
 // Ensure a dedicated, guaranteed writable temporary directory inside the project
 const projectRoot = path.resolve(__dirname, '../../../../../');
@@ -31,6 +36,117 @@ if (!process.env.LOCALAPPDATA || process.env.LOCALAPPDATA === 'undefined') {
 
 if (!process.env.APPDATA || process.env.APPDATA === 'undefined') {
     process.env.APPDATA = path.join(userHome, 'AppData', 'Roaming');
+}
+
+// Chromium launch arguments optimized for CloudLinux shared hosting (cPanel LVE memory limits)
+const cloudLinuxChromiumArgs = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--disable-software-rasterizer',
+    '--no-zygote',
+    '--disable-extensions',
+    '--disable-background-networking',
+    '--disable-background-timer-throttling',
+    '--disable-backgrounding-occluded-windows',
+    '--disable-breakpad',
+    '--disable-client-side-phishing-detection',
+    '--disable-component-update',
+    '--disable-default-apps',
+    '--disable-domain-reliability',
+    '--disable-features=AudioServiceOutOfProcess,IsolateOrigins,site-per-process,Translate,BackForwardCache,AcceptCHFrame,MediaRouter',
+    '--disable-hang-monitor',
+    '--disable-ipc-flooding-protection',
+    '--disable-popup-blocking',
+    '--disable-prompt-on-repost',
+    '--disable-renderer-backgrounding',
+    '--disable-sync',
+    '--force-color-profile=srgb',
+    '--metrics-recording-only',
+    '--no-first-run',
+    '--password-store=basic',
+    '--use-mock-keychain',
+    '--export-tagged-pdf',
+    '--js-flags=--max-old-space-size=256',
+    '--ignore-certificate-errors',
+];
+
+/**
+ * Check if an IP address falls into private, loopback, link-local, carrier-grade NAT, or reserved ranges.
+ */
+function isPrivateOrReservedIp(ip) {
+    if (!ip) return true;
+    if (ip.startsWith('::ffff:')) {
+        ip = ip.substring(7);
+    }
+
+    const parts = ip.split('.').map(Number);
+    if (parts.length === 4 && parts.every(n => !isNaN(n) && n >= 0 && n <= 255)) {
+        const [a, b, c] = parts;
+        if (a === 0) return true; // 0.0.0.0/8
+        if (a === 10) return true; // 10.0.0.0/8
+        if (a === 127) return true; // 127.0.0.0/8 (loopback)
+        if (a === 169 && b === 254) return true; // 169.254.0.0/16 (link local, metadata)
+        if (a === 172 && (b >= 16 && b <= 31)) return true; // 172.16.0.0/12
+        if (a === 192 && b === 168) return true; // 192.168.0.0/16
+        if (a === 100 && (b >= 64 && b <= 127)) return true; // 100.64.0.0/10 (CGNAT)
+        if (a === 192 && b === 0 && c === 2) return true; // TEST-NET-1
+        if (a === 198 && b === 51 && c === 100) return true; // TEST-NET-2
+        if (a === 203 && b === 0 && c === 113) return true; // TEST-NET-3
+        if (a >= 224) return true; // Multicast & Reserved
+        return false;
+    }
+
+    const lower = ip.toLowerCase();
+    if (lower === '::1' || lower === '::' || lower === '0:0:0:0:0:0:0:1') return true;
+    if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // IPv6 unique local
+    if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true; // Link local
+    return false;
+}
+
+/**
+ * Validate URL security against SSRF vulnerabilities (rejects private IPs and non-http schemes).
+ */
+async function isSafeUrl(rawUrl) {
+    let parsed;
+    try {
+        parsed = new URL(rawUrl);
+    } catch (e) {
+        return false;
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return false;
+    }
+
+    const host = parsed.hostname.toLowerCase();
+    if (!host || host === 'localhost' || host === '0.0.0.0' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.lan') || host.endsWith('.corp')) {
+        return false;
+    }
+
+    if (isPrivateOrReservedIp(host)) {
+        return false;
+    }
+
+    if (dnsCache.has(host)) {
+        return dnsCache.get(host);
+    }
+
+    try {
+        const addresses = await dnsLookup(host, { all: true });
+        for (const addr of addresses) {
+            if (isPrivateOrReservedIp(addr.address)) {
+                dnsCache.set(host, false);
+                return false;
+            }
+        }
+        dnsCache.set(host, true);
+        return true;
+    } catch (err) {
+        dnsCache.set(host, false);
+        return false;
+    }
 }
 
 // Resolve Playwright or Puppeteer
@@ -79,7 +195,8 @@ async function run() {
         }
     }
 
-    const timeoutMs = options.timeoutMs || 25000;
+    // Enforce strict execution timeout (capped at 25 seconds for shared hosting)
+    const timeoutMs = Math.min(options.timeoutMs || 25000, 25000);
     const engineInfo = resolveBrowserEngine();
 
     if (!engineInfo) {
@@ -90,23 +207,37 @@ async function run() {
         process.exit(1);
     }
 
+    // SSRF pre-check on target URL
+    const targetIsSafe = await isSafeUrl(targetUrl);
+    if (!targetIsSafe) {
+        console.error(JSON.stringify({
+            success: false,
+            error: `SSRF blocked: Disallowed or private target URL: ${targetUrl}`
+        }));
+        process.exit(1);
+    }
+
     const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
+    let browser = null;
+    let context = null;
+    let tempUserDataDir = null;
+
     try {
+        tempUserDataDir = path.join(customTempDir, `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+        try {
+            fs.mkdirSync(tempUserDataDir, { recursive: true });
+        } catch (e) {}
+
         if (engineInfo.type === 'playwright') {
             const { chromium } = engineInfo.engine;
-            const browser = await chromium.launch({
+            browser = await chromium.launch({
                 headless: true,
-                tracesDir: customTempDir,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--ignore-certificate-errors',
-                ]
+                tracesDir: tempUserDataDir,
+                args: cloudLinuxChromiumArgs
             });
 
-            const context = await browser.newContext({
+            context = await browser.newContext({
                 userAgent: userAgent,
                 viewport: { width: 1280, height: 900 },
                 locale: 'en-US',
@@ -117,6 +248,20 @@ async function run() {
                     'Sec-Ch-Ua-Mobile': '?0',
                     'Sec-Ch-Ua-Platform': '"Windows"',
                 }
+            });
+
+            // Route interception to block private IP ranges & SSRF attacks
+            await context.route('**/*', async (route) => {
+                const reqUrl = route.request().url();
+                if (reqUrl.startsWith('data:')) {
+                    return route.continue();
+                }
+
+                const safe = await isSafeUrl(reqUrl);
+                if (!safe) {
+                    return route.abort('blockedbyclient');
+                }
+                return route.continue();
             });
 
             const page = await context.newPage();
@@ -147,7 +292,6 @@ async function run() {
 
                         if (totalHeight >= scrollHeight || totalHeight > 15000) {
                             clearInterval(timer);
-                            // Scroll back to top
                             window.scrollTo(0, 0);
                             resolve();
                         }
@@ -193,8 +337,6 @@ async function run() {
                 };
             });
 
-            await browser.close();
-
             const result = {
                 success: true,
                 url: targetUrl,
@@ -213,20 +355,32 @@ async function run() {
         } else {
             // Puppeteer fallback
             const puppeteer = engineInfo.engine;
-            const browser = await puppeteer.launch({
+            browser = await puppeteer.launch({
                 headless: 'new',
                 ignoreHTTPSErrors: true,
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--ignore-certificate-errors',
-                ]
+                userDataDir: tempUserDataDir,
+                args: cloudLinuxChromiumArgs
             });
 
             const page = await browser.newPage();
+            page.setDefaultTimeout(timeoutMs);
             await page.setUserAgent(userAgent);
             await page.setViewport({ width: 1280, height: 900 });
+
+            // Route interception to block private IP ranges & SSRF attacks
+            await page.setRequestInterception(true);
+            page.on('request', async (req) => {
+                const reqUrl = req.url();
+                if (reqUrl.startsWith('data:')) {
+                    return req.continue();
+                }
+
+                const safe = await isSafeUrl(reqUrl);
+                if (!safe) {
+                    return req.abort('blockedbyclient');
+                }
+                return req.continue();
+            });
 
             const response = await page.goto(targetUrl, {
                 waitUntil: 'domcontentloaded',
@@ -282,8 +436,6 @@ async function run() {
                 };
             });
 
-            await browser.close();
-
             const result = {
                 success: true,
                 url: targetUrl,
@@ -307,6 +459,22 @@ async function run() {
             stack: err.stack
         }));
         process.exit(1);
+    } finally {
+        if (context) {
+            try {
+                await context.close();
+            } catch (e) {}
+        }
+        if (browser) {
+            try {
+                await browser.close();
+            } catch (e) {}
+        }
+        if (tempUserDataDir && fs.existsSync(tempUserDataDir)) {
+            try {
+                fs.rmSync(tempUserDataDir, { recursive: true, force: true });
+            } catch (e) {}
+        }
     }
 }
 

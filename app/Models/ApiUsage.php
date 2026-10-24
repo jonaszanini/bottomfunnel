@@ -26,4 +26,12 @@ class ApiUsage extends Model
             'calls' => 'integer',
         ];
     }
+
+    public static function forPeriod(string $provider, string $period): ?self
+    {
+        return static::query()
+            ->where('provider', $provider)
+            ->where('period', $period)
+            ->first();
+    }
 }

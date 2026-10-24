@@ -27,6 +27,8 @@ class Visit extends Model
         'flagged',
         'auto_blocked',
         'converted',
+        'presell_hop',
+        'hopped_at',
         'last_ping_at',
     ];
 
@@ -34,12 +36,19 @@ class Visit extends Model
     {
         return [
             'landed_at' => 'datetime',
+            'hopped_at' => 'datetime',
             'last_ping_at' => 'datetime',
             'engagement' => 'array',
             'flagged' => 'boolean',
             'auto_blocked' => 'boolean',
             'converted' => 'boolean',
+            'presell_hop' => 'boolean',
         ];
+    }
+
+    public function isHopped(): bool
+    {
+        return (bool) $this->presell_hop;
     }
 
     public function track(): BelongsTo

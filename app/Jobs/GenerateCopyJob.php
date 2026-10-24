@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\Page;
 use App\Models\Track;
 use App\Services\Copy\BaseCopyGeneratorService;
 use App\Services\Copy\SalesPageScraperService;
@@ -10,6 +11,7 @@ use App\Services\Pages\OpenAiPageGenerator;
 use App\Services\Pages\VariationGeneratorService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -30,7 +32,9 @@ class GenerateCopyJob implements ShouldQueue
 
     public int $tries = 2;
 
-    public int $timeout = 120;
+    public int $timeout = 90;
+
+    public array $backoff = [15, 45];
 
     /**
      * @param  array<string, mixed>  $payload
@@ -41,6 +45,22 @@ class GenerateCopyJob implements ShouldQueue
         public ?string $jobId = null,
     ) {
         $this->jobId ??= (string) Str::uuid();
+    }
+
+    /**
+     * Prevent duplicate concurrent executions for the same target record.
+     *
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        $key = (string) ($this->payload['page_id'] ?? $this->payload['track_id'] ?? $this->payload['salesPageUrl'] ?? $this->payload['productName'] ?? $this->jobId);
+
+        return [
+            (new WithoutOverlapping("copy:{$this->type}:{$key}"))
+                ->releaseAfter(15)
+                ->expireAfter(120),
+        ];
     }
 
     /**
@@ -98,6 +118,13 @@ class GenerateCopyJob implements ShouldQueue
             'started_at' => now()->toIso8601String(),
         ], now()->addHours(2));
 
+        if (! empty($this->payload['page_id'])) {
+            Page::query()->where('id', $this->payload['page_id'])->update([
+                'status' => 'processing',
+                'error_message' => null,
+            ]);
+        }
+
         try {
             $result = match ($this->type) {
                 self::TYPE_BASE_COPY => $this->handleBaseCopy($baseCopyGenerator),
@@ -113,6 +140,16 @@ class GenerateCopyJob implements ShouldQueue
                 'result' => $result,
                 'completed_at' => now()->toIso8601String(),
             ], now()->addHours(2));
+
+            if (! empty($this->payload['page_id'])) {
+                $page = Page::query()->find($this->payload['page_id']);
+                if ($page) {
+                    $page->update([
+                        'status' => 'completed',
+                        'error_message' => null,
+                    ]);
+                }
+            }
         } catch (Throwable $e) {
             Log::error("GenerateCopyJob ({$this->type}) failed for job {$this->jobId}: {$e->getMessage()}", [
                 'job_id' => $this->jobId,
@@ -120,14 +157,75 @@ class GenerateCopyJob implements ShouldQueue
                 'exception' => $e,
             ]);
 
+            $userMessage = Str::limit($e->getMessage(), 250);
+
             Cache::put($cacheKey, [
                 'status' => 'failed',
                 'type' => $this->type,
-                'error' => $e->getMessage(),
+                'error' => $userMessage,
                 'failed_at' => now()->toIso8601String(),
             ], now()->addHours(2));
 
+            if (! empty($this->payload['page_id'])) {
+                $page = Page::query()->find($this->payload['page_id']);
+                if ($page) {
+                    $page->update([
+                        'status' => 'failed',
+                        'error_message' => $userMessage,
+                        'structure_json' => array_merge(
+                            is_array($page->structure_json) ? $page->structure_json : [],
+                            [
+                                'status' => 'failed',
+                                'error' => $userMessage,
+                                'failed_at' => now()->toIso8601String(),
+                            ]
+                        ),
+                    ]);
+                }
+            }
+
             throw $e;
+        }
+    }
+
+    /**
+     * Handle permanent job failure.
+     */
+    public function failed(Throwable $exception): void
+    {
+        Log::error("GenerateCopyJob ({$this->type}) permanently failed for job {$this->jobId}: {$exception->getMessage()}", [
+            'job_id' => $this->jobId,
+            'type' => $this->type,
+            'payload' => $this->payload,
+            'exception' => $exception,
+        ]);
+
+        $userMessage = Str::limit($exception->getMessage(), 250);
+        $cacheKey = "generate_copy_job:{$this->jobId}";
+
+        Cache::put($cacheKey, [
+            'status' => 'failed',
+            'type' => $this->type,
+            'error' => $userMessage,
+            'failed_at' => now()->toIso8601String(),
+        ], now()->addHours(2));
+
+        if (! empty($this->payload['page_id'])) {
+            $page = Page::query()->find($this->payload['page_id']);
+            if ($page) {
+                $page->update([
+                    'status' => 'failed',
+                    'error_message' => $userMessage,
+                    'structure_json' => array_merge(
+                        is_array($page->structure_json) ? $page->structure_json : [],
+                        [
+                            'status' => 'failed',
+                            'error' => $userMessage,
+                            'failed_at' => now()->toIso8601String(),
+                        ]
+                    ),
+                ]);
+            }
         }
     }
 
@@ -191,6 +289,8 @@ class GenerateCopyJob implements ShouldQueue
         $page = $track->pages()->create([
             'name' => Str::limit($this->payload['product_name'].' '.config('flowhub.page_types.'.$this->payload['page_type']), 160, ''),
             'page_type' => $this->payload['page_type'],
+            'status' => 'completed',
+            'error_message' => null,
             'language' => $language,
             'structure_json' => $generated['structure'],
             'html' => $generated['html'],

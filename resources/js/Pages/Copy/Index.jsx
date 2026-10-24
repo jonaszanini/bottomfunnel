@@ -9,7 +9,7 @@ function getCsrfToken() {
     return match ? decodeURIComponent(match[1]) : '';
 }
 
-export default function Index({ initialUrl = '', initialProduct = '', initialLang = 'en', initialKeyword = '' }) {
+export default function Index({ initialUrl = '', initialProduct = '', initialLang = 'en', initialKeyword = '', jobStatus = null }) {
     // Section A: Offer Input Bar State
     const [salesPageUrl, setSalesPageUrl] = useState(initialUrl);
     const [targetKeyword, setTargetKeyword] = useState(initialKeyword || initialProduct);
@@ -19,6 +19,9 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
     const [scrapeWarning, setScrapeWarning] = useState(null);
     const [detectedLanguage, setDetectedLanguage] = useState(initialLang);
     const [productSummary, setProductSummary] = useState('');
+    const [generationError, setGenerationError] = useState(
+        jobStatus?.status === 'failed' ? (jobStatus.error || jobStatus.message || 'Generation failed.') : null
+    );
 
     // Section B: 20x10 Assets State
     const [headlines, setHeadlines] = useState([]);
@@ -31,6 +34,7 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
     const [screenshotBase64, setScreenshotBase64] = useState(null);
     const [screenshotFileName, setScreenshotFileName] = useState('');
     const [isRefining, setIsRefining] = useState(false);
+    const [refinementError, setRefinementError] = useState(null);
     const [competitorSummary, setCompetitorSummary] = useState(null);
     const [round1Backup, setRound1Backup] = useState(null); // { headlines, descriptions }
     const [activeRoundView, setActiveRoundView] = useState('round2'); // 'round1' | 'round2'
@@ -38,6 +42,16 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
     // Notification toast
     const [toastMessage, setToastMessage] = useState(null);
     const fileInputRef = useRef(null);
+
+    // Sync jobStatus if completed
+    useEffect(() => {
+        if (jobStatus?.status === 'completed' && jobStatus.data) {
+            if (jobStatus.data.headlines) setHeadlines(jobStatus.data.headlines);
+            if (jobStatus.data.descriptions) setDescriptions(jobStatus.data.descriptions);
+            if (jobStatus.data.detectedLanguage) setDetectedLanguage(jobStatus.data.detectedLanguage);
+            if (jobStatus.data.productSummary) setProductSummary(jobStatus.data.productSummary);
+        }
+    }, [jobStatus]);
 
     // Show temporary toast
     function showToast(msg) {
@@ -86,7 +100,7 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
 
     // Section A Action: Generate Base Ads
     async function handleAnalyzeAndGenerate(e) {
-        if (e) e.preventDefault();
+        if (e && e.preventDefault) e.preventDefault();
         if (!salesPageUrl.trim()) {
             alert('Please enter a sales page URL to analyze.');
             return;
@@ -94,6 +108,7 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
 
         setIsAnalyzing(true);
         setScrapeWarning(null);
+        setGenerationError(null);
 
         try {
             const res = await fetch('/api/copy/generate-base', {
@@ -112,7 +127,9 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
 
             let data = await res.json();
             if (!res.ok) {
-                throw new Error(data.message || 'Failed to analyze sales page.');
+                const errMsg = data.message || 'Failed to analyze sales page.';
+                setGenerationError(errMsg);
+                throw new Error(errMsg);
             }
 
             if (data?.job_id && (data?.status === 'pending' || data?.status === 'processing')) {
@@ -134,7 +151,9 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
                         break;
                     }
                     if (statusJson?.status === 'failed') {
-                        throw new Error(statusJson.message || 'Failed to analyze sales page.');
+                        const errMsg = statusJson.error || statusJson.message || 'Failed to analyze sales page.';
+                        setGenerationError(errMsg);
+                        throw new Error(errMsg);
                     }
                 }
             }
@@ -152,7 +171,7 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
                 showToast('Generated 20 headlines & 10 descriptions!');
             }
         } catch (err) {
-            alert('Error generating base copy: ' + err.message);
+            setGenerationError(err.message || 'Error generating base copy.');
         } finally {
             setIsAnalyzing(false);
         }
@@ -238,6 +257,7 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
         }
 
         setIsRefining(true);
+        setRefinementError(null);
 
         try {
             const res = await fetch('/api/copy/refine-with-screenshot', {
@@ -258,7 +278,9 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
 
             let data = await res.json();
             if (!res.ok || !data.success) {
-                throw new Error(data.message || 'Vision refinement failed.');
+                const errMsg = data.message || 'Vision refinement failed.';
+                setRefinementError(errMsg);
+                throw new Error(errMsg);
             }
 
             if (data?.job_id && (data?.status === 'pending' || data?.status === 'processing')) {
@@ -280,7 +302,9 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
                         break;
                     }
                     if (statusJson?.status === 'failed') {
-                        throw new Error(statusJson.message || 'Vision refinement failed.');
+                        const errMsg = statusJson.error || statusJson.message || 'Vision refinement failed.';
+                        setRefinementError(errMsg);
+                        throw new Error(errMsg);
                     }
                 }
             }
@@ -299,7 +323,7 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
             setActiveRoundView('round2');
             showToast('Copy refined against competitor screenshot!');
         } catch (err) {
-            alert('Refinement error: ' + err.message);
+            setRefinementError(err.message || 'Vision refinement failed.');
         } finally {
             setIsRefining(false);
         }
@@ -526,6 +550,39 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
                                 </div>
                             </div>
                         )}
+
+                        {/* Generation Failure Banner with Retry Action Button */}
+                        {generationError && (
+                            <div className="rounded-xl border border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-950/40 p-4 text-xs text-red-800 dark:text-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                                <div className="flex items-start gap-2.5">
+                                    <span className="text-base leading-none text-red-600 dark:text-red-400">⚠️</span>
+                                    <div>
+                                        <strong className="block font-semibold text-sm">Copy Generation Failed</strong>
+                                        <p className="mt-0.5 text-red-700 dark:text-red-300 font-mono text-xs">{generationError}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={handleAnalyzeAndGenerate}
+                                        disabled={isAnalyzing || !salesPageUrl.trim()}
+                                        className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs shadow-xs transition-colors flex items-center gap-1.5"
+                                    >
+                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                                        </svg>
+                                        <span>Retry Generation</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setGenerationError(null)}
+                                        className="px-2 py-1.5 text-xs text-red-600 hover:text-red-800 dark:hover:text-red-200 font-medium"
+                                    >
+                                        Dismiss
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </form>
                 </section>
 
@@ -681,6 +738,39 @@ export default function Index({ initialUrl = '', initialProduct = '', initialLan
                                     </li>
                                 ))}
                             </ul>
+                        </div>
+                    )}
+
+                    {/* Vision Refinement Failure Banner with Retry Action Button */}
+                    {refinementError && (
+                        <div className="rounded-xl border border-red-300 bg-red-50 dark:border-red-900/60 dark:bg-red-950/40 p-4 text-xs text-red-800 dark:text-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                            <div className="flex items-start gap-2.5">
+                                <span className="text-base leading-none text-red-600 dark:text-red-400">⚠️</span>
+                                <div>
+                                    <strong className="block font-semibold text-sm">Vision Refinement Failed</strong>
+                                    <p className="mt-0.5 text-red-700 dark:text-red-300 font-mono text-xs">{refinementError}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={handleRefineWithScreenshot}
+                                    disabled={isRefining || !screenshotBase64}
+                                    className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-medium text-xs shadow-xs transition-colors flex items-center gap-1.5"
+                                >
+                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
+                                    </svg>
+                                    <span>Retry Refinement</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setRefinementError(null)}
+                                    className="px-2 py-1.5 text-xs text-red-600 hover:text-red-800 dark:hover:text-red-200 font-medium"
+                                >
+                                    Dismiss
+                                </button>
+                            </div>
                         </div>
                     )}
                 </section>

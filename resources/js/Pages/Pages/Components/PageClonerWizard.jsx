@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { router } from '@inertiajs/react';
 import { Field, button, control, quiet } from '../../../Components/Layout';
 import { api, ApiError } from '../../../utils/apiClient';
 
@@ -231,15 +232,33 @@ export default function PageClonerWizard({
                         throw new Error('Cloning cancelled.');
                     }
                     pollAttempts++;
+
+                    // Sync Inertia state in the background
+                    router.reload({
+                        only: ['pages', 'currentPage', 'jobStatus'],
+                        preserveState: true,
+                        preserveScroll: true,
+                    });
+
                     const statusRes = await api.get(`/pages/crawl-and-clone/status/${jobId}`, {}, {
                         signal: controller.signal,
                     });
                     if (statusRes?.status === 'completed') {
                         data = statusRes;
+                        router.reload({
+                            only: ['pages', 'currentPage', 'jobStatus'],
+                            preserveState: true,
+                            preserveScroll: true,
+                        });
                         break;
                     }
                     if (statusRes?.status === 'failed') {
-                        throw new Error(statusRes.message || 'Cloning process encountered an error.');
+                        router.reload({
+                            only: ['pages', 'currentPage', 'jobStatus'],
+                            preserveState: true,
+                            preserveScroll: true,
+                        });
+                        throw new Error(statusRes.error || statusRes.message || 'Cloning process encountered an error.');
                     }
                 }
             }
@@ -487,18 +506,32 @@ export default function PageClonerWizard({
                 )}
             </div>
 
-            {/* Error Banner */}
+            {/* Error Banner with Retry Action Button */}
             {errorMessage && (
-                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs sm:text-sm text-rose-700 dark:text-rose-300 flex items-start gap-3 shadow-2xs">
-                    <svg className="w-5 h-5 shrink-0 text-rose-500 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="12" y1="8" x2="12" y2="12" />
-                        <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <div className="flex-1">
-                        <span className="font-semibold block">Cloning Error:</span>
-                        <span>{errorMessage}</span>
+                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-xs sm:text-sm text-rose-700 dark:text-rose-300 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-2xs">
+                    <div className="flex items-start gap-3">
+                        <svg className="w-5 h-5 shrink-0 text-rose-500 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="12" y1="8" x2="12" y2="12" />
+                            <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <div className="flex-1">
+                            <span className="font-semibold block">Cloning Error:</span>
+                            <span className="font-mono text-xs">{errorMessage}</span>
+                        </div>
                     </div>
+                    <button
+                        type="button"
+                        onClick={handleStartClone}
+                        disabled={isCloning}
+                        className="rounded-lg bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 text-xs font-semibold shadow-xs flex items-center justify-center gap-1.5 shrink-0 cursor-pointer disabled:opacity-50"
+                    >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                            <path d="M3 3v5h5" />
+                        </svg>
+                        <span>Retry Clone</span>
+                    </button>
                 </div>
             )}
 

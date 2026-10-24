@@ -195,6 +195,9 @@ class FrankfurterFx
      */
     public function fetchDirect(string $from, string $to): ?float
     {
+        $from = strtoupper(trim($from));
+        $to = strtoupper(trim($to));
+
         try {
             $response = Http::timeout(10)
                 ->acceptJson()

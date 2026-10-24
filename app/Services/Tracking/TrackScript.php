@@ -25,6 +25,7 @@ class TrackScript
   var forms = 0;
   var exitIntent = false;
   var sentClick = false;
+  var hopped = false;
   var pending = null;
   var params = new URLSearchParams(location.search);
 
@@ -34,7 +35,8 @@ class TrackScript
       cta_clicks: cta,
       button_clicks: buttons,
       form_interactions: forms,
-      exit_intent: exitIntent
+      exit_intent: exitIntent,
+      presell_hop: hopped || cta > 0
     };
   }
 
@@ -48,6 +50,7 @@ class TrackScript
       gbraid: params.get("gbraid"),
       wbraid: params.get("wbraid"),
       referrer: document.referrer || null,
+      presell_hop: hopped || cta > 0,
       engagement: engagement()
     };
   }
@@ -79,6 +82,7 @@ class TrackScript
     if (sentClick) return;
     sentClick = true;
     cta += 1;
+    hopped = true;
     ensure().then(function () {
       send(true);
       if (affiliate) location.href = affiliate;

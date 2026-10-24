@@ -1,3 +1,4 @@
+
 <?php
 
 return [
@@ -16,6 +17,8 @@ return [
     'serpapi_total_limit' => 250,
     'serpapi_reserve' => 20,
     'serpapi_gl' => env('SERPAPI_GL', 'ca'),
+    'serpapi_cache_ttl_hours' => (int) env('SERPAPI_CACHE_TTL_HOURS', 12),
+    'serpapi_quota_high_threshold' => (float) env('SERPAPI_QUOTA_HIGH_THRESHOLD', 0.85),
 
     /*
     |--------------------------------------------------------------------------
@@ -90,6 +93,7 @@ return [
         'dead_post_peak_min_peak' => (float) env('WATCHING_DEAD_POST_PEAK_MIN_PEAK', 60.0),
         'dead_post_peak_7d_ratio' => (float) env('WATCHING_DEAD_POST_PEAK_7D_RATIO', 0.15),
         'dead_post_peak_30d_ratio' => (float) env('WATCHING_DEAD_POST_PEAK_30D_RATIO', 0.25),
+        'fallback_cpc_floor_cad' => (float) env('WATCHING_FALLBACK_CPC_FLOOR_CAD', 1.50),
     ],
 
     /*
@@ -135,11 +139,14 @@ return [
         'listing_down' => [
             'enabled' => (bool) env('SAFETY_LISTING_DOWN_ENABLED', true),
             'action' => env('SAFETY_LISTING_DOWN_ACTION', 'alert'),
+            'consecutive_failures_required' => (int) env('SAFETY_LISTING_CONSECUTIVE_FAILURES', 2),
         ],
         'bleeder' => [
             'enabled' => (bool) env('SAFETY_BLEEDER_ENABLED', true),
             'spend_payout_multiplier' => (float) env('SAFETY_BLEEDER_MULTIPLIER', 1.5),
             'window_days' => (int) env('SAFETY_BLEEDER_WINDOW_DAYS', 7),
+            'min_clicks' => (int) env('SAFETY_BLEEDER_MIN_CLICKS', 20),
+            'postback_buffer_hours' => (int) env('SAFETY_BLEEDER_POSTBACK_BUFFER_HOURS', 3),
             'action' => env('SAFETY_BLEEDER_ACTION', 'alert'),
         ],
     ],

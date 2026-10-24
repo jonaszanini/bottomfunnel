@@ -3,6 +3,7 @@
 namespace App\Services\Google;
 
 use App\Models\GoogleAdsAccount;
+use App\Models\IpBlock;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +11,10 @@ use Illuminate\Support\Facades\Log;
 
 class GoogleAdsClient
 {
+    public const MAX_CAMPAIGN_IP_EXCLUSIONS = 500;
+
+    public const IP_EXCLUSION_SAFETY_THRESHOLD = 490;
+
     public function authorizationUrl(string $state): string
     {
         $this->assertOauthConfigured();
@@ -250,6 +255,238 @@ class GoogleAdsClient
         return $campaigns;
     }
 
+    /**
+     * @return list<array{resource_name: string, ip_address: string}>
+     */
+    public function getCampaignIpExclusions(GoogleAdsAccount $account, string $campaignId): array
+    {
+        $campaignId = $this->digits($campaignId);
+        $rows = $this->search(
+            $this->accessToken($account),
+            $account->customer_id,
+            $account->login_customer_id,
+            "SELECT campaign_criterion.resource_name, campaign_criterion.ip_block.ip_address FROM campaign_criterion WHERE campaign.id = {$campaignId} AND campaign_criterion.type = 'IP_BLOCK'",
+        );
+
+        $results = [];
+        foreach ($rows as $row) {
+            $criterion = $row['campaignCriterion'] ?? null;
+            if (! is_array($criterion)) {
+                continue;
+            }
+            $resourceName = (string) ($criterion['resourceName'] ?? '');
+            $ip = (string) ($criterion['ipBlock']['ipAddress'] ?? '');
+            if ($resourceName !== '' && $ip !== '') {
+                $results[] = [
+                    'resource_name' => $resourceName,
+                    'ip_address' => $ip,
+                ];
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * @param  list<string>  $resourceNames
+     */
+    public function removeCriteria(GoogleAdsAccount $account, array $resourceNames): void
+    {
+        $resourceNames = array_values(array_filter($resourceNames));
+        if ($resourceNames === []) {
+            return;
+        }
+
+        $customerId = $this->digits($account->customer_id);
+        $operations = array_map(fn (string $name): array => ['remove' => $name], $resourceNames);
+
+        $this->mutate(
+            $this->accessToken($account),
+            $customerId,
+            $account->login_customer_id,
+            '/campaignCriteria:mutate',
+            ['operations' => $operations],
+        );
+    }
+
+    /**
+     * Enforce Google Ads 500 IP exclusion limit on a campaign.
+     * Consolidates /24 subnets and rotates oldest exclusions if approaching 500 limit.
+     *
+     * @return array{consolidated_subnets: int, removed_ips: int, rotated: int, active_count: int}
+     */
+    public function enforceIpExclusionLimit(GoogleAdsAccount $account, string $campaignId, int $safetyThreshold = self::IP_EXCLUSION_SAFETY_THRESHOLD): array
+    {
+        $exclusions = $this->getCampaignIpExclusions($account, $campaignId);
+        $count = count($exclusions);
+
+        $consolidatedSubnets = 0;
+        $removedIps = 0;
+        $rotated = 0;
+
+        if ($count < $safetyThreshold) {
+            return [
+                'consolidated_subnets' => 0,
+                'removed_ips' => 0,
+                'rotated' => 0,
+                'active_count' => $count,
+            ];
+        }
+
+        // Phase 1: Consolidate multiple IPs from the same /24 subnet into a CIDR mask
+        $subnetGroups = [];
+        foreach ($exclusions as $item) {
+            $subnet = self::toSubnet24($item['ip_address']);
+            if ($subnet !== null) {
+                $subnetGroups[$subnet][] = $item;
+            }
+        }
+
+        $customerId = $this->digits($account->customer_id);
+        $cleanCampaignId = $this->digits($campaignId);
+
+        foreach ($subnetGroups as $subnet => $items) {
+            $hasSubnetMask = false;
+            $individualItems = [];
+            foreach ($items as $item) {
+                if ($item['ip_address'] === $subnet) {
+                    $hasSubnetMask = true;
+                } else {
+                    $individualItems[] = $item;
+                }
+            }
+
+            if (! $hasSubnetMask && count($individualItems) >= 2) {
+                $cidrPayload = $this->mutate(
+                    $this->accessToken($account),
+                    $customerId,
+                    $account->login_customer_id,
+                    '/campaignCriteria:mutate',
+                    [
+                        'operations' => [[
+                            'create' => [
+                                'campaign' => 'customers/'.$customerId.'/campaigns/'.$cleanCampaignId,
+                                'negative' => true,
+                                'ipBlock' => ['ipAddress' => $subnet],
+                            ],
+                        ]],
+                    ],
+                );
+                $cidrResource = (string) ($cidrPayload['results'][0]['resourceName'] ?? '');
+
+                $resourceNamesToRemove = array_map(fn (array $it): string => $it['resource_name'], $individualItems);
+                $this->removeCriteria($account, $resourceNamesToRemove);
+
+                $consolidatedSubnets++;
+                $removedIps += count($individualItems);
+
+                $removedIpList = array_map(fn (array $it): string => $it['ip_address'], $individualItems);
+                IpBlock::query()
+                    ->where('campaign_id', $cleanCampaignId)
+                    ->whereIn('ip_address', $removedIpList)
+                    ->where('status', 'applied')
+                    ->update([
+                        'status' => 'consolidated',
+                        'last_error' => 'Consolidated into /24 subnet mask: '.$subnet,
+                    ]);
+
+                $existingBlock = IpBlock::query()
+                    ->where('campaign_id', $cleanCampaignId)
+                    ->whereIn('ip_address', $removedIpList)
+                    ->first();
+                $trackId = $existingBlock?->track_id;
+
+                if ($trackId) {
+                    IpBlock::query()->updateOrCreate(
+                        [
+                            'track_id' => $trackId,
+                            'ip_address' => $subnet,
+                            'campaign_id' => $cleanCampaignId,
+                        ],
+                        [
+                            'google_ads_account_id' => $account->id,
+                            'reason' => 'Automated /24 CIDR consolidation',
+                            'criterion_resource_name' => $cidrResource,
+                            'status' => 'applied',
+                            'last_error' => null,
+                        ]
+                    );
+                }
+            } elseif ($hasSubnetMask && count($individualItems) >= 1) {
+                $resourceNamesToRemove = array_map(fn (array $it): string => $it['resource_name'], $individualItems);
+                $this->removeCriteria($account, $resourceNamesToRemove);
+
+                $removedIps += count($individualItems);
+                $removedIpList = array_map(fn (array $it): string => $it['ip_address'], $individualItems);
+                IpBlock::query()
+                    ->where('campaign_id', $cleanCampaignId)
+                    ->whereIn('ip_address', $removedIpList)
+                    ->where('status', 'applied')
+                    ->update([
+                        'status' => 'consolidated',
+                        'last_error' => 'Consolidated into existing /24 subnet mask: '.$subnet,
+                    ]);
+            }
+        }
+
+        // Re-check count after consolidation
+        $exclusions = $this->getCampaignIpExclusions($account, $campaignId);
+        $count = count($exclusions);
+
+        // Phase 2: If still approaching limit (e.g. >= 495), rotate out oldest blocked IPs
+        $rotateThreshold = min(495, $safetyThreshold + 5);
+        if ($count >= $rotateThreshold) {
+            $slotsToFree = max(5, $count - ($safetyThreshold - 5));
+            $oldestBlocks = IpBlock::query()
+                ->where('campaign_id', $cleanCampaignId)
+                ->where('status', 'applied')
+                ->whereNotNull('criterion_resource_name')
+                ->oldest()
+                ->limit($slotsToFree)
+                ->get();
+
+            $resourceNamesToRotate = [];
+            foreach ($oldestBlocks as $oldBlock) {
+                if ($oldBlock->criterion_resource_name) {
+                    $resourceNamesToRotate[] = $oldBlock->criterion_resource_name;
+                }
+            }
+
+            if (count($resourceNamesToRotate) < $slotsToFree) {
+                foreach ($exclusions as $item) {
+                    if (count($resourceNamesToRotate) >= $slotsToFree) {
+                        break;
+                    }
+                    if (! in_array($item['resource_name'], $resourceNamesToRotate, true)) {
+                        $resourceNamesToRotate[] = $item['resource_name'];
+                    }
+                }
+            }
+
+            if ($resourceNamesToRotate !== []) {
+                $this->removeCriteria($account, $resourceNamesToRotate);
+                $rotated = count($resourceNamesToRotate);
+
+                IpBlock::query()
+                    ->where('campaign_id', $cleanCampaignId)
+                    ->whereIn('criterion_resource_name', $resourceNamesToRotate)
+                    ->update([
+                        'status' => 'rotated',
+                        'last_error' => 'Rotated out to enforce 500 campaign IP exclusion limit',
+                    ]);
+            }
+
+            $count = count($this->getCampaignIpExclusions($account, $campaignId));
+        }
+
+        return [
+            'consolidated_subnets' => $consolidatedSubnets,
+            'removed_ips' => $removedIps,
+            'rotated' => $rotated,
+            'active_count' => $count,
+        ];
+    }
+
     public function blockIp(GoogleAdsAccount $account, string $campaignId, string $ip): string
     {
         $customerId = $this->digits($account->customer_id);
@@ -257,6 +494,13 @@ class GoogleAdsClient
         $existing = $this->findIpCriterion($account, $campaignId, $ip);
         if ($existing !== null) {
             return $existing;
+        }
+
+        $this->enforceIpExclusionLimit($account, $campaignId);
+
+        $existingAfter = $this->findIpCriterion($account, $campaignId, $ip);
+        if ($existingAfter !== null) {
+            return $existingAfter;
         }
 
         $payload = $this->mutate(
@@ -929,6 +1173,41 @@ class GoogleAdsClient
         return $ads;
     }
 
+    public static function toSubnet24(string $ip): ?string
+    {
+        $ip = trim($ip);
+        if (str_ends_with($ip, '/24')) {
+            return $ip;
+        }
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            $parts = explode('.', $ip);
+            if (count($parts) === 4) {
+                return "{$parts[0]}.{$parts[1]}.{$parts[2]}.0/24";
+            }
+        }
+
+        return null;
+    }
+
+    public static function ipMatchesCidr(string $ip, string $cidr): bool
+    {
+        if ($ip === $cidr) {
+            return true;
+        }
+        if (! str_contains($cidr, '/')) {
+            return false;
+        }
+        [$subnet, $bits] = array_pad(explode('/', $cidr, 2), 2, '32');
+        $ipLong = ip2long($ip);
+        $subnetLong = ip2long($subnet);
+        if ($ipLong === false || $subnetLong === false) {
+            return false;
+        }
+        $mask = -1 << (32 - (int) $bits);
+
+        return ($ipLong & $mask) === ($subnetLong & $mask);
+    }
+
     private function findIpCriterion(GoogleAdsAccount $account, string $campaignId, string $ip): ?string
     {
         $rows = $this->search(
@@ -943,8 +1222,8 @@ class GoogleAdsClient
             if (! is_array($criterion)) {
                 continue;
             }
-            $blocked = $criterion['ipBlock']['ipAddress'] ?? '';
-            if ($blocked === $ip) {
+            $blocked = (string) ($criterion['ipBlock']['ipAddress'] ?? '');
+            if ($blocked === $ip || self::ipMatchesCidr($ip, $blocked)) {
                 return (string) ($criterion['resourceName'] ?? '');
             }
         }

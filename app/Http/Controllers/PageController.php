@@ -22,6 +22,7 @@ use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
+use Throwable;
 
 class PageController extends Controller
 {
@@ -77,6 +78,9 @@ class PageController extends Controller
                 ->map(fn (Page $page): array => [
                     'id' => $page->id,
                     'name' => $page->name,
+                    'status' => $page->status ?? ($page->structure_json['status'] ?? 'completed'),
+                    'error' => $page->failureReason(),
+                    'failure_reason' => $page->failureReason(),
                     'page_type' => config('flowhub.page_types.'.$page->page_type, $page->page_type),
                     'product_name' => $page->track?->product_name ?? 'Standalone Offer',
                     'track_product_name' => $page->track?->product_name ?? 'Standalone Offer',
@@ -87,6 +91,8 @@ class PageController extends Controller
                     'updated_at' => $page->updated_at?->toDateTimeString(),
                     'created_at' => $page->created_at?->toDateTimeString(),
                 ]),
+            'currentPage' => request()->query('page_id') ? Page::query()->find(request()->query('page_id')) : null,
+            'jobStatus' => request()->query('job_id') ? Cache::get('clone_job:'.request()->query('job_id')) : null,
             'tracks' => Track::query()
                 ->with([
                     'account:id,name,customer_id',
@@ -193,12 +199,13 @@ class PageController extends Controller
     /**
      * Crawl an external sales page and clone it with asset rewriting and affiliate link replacement.
      */
-    public function crawlAndClone(Request $request): JsonResponse
+    public function crawlAndClone(Request $request, PageCrawlerService $crawler): JsonResponse
     {
         $data = $request->validate([
             'url' => ['required', 'url', 'max:2048'],
             'affiliate_link' => ['required', 'url', 'max:2048'],
             'product_name' => ['nullable', 'string', 'max:255'],
+            'page_id' => ['nullable', 'integer', 'exists:pages,id'],
             'force_browser' => ['boolean'],
             'custom_head' => ['nullable', 'string', 'max:15000'],
             'custom_body' => ['nullable', 'string', 'max:15000'],
@@ -206,6 +213,22 @@ class PageController extends Controller
             'optimize_images' => ['boolean'],
             'enable_param_pass_through' => ['boolean'],
         ]);
+
+        try {
+            $crawler->validateUrlSecurity($data['url']);
+        } catch (Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        if (! empty($data['page_id'])) {
+            Page::query()->where('id', $data['page_id'])->update([
+                'status' => 'processing',
+                'error_message' => null,
+            ]);
+        }
 
         $jobId = (string) Str::uuid();
 
@@ -254,6 +277,7 @@ class PageController extends Controller
                 'job_id' => $jobId,
                 'status' => 'failed',
                 'message' => $cached['error'] ?? 'Page cloning failed.',
+                'error' => $cached['error'] ?? 'Page cloning failed.',
             ], 422);
         }
 
@@ -428,18 +452,87 @@ class PageController extends Controller
     {
         $page->load('track:id,product_name,public_script_key,page_type');
 
+        $pageData = [
+            'id' => $page->id,
+            'name' => $page->name,
+            'status' => $page->status ?? ($page->structure_json['status'] ?? 'completed'),
+            'error' => $page->failureReason(),
+            'failure_reason' => $page->failureReason(),
+            'page_type' => $page->page_type,
+            'page_type_label' => config('flowhub.page_types.'.$page->page_type, $page->page_type),
+            'language' => $page->language,
+            'structure' => $page->structure_json,
+            'injected_script' => $page->injected_script,
+            'product_name' => $page->track?->product_name,
+        ];
+
         return Inertia::render('Pages/Builder', [
-            'page' => [
-                'id' => $page->id,
-                'name' => $page->name,
-                'page_type' => $page->page_type,
-                'page_type_label' => config('flowhub.page_types.'.$page->page_type, $page->page_type),
-                'language' => $page->language,
-                'structure' => $page->structure_json,
-                'injected_script' => $page->injected_script,
-                'product_name' => $page->track?->product_name,
-            ],
+            'page' => $pageData,
+            'currentPage' => $pageData,
+            'pages' => Page::query()
+                ->latest()
+                ->get()
+                ->map(fn (Page $p): array => [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'status' => $p->status ?? ($p->structure_json['status'] ?? 'completed'),
+                    'error' => $p->failureReason(),
+                    'failure_reason' => $p->failureReason(),
+                    'page_type' => $p->page_type,
+                    'updated_at' => $p->updated_at?->toDateTimeString(),
+                ]),
+            'jobStatus' => request()->query('job_id') ? Cache::get('clone_job:'.request()->query('job_id')) : null,
         ]);
+    }
+
+    /**
+     * Retry a failed page generation or clone job.
+     */
+    public function retry(Request $request, Page $page): RedirectResponse|JsonResponse
+    {
+        $structure = is_array($page->structure_json) ? $page->structure_json : [];
+        $jobId = (string) Str::uuid();
+
+        $page->update([
+            'status' => 'processing',
+            'error_message' => null,
+        ]);
+
+        if ($page->page_type === 'cloned' || ! empty($structure['sourceUrl']) || ! empty($structure['cloned_url']) || ! empty($structure['url'])) {
+            $sourceUrl = $structure['sourceUrl'] ?? $structure['cloned_url'] ?? $structure['url'] ?? $page->track?->affiliate_url ?? 'https://example.com';
+            $affiliateLink = $structure['affiliateUrl'] ?? $structure['affiliate_link'] ?? $page->track?->affiliate_url ?? 'https://example.com';
+
+            ClonePageJob::dispatch($jobId, [
+                'url' => $sourceUrl,
+                'affiliate_link' => $affiliateLink,
+                'product_name' => $page->name,
+                'page_id' => $page->id,
+                'force_browser' => false,
+                'strip_trackers' => true,
+                'optimize_images' => true,
+                'enable_param_pass_through' => true,
+            ]);
+        } else {
+            GenerateCopyJob::dispatch(GenerateCopyJob::TYPE_VARIATIONS, [
+                'page_id' => $page->id,
+                'strategyType' => $page->page_type ?: 'flash_sale',
+                'productName' => $page->name,
+                'language' => $page->language ?: 'en',
+                'affiliateUrl' => $page->track?->affiliate_url ?? 'https://example.com',
+            ], $jobId);
+        }
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'status' => 'processing',
+                'job_id' => $jobId,
+                'page_id' => $page->id,
+                'message' => 'Job queued for retry.',
+            ]);
+        }
+
+        return back()->with('success', "Retrying page generation for '{$page->name}'.");
     }
 
     public function update(Request $request, Page $page, HtmlRenderer $renderer): RedirectResponse

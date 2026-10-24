@@ -61,6 +61,11 @@ class RefreshWatchingProducts extends Command
         $usedCalls = $budget->callsUsedThisMonth();
         $monthlyCap = config('watching.serpapi_monthly_cap', 230);
         $weeklyAllowance = $budget->weeklyCallAllowance();
+        $isQuotaHigh = $budget->isQuotaHigh();
+
+        if ($isQuotaHigh) {
+            $this->warn("SerpApi monthly quota usage has reached 85%+ ({$usedCalls}/{$monthlyCap} calls). Automatically restricting scheduled refresh to high priority or active campaign products only.");
+        }
 
         if ($productId) {
             $productsToRefresh = WatchedProduct::query()->where('id', $productId)->get();
@@ -70,7 +75,7 @@ class RefreshWatchingProducts extends Command
                 return self::FAILURE;
             }
         } else {
-            $productsToRefresh = $budget->selectProductsForWeeklyRefresh();
+            $productsToRefresh = $budget->selectProductsForWeeklyRefresh($isQuotaHigh);
         }
 
         // DRY-RUN PLAN
@@ -78,6 +83,7 @@ class RefreshWatchingProducts extends Command
             $this->info('=== Watching Products Refresh Budget Plan (Dry Run) ===');
             $this->line("Month: {$budget->currentPeriod()}");
             $this->line("SerpApi Calls Used This Month: {$usedCalls} / {$monthlyCap} cap (250 hard limit)");
+            $this->line('Quota High Restriction (>=85%): '.($isQuotaHigh ? 'ACTIVE (high priority / active campaigns only)' : 'Inactive'));
             $this->line("Weekly Call Allowance: {$weeklyAllowance}");
             $this->line('Selected Products for SerpApi Refresh: '.$productsToRefresh->count().' (projected calls: '.($productsToRefresh->count() * 2).')');
 
@@ -154,7 +160,8 @@ class RefreshWatchingProducts extends Command
                     break;
                 }
 
-                $data = $serpClient->fetchProductData($product, forceFresh: true);
+                $forceFresh = ! empty($productId);
+                $data = $serpClient->fetchProductData($product, forceFresh: $forceFresh, isManual: ! empty($productId));
                 $serpCallsMade += 2;
 
                 if ($data['success']) {

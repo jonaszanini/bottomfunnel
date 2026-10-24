@@ -1,13 +1,32 @@
+import { useState } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
 import Layout, { button, control, money, quiet } from '../../Components/Layout';
 
-export default function Show({ track, conversions, visits, spend, pages = [], track_campaigns = [] }) {
+export default function Show({ track, conversions, visits = [], spend, pages = [], track_campaigns = [] }) {
+    const [blockingIp, setBlockingIp] = useState(null);
+
     const spendForm = useForm({
         start_date: '',
         end_date: '',
         amount_cad: '',
         note: '',
     });
+
+    const handleBlockIp = (ip, fraudScore, reason) => {
+        setBlockingIp(ip);
+        router.post(
+            '/ip-blocks/block',
+            {
+                track_id: track.id,
+                ip_address: ip,
+                reason: `Manual one-click block from Track #${track.id} (Score: ${fraudScore}${reason ? ', Reason: ' + reason : ''})`,
+            },
+            {
+                preserveScroll: true,
+                onFinish: () => setBlockingIp(null),
+            }
+        );
+    };
 
     return (
         <Layout title={track.product_name}>
@@ -210,6 +229,150 @@ export default function Show({ track, conversions, visits, spend, pages = [], tr
                 <ul className="mt-3 space-y-1 text-sm text-theme-secondary">
                     {spend.map((row) => <li key={row.id}>{row.start_date} to {row.end_date}: {money(row.amount_cad)} {row.note}</li>)}
                 </ul>
+            </section>
+            {/* Traffic & Click Fraud Inspection Section */}
+            <section className="mt-4 overflow-x-auto rounded-xl border border-theme bg-theme-surface shadow-sm text-theme-primary">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border-b border-theme">
+                    <div>
+                        <h2 className="text-base font-semibold text-theme-primary flex items-center gap-2">
+                            <span>Traffic &amp; Click Fraud Inspection</span>
+                            <span className="rounded-full bg-theme-card border border-theme px-2 py-0.5 text-xs text-theme-secondary font-medium">
+                                {visits.length} recent sessions
+                            </span>
+                        </h2>
+                        <p className="text-xs text-theme-secondary mt-0.5">
+                            Real-time session telemetry, affiliate CTA presell hops, and fraud scores. Block malicious IPs directly to Google Ads campaign exclusions.
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <div className="text-right">
+                            <span className="text-[11px] uppercase tracking-wider text-theme-muted font-semibold block">Presell Hop CTR</span>
+                            <span className="text-base font-bold text-emerald-600 dark:text-emerald-400">
+                                {track.presell_hop_ctr ?? 0}%
+                            </span>
+                            <span className="text-[11px] text-theme-secondary ml-1">
+                                ({track.hop_visits ?? 0} / {track.total_visits ?? visits.length} visits)
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                    <table className="min-w-full text-left text-xs divide-y divide-theme">
+                        <thead className="bg-theme-canvas/60 text-theme-muted uppercase tracking-wider font-semibold">
+                            <tr>
+                                <th className="px-3 py-2.5">Landed / Time</th>
+                                <th className="px-3 py-2.5">IP Address</th>
+                                <th className="px-3 py-2.5">Google Click ID (GCLID)</th>
+                                <th className="px-3 py-2.5">Time on Page</th>
+                                <th className="px-3 py-2.5">Presell Hop</th>
+                                <th className="px-3 py-2.5">Fraud Score &amp; Reason</th>
+                                <th className="px-3 py-2.5 text-right">Automated Google Ads Exclusion</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-theme">
+                            {visits.map((visit) => {
+                                const isBlocked = visit.is_blocked || visit.block_status === 'applied';
+                                const isPending = visit.block_status === 'pending';
+                                const isWhitelisted = visit.block_status === 'whitelisted';
+                                const isBusy = blockingIp === visit.ip_address;
+
+                                return (
+                                    <tr key={visit.id} className="hover:bg-theme-subtle/40 transition-colors">
+                                        <td className="px-3 py-2.5 text-theme-secondary whitespace-nowrap">
+                                            {visit.landed_at ? new Date(visit.landed_at).toLocaleString() : '—'}
+                                        </td>
+                                        <td className="px-3 py-2.5 font-mono font-medium text-theme-primary whitespace-nowrap">
+                                            {visit.ip_address}
+                                        </td>
+                                        <td className="px-3 py-2.5 max-w-[180px] truncate font-mono text-[11px] text-theme-secondary" title={visit.gclid || 'Direct / Organic'}>
+                                            {visit.gclid ? (
+                                                <span className="inline-flex items-center gap-1 text-theme-accent">
+                                                    <span>gclid:</span>
+                                                    <span className="truncate">{visit.gclid}</span>
+                                                </span>
+                                            ) : (
+                                                <span className="text-theme-muted">None (Organic/Direct)</span>
+                                            )}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-theme-secondary whitespace-nowrap">
+                                            {visit.time_on_page_seconds}s
+                                        </td>
+                                        <td className="px-3 py-2.5 whitespace-nowrap">
+                                            {visit.presell_hop ? (
+                                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
+                                                    <span>✓ Hopped to Offer</span>
+                                                </div>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-500/10 text-zinc-400 border border-zinc-500/20">
+                                                    No Hop
+                                                </span>
+                                            )}
+                                        </td>
+                                        <td className="px-3 py-2.5 max-w-xs">
+                                            <div className="flex items-center gap-2">
+                                                {visit.fraud_score >= 70 ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30">
+                                                        ⚠️ {visit.fraud_score} / 100 {visit.auto_blocked ? '(Auto-blocked)' : '(High Risk)'}
+                                                    </span>
+                                                ) : visit.fraud_score >= 40 ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">
+                                                        ⚠️ {visit.fraud_score} / 100 (Flagged)
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                        {visit.fraud_score} Clean
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {visit.fraud_reason && (
+                                                <div className="mt-1 text-[11px] text-theme-muted truncate" title={visit.fraud_reason}>
+                                                    {visit.fraud_reason}
+                                                </div>
+                                            )}
+                                        </td>
+                                        <td className="px-3 py-2.5 text-right whitespace-nowrap">
+                                            {isBlocked ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
+                                                    ✓ Excluded on Google Ads
+                                                </span>
+                                            ) : isPending ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
+                                                    ⏳ Syncing Exclusion...
+                                                </span>
+                                            ) : isWhitelisted ? (
+                                                <span className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-semibold bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/25">
+                                                    🛡 Whitelisted
+                                                </span>
+                                            ) : (
+                                                <button
+                                                    type="button"
+                                                    disabled={isBusy}
+                                                    onClick={() => handleBlockIp(visit.ip_address, visit.fraud_score, visit.fraud_reason)}
+                                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white transition-colors shadow-sm cursor-pointer"
+                                                    title={`Exclude IP ${visit.ip_address} on Google Ads campaign`}
+                                                >
+                                                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                        <circle cx="12" cy="12" r="10" />
+                                                        <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                                                    </svg>
+                                                    <span>{isBusy ? 'Blocking...' : 'Block IP'}</span>
+                                                </button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {visits.length === 0 && (
+                                <tr>
+                                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-theme-muted">
+                                        No traffic visits recorded yet for this Track.
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
             <section className="mt-4 overflow-x-auto rounded-xl border border-theme bg-theme-surface shadow-sm text-theme-primary">

@@ -33,47 +33,7 @@ class ThemeFeatureTest extends TestCase
         $response->assertJsonValidationErrors(['theme']);
     }
 
-    public function test_welcome_page_injects_dark_class_when_dark_cookie_provided(): void
-    {
-        $response = $this->withUnencryptedCookies([
-            ThemeManager::COOKIE_NAME => 'dark',
-        ])->get('/welcome');
-
-        $response->assertOk();
-        $content = $response->getContent();
-
-        $this->assertStringContainsString('class="dark"', $content);
-        $this->assertStringContainsString('data-theme="dark"', $content);
-        $this->assertStringContainsString('data-theme-toggle', $content);
-        $this->assertStringContainsString('prefers-color-scheme: dark', $content);
-    }
-
-    public function test_welcome_page_injects_light_class_when_light_cookie_provided(): void
-    {
-        $response = $this->withUnencryptedCookies([
-            ThemeManager::COOKIE_NAME => 'light',
-        ])->get('/welcome');
-
-        $response->assertOk();
-        $content = $response->getContent();
-
-        $this->assertStringContainsString('class="light"', $content);
-        $this->assertStringContainsString('data-theme="light"', $content);
-    }
-
-    public function test_welcome_page_defaults_to_system_when_no_cookie_present(): void
-    {
-        $response = $this->get('/welcome');
-
-        $response->assertOk();
-        $content = $response->getContent();
-
-        $this->assertStringContainsString('class=""', $content);
-        $this->assertStringContainsString('data-theme="system"', $content);
-        $this->assertStringContainsString('prefers-color-scheme: dark', $content);
-    }
-
-    public function test_inertia_app_view_injects_dark_class_on_html_tag(): void
+    public function test_inertia_app_view_injects_dark_class_when_dark_cookie_provided(): void
     {
         $response = $this->withUnencryptedCookies([
             ThemeManager::COOKIE_NAME => 'dark',
@@ -85,5 +45,37 @@ class ThemeFeatureTest extends TestCase
         $this->assertStringContainsString('class="dark"', $content);
         $this->assertStringContainsString('data-theme="dark"', $content);
         $this->assertStringContainsString('prefers-color-scheme: dark', $content);
+    }
+
+    public function test_inertia_app_view_injects_light_class_when_light_cookie_provided(): void
+    {
+        $response = $this->withUnencryptedCookies([
+            ThemeManager::COOKIE_NAME => 'light',
+        ])->get('/login');
+
+        $response->assertOk();
+        $content = $response->getContent();
+
+        $this->assertStringContainsString('class="light"', $content);
+        $this->assertStringContainsString('data-theme="light"', $content);
+    }
+
+    public function test_inertia_app_view_defaults_to_system_when_no_cookie_present(): void
+    {
+        $response = $this->get('/login');
+
+        $response->assertOk();
+        $content = $response->getContent();
+
+        $this->assertStringContainsString('class=""', $content);
+        $this->assertStringContainsString('data-theme="system"', $content);
+        $this->assertStringContainsString('prefers-color-scheme: dark', $content);
+    }
+
+    public function test_welcome_route_redirects_to_home(): void
+    {
+        $response = $this->get('/welcome');
+
+        $response->assertRedirect('/');
     }
 }

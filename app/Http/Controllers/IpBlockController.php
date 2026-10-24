@@ -2,15 +2,65 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ApplyIpBlockJob;
 use App\Models\IpBlock;
+use App\Models\Track;
 use App\Services\Google\GoogleAdsClient;
 use App\Services\Google\GoogleRequestException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class IpBlockController extends Controller
 {
+    public function block(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'track_id' => ['required', 'integer', 'exists:tracks,id'],
+            'ip_address' => ['required', 'string', 'max:45'],
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $track = Track::query()->findOrFail($validated['track_id']);
+        $ip = trim($validated['ip_address']);
+        $reason = $validated['reason'] ?? 'Manual one-click block from Track inspection';
+
+        $isWhitelisted = IpBlock::query()
+            ->where('track_id', $track->id)
+            ->where('ip_address', $ip)
+            ->where('status', 'whitelisted')
+            ->exists();
+
+        if ($isWhitelisted) {
+            return back()->with('error', "IP {$ip} is whitelisted on this Track.");
+        }
+
+        $block = IpBlock::query()->firstOrCreate(
+            [
+                'track_id' => $track->id,
+                'ip_address' => $ip,
+                'campaign_id' => (string) ($track->campaign_ids[0] ?? ''),
+            ],
+            [
+                'google_ads_account_id' => $track->google_ads_account_id,
+                'reason' => $reason,
+                'status' => 'pending',
+            ],
+        );
+
+        if (! in_array($block->status, ['applied', 'whitelisted'], true)) {
+            $block->update([
+                'reason' => $reason,
+                'status' => 'pending',
+            ]);
+        }
+
+        ApplyIpBlockJob::dispatch($track->id, $ip, $reason);
+
+        return back()->with('success', "IP {$ip} queued for Google Ads exclusion.");
+    }
+
     public function index(): Response
     {
         return Inertia::render('Blocks/Index', [

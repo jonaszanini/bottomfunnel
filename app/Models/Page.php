@@ -13,6 +13,8 @@ class Page extends Model
         'campaign_id',
         'name',
         'page_type',
+        'status',
+        'error_message',
         'language',
         'structure_json',
         'html',
@@ -39,5 +41,25 @@ class Page extends Model
     public function visits(): HasMany
     {
         return $this->hasMany(Visit::class);
+    }
+
+    public function isProcessing(): bool
+    {
+        return $this->status === 'processing';
+    }
+
+    public function isFailed(): bool
+    {
+        return $this->status === 'failed';
+    }
+
+    public function isCompleted(): bool
+    {
+        return $this->status === 'completed' || $this->status === null;
+    }
+
+    public function failureReason(): ?string
+    {
+        return $this->error_message ?? ($this->structure_json['error'] ?? null);
     }
 }

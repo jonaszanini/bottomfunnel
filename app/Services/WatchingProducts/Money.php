@@ -36,6 +36,19 @@ class Money implements JsonSerializable
             return round($this->amount * (float) $today->cad_per_unit, 2);
         }
 
+        $latest = FxRate::query()
+            ->where('currency', $this->currency)
+            ->orderByDesc('rate_date')
+            ->first();
+
+        if ($latest && (float) $latest->cad_per_unit > 0) {
+            return round($this->amount * (float) $latest->cad_per_unit, 2);
+        }
+
+        if ($this->currency === 'USD') {
+            return round($this->amount * 1.38, 2);
+        }
+
         $fx ??= app(FrankfurterFx::class);
 
         return $fx->toCad($this->amount, $this->currency);
@@ -47,9 +60,43 @@ class Money implements JsonSerializable
             return round($this->amount, 2);
         }
 
+        if ($this->currency === 'CAD') {
+            $today = FxRate::query()
+                ->where('currency', 'USD')
+                ->whereDate('rate_date', today())
+                ->first();
+
+            if ($today && (float) $today->cad_per_unit > 0) {
+                return round($this->amount / (float) $today->cad_per_unit, 2);
+            }
+
+            $latest = FxRate::query()
+                ->where('currency', 'USD')
+                ->orderByDesc('rate_date')
+                ->first();
+
+            if ($latest && (float) $latest->cad_per_unit > 0) {
+                return round($this->amount / (float) $latest->cad_per_unit, 2);
+            }
+
+            return round($this->amount / 1.38, 2);
+        }
+
         $fx ??= app(FrankfurterFx::class);
 
         return $fx->toUsd($this->amount, $this->currency);
+    }
+
+    public function convertTo(string $targetCurrency, ?FrankfurterFx $fx = null): float
+    {
+        $targetCurrency = strtoupper(trim($targetCurrency));
+        if ($this->currency === $targetCurrency) {
+            return round($this->amount, 2);
+        }
+
+        $fx ??= app(FrankfurterFx::class);
+
+        return $fx->convert($this->amount, $this->currency, $targetCurrency);
     }
 
     public function toFxRate(): ?FxRate

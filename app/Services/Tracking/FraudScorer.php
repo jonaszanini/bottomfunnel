@@ -7,6 +7,8 @@ use App\Models\Visit;
 
 class FraudScorer
 {
+    public const AUTO_BLOCK_THRESHOLD = 70;
+
     /** @var list<string> */
     private array $datacenterCidrs = [
         '3.0.0.0/8', '13.32.0.0/15', '15.230.0.0/16', '18.32.0.0/11', '34.64.0.0/10',
@@ -66,6 +68,35 @@ class FraudScorer
             $reasons[] = 'Several short sessions from this IP with no conversion';
         }
 
+        // Check for repeated ad clicks from the same IP with different gclids and zero CTA engagement
+        $adClicks = Visit::query()
+            ->where('track_id', $visit->track_id)
+            ->where('ip_address', $visit->ip_address)
+            ->whereNotNull('gclid')
+            ->where('gclid', '!=', '')
+            ->where('landed_at', '>=', now()->subDays(7))
+            ->get(['id', 'gclid', 'presell_hop', 'converted', 'engagement']);
+
+        $distinctGclids = $adClicks->pluck('gclid')->filter()->unique();
+        if ($visit->gclid && ! $distinctGclids->contains($visit->gclid)) {
+            $distinctGclids->push($visit->gclid);
+        }
+
+        $hasCtaEngagement = $adClicks->contains(function (Visit $v): bool {
+            if ($v->presell_hop || $v->converted) {
+                return true;
+            }
+            $cta = is_array($v->engagement) ? (int) ($v->engagement['cta_clicks'] ?? 0) : 0;
+
+            return $cta > 0;
+        }) || ($visit->presell_hop || $visit->converted || (is_array($visit->engagement) && (int) ($visit->engagement['cta_clicks'] ?? 0) > 0));
+
+        if ($distinctGclids->count() >= 2 && ! $hasCtaEngagement) {
+            $score += 85;
+            $block = true;
+            $reasons[] = 'Repeated ad clicks from same IP with different gclids and zero CTA engagement';
+        }
+
         $flagOnly = false;
         if ($recent->count() >= 6 && $recent->avg('time_on_page_seconds') < 10) {
             $score += 40;
@@ -81,7 +112,11 @@ class FraudScorer
             ];
         }
 
-        if ($block) {
+        if ($block || $score >= self::AUTO_BLOCK_THRESHOLD) {
+            if ($reasons === []) {
+                $reasons[] = 'Fraud score threshold exceeded';
+            }
+
             return [
                 'score' => min(100, $score),
                 'flagged' => true,

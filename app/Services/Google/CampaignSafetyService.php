@@ -7,7 +7,9 @@ use App\Enums\WatchedProductStatus;
 use App\Models\AdSpend;
 use App\Models\CampaignAlert;
 use App\Models\Conversion;
+use App\Models\GoogleAdsCampaign;
 use App\Models\Track;
+use App\Models\Visit;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\ListingChecker;
 use App\Services\WatchingProducts\Money;
@@ -33,29 +35,26 @@ class CampaignSafetyService
 
     /**
      * Record or update an active safety alert, avoiding redundant duplicate rows.
+     * Deduplicates unresolved alerts for the same alert_type and campaign_id / track_id.
      *
      * @param  array<string, mixed>  $data
      */
     public function recordAlert(array $data): CampaignAlert
     {
         $type = $data['type'] ?? 'general';
-        $trackId = $data['track_id'] ?? null;
-        $productId = $data['product_id'] ?? null;
+        $campaignId = ! empty($data['campaign_id']) ? (string) $data['campaign_id'] : null;
+        $trackId = isset($data['track_id']) ? (int) $data['track_id'] : null;
+        $productId = isset($data['product_id']) ? (int) $data['product_id'] : null;
 
-        $query = CampaignAlert::query()->where('type', $type)->whereNull('dismissed_at');
-        if ($trackId !== null) {
-            $query->where('track_id', $trackId);
-        } elseif ($productId !== null) {
-            $query->where('product_id', $productId);
-        }
-
-        $existing = $query->first();
+        $existing = CampaignAlert::findOpenAlert($type, $campaignId, $trackId, $productId);
 
         if ($existing) {
             $existing->update([
                 'product_name' => $data['product_name'] ?? $existing->product_name,
                 'campaign_id' => $data['campaign_id'] ?? $existing->campaign_id,
                 'account_id' => $data['account_id'] ?? $existing->account_id,
+                'track_id' => $data['track_id'] ?? $existing->track_id,
+                'product_id' => $data['product_id'] ?? $existing->product_id,
                 'severity' => $data['severity'] ?? $existing->severity,
                 'reason' => $data['reason'] ?? $existing->reason,
                 'message' => $data['message'] ?? $existing->message,
@@ -83,6 +82,9 @@ class CampaignSafetyService
      *     product_id: int,
      *     product_name: string,
      *     listing_status: string,
+     *     is_transient: bool,
+     *     consecutive_failures: int,
+     *     required_failures: int,
      *     paused_campaigns: list<array{
      *         track_id: int,
      *         campaign_id: string,
@@ -101,9 +103,13 @@ class CampaignSafetyService
         foreach ($products as $product) {
             $check = $this->listingChecker->check($product);
             $listingStatus = $check['listing_status'] ?? ListingStatus::Unknown;
+            $isTransient = $check['is_transient'] ?? false;
+            $consecutive = $check['consecutive_failures'] ?? 0;
+            $required = $check['required_failures'] ?? 2;
+            $confirmedDown = $check['confirmed_down'] ?? ($listingStatus === ListingStatus::Expired);
 
             $pausedCampaigns = [];
-            if ($listingStatus === ListingStatus::Expired) {
+            if ($listingStatus === ListingStatus::Expired && $confirmedDown) {
                 // Update product listing status in database
                 $product->listing_status = ListingStatus::Expired;
                 $product->saveQuietly();
@@ -111,14 +117,22 @@ class CampaignSafetyService
                 $pausedCampaigns = $this->pauseCampaignsForProduct(
                     $product,
                     dryRun: $dryRun,
-                    reason: 'Offer page returned broken status or expired listing content.'
+                    reason: $isTransient
+                        ? "Offer page persistent connection failure ({$consecutive}/{$required} consecutive runs failed)."
+                        : 'Offer page returned broken status or expired listing content.'
                 );
+            } elseif ($listingStatus === ListingStatus::Active && $product->listing_status !== ListingStatus::Active) {
+                $product->listing_status = ListingStatus::Active;
+                $product->saveQuietly();
             }
 
             $results[] = [
                 'product_id' => $product->id,
                 'product_name' => $product->name,
                 'listing_status' => $listingStatus->value,
+                'is_transient' => $isTransient,
+                'consecutive_failures' => $consecutive,
+                'required_failures' => $required,
                 'paused_campaigns' => $pausedCampaigns,
             ];
         }
@@ -220,6 +234,10 @@ class CampaignSafetyService
                 try {
                     $this->googleAds->updateCampaignStatus($account, $campaignId, 'PAUSED');
 
+                    GoogleAdsCampaign::query()
+                        ->where('campaign_id', $campaignId)
+                        ->update(['status' => 'PAUSED']);
+
                     Log::warning("CampaignSafety: Paused Google Ads campaign {$campaignId} on account {$account->id} for product '{$product->name}'. Reason: {$reason}", [
                         'product_id' => $product->id,
                         'track_id' => $track->id,
@@ -273,7 +291,9 @@ class CampaignSafetyService
 
     /**
      * Check for spend-without-conversion bleeder campaigns and pause or flag them.
-     * Rule: Spend > 1.5× typical payout in window (default 7 days) and zero conversions.
+     * Rule: Spend > 1.5× typical payout in window (default 7 days), zero conversions,
+     * and traffic meets minimum click threshold (e.g. 20+ clicks). Defers auto-pause
+     * when traffic or pending postbacks occurred within the postback buffer window.
      *
      * @return list<array{
      *     track_id: int,
@@ -282,8 +302,10 @@ class CampaignSafetyService
      *     spend_cad: float,
      *     payout_cad: float,
      *     threshold_cad: float,
+     *     clicks_count: int,
      *     conversions_count: int,
      *     is_bleeder: bool,
+     *     postback_buffer_active: bool,
      *     action_taken: string,
      *     campaigns: list<array{campaign_id: string, action: string, error?: string}>
      * }>
@@ -293,10 +315,14 @@ class CampaignSafetyService
         ?float $spendMultiplier = null,
         ?int $windowDays = null,
         bool $suggestOnly = false,
-        ?int $trackId = null
+        ?int $trackId = null,
+        ?int $minClicks = null,
+        ?int $postbackBufferHours = null
     ): array {
         $windowDays ??= (int) config('flowhub.safety_rules.bleeder.window_days', config('watching.safety_rules.bleeder.window_days', 7));
         $spendMultiplier ??= (float) config('flowhub.safety_rules.bleeder.spend_payout_multiplier', config('watching.safety_rules.bleeder.spend_payout_multiplier', 1.5));
+        $minClicks ??= (int) config('flowhub.safety_rules.bleeder.min_clicks', config('watching.safety_rules.bleeder.min_clicks', 20));
+        $postbackBufferHours ??= (int) config('flowhub.safety_rules.bleeder.postback_buffer_hours', config('watching.safety_rules.bleeder.postback_buffer_hours', 3));
         $configuredAction = config('flowhub.safety_rules.bleeder.action', config('watching.safety_rules.bleeder.action', 'alert'));
 
         $effectiveAction = ($suggestOnly || $configuredAction === 'suggest') ? 'suggest' : ($configuredAction === 'pause' ? 'pause' : 'alert');
@@ -321,14 +347,18 @@ class CampaignSafetyService
                 continue;
             }
 
-            // 1. Calculate AdSpend in window (converted to CAD)
+            // 1. Calculate AdSpend in window (normalized to CAD via Money.php)
             $spendRows = AdSpend::query()
                 ->where('track_id', $track->id)
                 ->whereDate('start_date', '<=', $to->toDateString())
                 ->whereDate('end_date', '>=', $from->toDateString())
                 ->get();
 
-            $totalSpendCad = round((float) $spendRows->sum('amount_cad'), 2);
+            $totalSpendCad = 0.0;
+            foreach ($spendRows as $spendRow) {
+                $totalSpendCad += Money::make((float) $spendRow->amount_cad, 'CAD')->toCad();
+            }
+            $totalSpendCad = round($totalSpendCad, 2);
 
             // Fallback: if no AdSpend rows recorded, inspect linked WatchedProduct spend_amount
             if ($totalSpendCad <= 0) {
@@ -344,7 +374,13 @@ class CampaignSafetyService
                 }
             }
 
-            // 2. Count non-refunded conversions in window
+            // 2. Count clicks in window
+            $clicksCount = Visit::query()
+                ->where('track_id', $track->id)
+                ->whereBetween('landed_at', [$from, $to])
+                ->count();
+
+            // 3. Count non-refunded conversions in window
             $conversions = Conversion::query()
                 ->where('track_id', $track->id)
                 ->where('created_at', '>=', $from)
@@ -353,21 +389,25 @@ class CampaignSafetyService
 
             $conversionCount = $conversions->count();
 
-            // 3. Resolve typical payout in CAD
+            // 4. Resolve typical payout in CAD via Money.php
             $typicalPayoutCad = (float) $track->typical_commission_cad;
-            if ($typicalPayoutCad <= 0) {
+            if ($typicalPayoutCad > 0) {
+                $typicalPayoutCad = round(Money::make($typicalPayoutCad, 'CAD')->toCad(), 2);
+            } else {
                 $linkedProduct ??= WatchedProduct::query()
                     ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($track->product_name))])
                     ->first();
 
                 if ($linkedProduct) {
-                    $typicalPayoutCad = (float) ($linkedProduct->payout_cad > 0
-                        ? $linkedProduct->payout_cad
-                        : Money::make($linkedProduct->payout_amount, $linkedProduct->payout_currency ?: 'USD')->toCad());
+                    if ((float) $linkedProduct->payout_cad > 0) {
+                        $typicalPayoutCad = round(Money::make((float) $linkedProduct->payout_cad, 'CAD')->toCad(), 2);
+                    } elseif ((float) $linkedProduct->payout_amount > 0) {
+                        $typicalPayoutCad = round(Money::make((float) $linkedProduct->payout_amount, $linkedProduct->payout_currency ?: 'USD')->toCad(), 2);
+                    }
                 }
             }
 
-            // If typical payout is unknown or 0, we cannot reliably compute 1.5x payout threshold
+            // If typical payout is unknown or 0, we cannot reliably compute payout threshold
             if ($typicalPayoutCad <= 0) {
                 Log::info("CampaignSafety: Track {$track->id} ('{$track->product_name}') has no typical payout configured; skipping bleeder check.");
 
@@ -375,7 +415,29 @@ class CampaignSafetyService
             }
 
             $spendThresholdCad = round($typicalPayoutCad * $spendMultiplier, 2);
-            $isBleeder = ($totalSpendCad > $spendThresholdCad) && ($conversionCount === 0);
+
+            // Bleeder evaluation: spend > threshold CAD, 0 conversions, AND clicks >= min_clicks
+            $meetsSpend = $totalSpendCad > $spendThresholdCad;
+            $hasZeroConversions = $conversionCount === 0;
+            $meetsClicks = ($minClicks <= 0) || ($clicksCount >= $minClicks);
+
+            $isBleeder = $meetsSpend && $hasZeroConversions && $meetsClicks;
+
+            // 5. Attribution lag / Postback buffer check
+            // Check if there are active clicks or pending/unmatched conversions within postbackBufferHours
+            $bufferCutoff = now()->subHours($postbackBufferHours);
+            $hasPendingPostbackConversions = Conversion::query()
+                ->where('track_id', $track->id)
+                ->where('created_at', '>=', $bufferCutoff)
+                ->whereIn('status', ['unmatched', 'pending'])
+                ->exists();
+
+            $recentClicksCount = Visit::query()
+                ->where('track_id', $track->id)
+                ->where('landed_at', '>=', $bufferCutoff)
+                ->count();
+
+            $isPostbackBufferActive = $hasPendingPostbackConversions || ($recentClicksCount > 0);
 
             $actionTaken = 'none';
             $campaignResults = [];
@@ -384,12 +446,13 @@ class CampaignSafetyService
                 if ($suggestOnly || $effectiveAction === 'suggest') {
                     $actionTaken = 'suggest_pause';
 
-                    Log::warning("CampaignSafety [SUGGESTED PAUSE]: Bleeder detected for track {$track->id} ('{$track->product_name}'). Spend CAD: {$totalSpendCad} exceeds {$spendMultiplier}× payout threshold ({$spendThresholdCad} CAD) with 0 conversions in {$windowDays}d window. Suggested action: PAUSE campaign(s).", [
+                    Log::warning("CampaignSafety [SUGGESTED PAUSE]: Bleeder detected for track {$track->id} ('{$track->product_name}'). Spend CAD: {$totalSpendCad} exceeds {$spendMultiplier}× payout threshold ({$spendThresholdCad} CAD) with 0 conversions across {$clicksCount} clicks in {$windowDays}d window. Suggested action: PAUSE campaign(s).", [
                         'track_id' => $track->id,
                         'product_name' => $track->product_name,
                         'spend_cad' => $totalSpendCad,
                         'payout_cad' => $typicalPayoutCad,
                         'threshold_cad' => $spendThresholdCad,
+                        'clicks' => $clicksCount,
                         'conversions' => 0,
                         'window_days' => $windowDays,
                         'campaign_ids' => $campaignIds,
@@ -404,54 +467,89 @@ class CampaignSafetyService
                 } elseif (! $this->isAutoPauseEnabled()) {
                     $actionTaken = 'alert_raised';
 
-                    $alert = $this->recordAlert([
-                        'type' => 'bleeder',
-                        'product_name' => $track->product_name,
-                        'track_id' => $track->id,
-                        'campaign_id' => implode(', ', $campaignIds),
-                        'account_id' => $account->id,
-                        'severity' => 'warning',
-                        'reason' => 'Spend without conversion',
-                        'message' => "Bleeder detected for track {$track->id} ('{$track->product_name}'): Spend CA\${$totalSpendCad} exceeds {$spendMultiplier}× typical payout threshold (CA\${$spendThresholdCad}, payout reference CA\${$typicalPayoutCad}) with 0 conversions in {$windowDays}d window. Auto-pause is disabled; alert raised without mutating campaign status.",
-                        'spend_cad' => $totalSpendCad,
-                        'payout_cad' => $typicalPayoutCad,
-                        'threshold_cad' => $spendThresholdCad,
-                        'window_days' => $windowDays,
-                        'conversions_count' => 0,
-                        'action_taken' => 'alert_raised',
-                        'details' => [
+                    foreach ($campaignIds as $campaignId) {
+                        $campaignId = (string) $campaignId;
+                        $this->recordAlert([
+                            'type' => 'bleeder',
+                            'product_name' => $track->product_name,
+                            'track_id' => $track->id,
+                            'campaign_id' => $campaignId,
+                            'account_id' => $account->id,
+                            'severity' => 'warning',
+                            'reason' => 'Spend without conversion',
+                            'message' => "Bleeder detected for track {$track->id} ('{$track->product_name}'): Spend CA\${$totalSpendCad} exceeds {$spendMultiplier}× typical payout threshold (CA\${$spendThresholdCad}, payout reference CA\${$typicalPayoutCad}) with 0 conversions across {$clicksCount} clicks in {$windowDays}d window. Auto-pause is disabled; alert raised without mutating campaign status.",
                             'spend_cad' => $totalSpendCad,
                             'payout_cad' => $typicalPayoutCad,
                             'threshold_cad' => $spendThresholdCad,
                             'window_days' => $windowDays,
-                            'conversions' => 0,
-                            'campaign_ids' => $campaignIds,
-                            'auto_pause_enabled' => false,
-                        ],
-                    ]);
+                            'conversions_count' => 0,
+                            'action_taken' => 'alert_raised',
+                            'details' => [
+                                'spend_cad' => $totalSpendCad,
+                                'payout_cad' => $typicalPayoutCad,
+                                'threshold_cad' => $spendThresholdCad,
+                                'window_days' => $windowDays,
+                                'clicks' => $clicksCount,
+                                'conversions' => 0,
+                                'campaign_ids' => $campaignIds,
+                                'auto_pause_enabled' => false,
+                                'postback_buffer_active' => $isPostbackBufferActive,
+                            ],
+                        ]);
 
-                    Log::warning("CampaignSafety: [ALERT RAISED] Bleeder detected for track {$track->id} ('{$track->product_name}'). Spend CAD: {$totalSpendCad} exceeds threshold ({$spendThresholdCad} CAD) with 0 conversions in {$windowDays}d window. Auto-pause disabled; no campaign was paused.", [
+                        $campaignResults[] = [
+                            'campaign_id' => $campaignId,
+                            'action' => 'alert_raised',
+                        ];
+                    }
+                } elseif ($isPostbackBufferActive) {
+                    // Auto-pause is ENABLED, but recent traffic or pending conversions fall within the postback buffer window
+                    $actionTaken = 'postback_buffer_held';
+
+                    Log::warning("CampaignSafety [POSTBACK BUFFER HELD]: Bleeder threshold met for track {$track->id} ('{$track->product_name}'), but {$recentClicksCount} clicks or pending postbacks occurred in the {$postbackBufferHours}h attribution lag buffer. Auto-pause held pending attribution window completion.", [
                         'track_id' => $track->id,
-                        'product_name' => $track->product_name,
-                        'spend_cad' => $totalSpendCad,
-                        'payout_cad' => $typicalPayoutCad,
-                        'threshold_cad' => $spendThresholdCad,
-                        'conversions' => 0,
-                        'window_days' => $windowDays,
-                        'campaign_ids' => $campaignIds,
-                        'alert_id' => $alert->id,
+                        'recent_clicks' => $recentClicksCount,
+                        'buffer_hours' => $postbackBufferHours,
                     ]);
 
                     foreach ($campaignIds as $campaignId) {
+                        $campaignId = (string) $campaignId;
+                        $this->recordAlert([
+                            'type' => 'bleeder',
+                            'product_name' => $track->product_name,
+                            'track_id' => $track->id,
+                            'campaign_id' => $campaignId,
+                            'account_id' => $account->id,
+                            'severity' => 'warning',
+                            'reason' => 'Spend without conversion (postback buffer active)',
+                            'message' => "Bleeder detected for track {$track->id} ('{$track->product_name}'): Spend CA\${$totalSpendCad} exceeded threshold CA\${$spendThresholdCad}, but {$recentClicksCount} clicks occurred within the {$postbackBufferHours}h postback delay buffer. Auto-pause held pending postback arrival.",
+                            'spend_cad' => $totalSpendCad,
+                            'payout_cad' => $typicalPayoutCad,
+                            'threshold_cad' => $spendThresholdCad,
+                            'window_days' => $windowDays,
+                            'conversions_count' => 0,
+                            'action_taken' => 'postback_buffer_held',
+                            'details' => [
+                                'spend_cad' => $totalSpendCad,
+                                'payout_cad' => $typicalPayoutCad,
+                                'threshold_cad' => $spendThresholdCad,
+                                'window_days' => $windowDays,
+                                'clicks' => $clicksCount,
+                                'recent_clicks' => $recentClicksCount,
+                                'postback_buffer_hours' => $postbackBufferHours,
+                                'postback_buffer_active' => true,
+                            ],
+                        ]);
+
                         $campaignResults[] = [
-                            'campaign_id' => (string) $campaignId,
-                            'action' => 'alert_raised',
+                            'campaign_id' => $campaignId,
+                            'action' => 'postback_buffer_held',
                         ];
                     }
                 } elseif ($dryRun) {
                     $actionTaken = 'dry_run_pause';
 
-                    Log::info("CampaignSafety: [DRY RUN] Would pause bleeder campaigns for track {$track->id} ('{$track->product_name}'). Spend CAD: {$totalSpendCad} > Threshold CAD: {$spendThresholdCad} with 0 conversions in {$windowDays}d.", [
+                    Log::info("CampaignSafety: [DRY RUN] Would pause bleeder campaigns for track {$track->id} ('{$track->product_name}'). Spend CAD: {$totalSpendCad} > Threshold CAD: {$spendThresholdCad} with 0 conversions across {$clicksCount} clicks in {$windowDays}d.", [
                         'track_id' => $track->id,
                         'campaign_ids' => $campaignIds,
                     ]);
@@ -471,7 +569,11 @@ class CampaignSafetyService
                         try {
                             $this->googleAds->updateCampaignStatus($account, $campaignId, 'PAUSED');
 
-                            Log::warning("CampaignSafety: Paused bleeder Google Ads campaign {$campaignId} on account {$account->id} for track {$track->id} ('{$track->product_name}'). Spend CAD: {$totalSpendCad} > Threshold CAD: {$spendThresholdCad} with 0 conversions in {$windowDays}d.", [
+                            GoogleAdsCampaign::query()
+                                ->where('campaign_id', $campaignId)
+                                ->update(['status' => 'PAUSED']);
+
+                            Log::warning("CampaignSafety: Paused bleeder Google Ads campaign {$campaignId} on account {$account->id} for track {$track->id} ('{$track->product_name}'). Spend CAD: {$totalSpendCad} > Threshold CAD: {$spendThresholdCad} with 0 conversions across {$clicksCount} clicks in {$windowDays}d.", [
                                 'track_id' => $track->id,
                                 'product_name' => $track->product_name,
                                 'campaign_id' => $campaignId,
@@ -479,6 +581,7 @@ class CampaignSafetyService
                                 'payout_cad' => $typicalPayoutCad,
                                 'threshold_cad' => $spendThresholdCad,
                                 'conversions' => 0,
+                                'clicks' => $clicksCount,
                                 'window_days' => $windowDays,
                             ]);
 
@@ -490,7 +593,7 @@ class CampaignSafetyService
                                 'account_id' => $account->id,
                                 'severity' => 'danger',
                                 'reason' => 'Spend without conversion',
-                                'message' => "Paused bleeder Google Ads campaign {$campaignId} for track {$track->id} ('{$track->product_name}'). Spend CA\${$totalSpendCad} exceeded threshold CA\${$spendThresholdCad} with 0 conversions.",
+                                'message' => "Paused bleeder Google Ads campaign {$campaignId} for track {$track->id} ('{$track->product_name}'). Spend CA\${$totalSpendCad} exceeded threshold CA\${$spendThresholdCad} with 0 conversions across {$clicksCount} clicks.",
                                 'spend_cad' => $totalSpendCad,
                                 'payout_cad' => $typicalPayoutCad,
                                 'threshold_cad' => $spendThresholdCad,
@@ -527,8 +630,10 @@ class CampaignSafetyService
                 'spend_cad' => $totalSpendCad,
                 'payout_cad' => $typicalPayoutCad,
                 'threshold_cad' => $spendThresholdCad,
+                'clicks_count' => $clicksCount,
                 'conversions_count' => $conversionCount,
                 'is_bleeder' => $isBleeder,
+                'postback_buffer_active' => $isPostbackBufferActive,
                 'action_taken' => $actionTaken,
                 'campaigns' => $campaignResults,
             ];

@@ -4,9 +4,19 @@ namespace App\Services\Pages;
 
 class HtmlDocument
 {
+    protected HtmlSanitizer $sanitizer;
+
+    public function __construct(?HtmlSanitizer $sanitizer = null)
+    {
+        $this->sanitizer = $sanitizer ?: app(HtmlSanitizer::class);
+    }
+
     public function wrap(string $body, string $title, string $script = ''): string
     {
         $safeTitle = e($title);
+        // Strip third-party tracking scripts, competitor pixels, and meta-refresh from body before wrapping
+        $cleanBody = $this->sanitizer->stripThirdPartyTrackers($body);
+        // First-party TrackScript is appended after sanitization so tracking remains intact
         $scriptBlock = trim($script) === '' ? '' : "\n".$script;
 
         return <<<HTML
@@ -39,7 +49,7 @@ button{font-family:"Segoe UI",sans-serif;background:#0f766e;color:#fff;border:0;
 </head>
 <body>
 <main class="wrap">
-{$body}
+{$cleanBody}
 </main>{$scriptBlock}
 </body>
 </html>

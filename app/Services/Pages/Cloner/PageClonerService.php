@@ -2,15 +2,30 @@
 
 namespace App\Services\Pages\Cloner;
 
+use App\Services\Pages\HtmlSanitizer;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
+use Illuminate\Support\Facades\Http;
+use Throwable;
 
 class PageClonerService
 {
+    public const MAX_ASSET_SIZE_BYTES = 10485760; // 10MB individual asset download cap
+
+    public const MAX_CONCURRENT_PER_HOST = 3; // Limit concurrent requests per host to prevent WAF blocks
+
+    /** @var array<string, int> Host request counters for rate limiting */
+    protected array $hostRequestCounters = [];
+
+    protected HtmlSanitizer $sanitizer;
+
     public function __construct(
-        protected PageCrawlerService $crawler
-    ) {}
+        protected PageCrawlerService $crawler,
+        ?HtmlSanitizer $sanitizer = null
+    ) {
+        $this->sanitizer = $sanitizer ?: app(HtmlSanitizer::class);
+    }
 
     /**
      * Known third party analytics & pixel script signatures to remove.
@@ -20,8 +35,9 @@ class PageClonerService
         '/google-analytics\.com/i',
         '/connect\.facebook\.net/i',
         '/fbevents\.js/i',
+        '/facebook\.com\/tr/i',
         '/analytics\.tiktok\.com/i',
-        '/clarity\.ms\/tag/i',
+        '/clarity\.ms/i',
         '/static\.hotjar\.com/i',
         '/snap\.licdn\.com/i',
         '/sc-static\.net\/scevent/i',
@@ -64,7 +80,8 @@ class PageClonerService
      *     customBodyScripts?: ?string,
      *     stripTrackers?: bool,
      *     optimizeImages?: bool,
-     *     enableParamPassThrough?: bool
+     *     enableParamPassThrough?: bool,
+     *     localizeAssets?: bool
      * }  $config
      * @return array{
      *     clonedHtml: string,
@@ -86,13 +103,14 @@ class PageClonerService
     public function clone(array $config): array
     {
         $rawHtml = $config['rawHtml'];
-        $sourceUrl = $config['sourceUrl'];
+        $sourceUrl = $this->crawler->validateUrlSecurity($config['sourceUrl']);
         $affiliateLink = trim((string) ($config['affiliateLink'] ?? ''));
         $customHead = trim((string) ($config['customHeadScripts'] ?? ''));
         $customBody = trim((string) ($config['customBodyScripts'] ?? ''));
         $stripTrackers = $config['stripTrackers'] ?? true;
         $optimizeImages = $config['optimizeImages'] ?? true;
         $enableParamPassThrough = $config['enableParamPassThrough'] ?? true;
+        $localizeAssets = $config['localizeAssets'] ?? false;
 
         $stats = [
             'assetsRewritten' => 0,
@@ -104,23 +122,22 @@ class PageClonerService
 
         $linksInventory = [];
 
-        // Pre-clean: strip anti-framing meta tags
-        $cleanHtml = preg_replace(
-            '/<meta[^>]+(?:http-equiv\s*=\s*["\']?(?:Content-Security-Policy|X-Frame-Options)["\']?)[^>]*>/iu',
-            '',
-            $rawHtml
-        ) ?? $rawHtml;
+        // 1. Sanitization runs BEFORE PresellCompilerEngine and cloner injects Flow Hub's
+        // own TrackScript and affiliate hop links. Strip third-party tracking scripts,
+        // competitor pixels, meta refresh redirects, and anti-framing locks first.
+        $cleanHtml = $stripTrackers
+            ? $this->sanitizer->stripThirdPartyTrackers($rawHtml)
+            : $rawHtml;
 
         $dom = new DOMDocument;
         $prevErrors = libxml_use_internal_errors(true);
-        // Load with UTF-8
         $dom->loadHTML('<?xml encoding="utf-8" ?>'.$cleanHtml, LIBXML_NOERROR | LIBXML_NOWARNING | LIBXML_NONET);
         libxml_clear_errors();
         libxml_use_internal_errors($prevErrors);
 
         $xpath = new DOMXPath($dom);
 
-        // 1. Strip Tracking Scripts & Anti-Framing scripts
+        // 2. Secondary tracker cleanup & stats tallying
         if ($stripTrackers) {
             $scripts = $xpath->query('//script');
             if ($scripts) {
@@ -132,10 +149,8 @@ class PageClonerService
 
                     $src = $script->getAttribute('src');
                     $inlineContent = $script->textContent;
-
                     $shouldRemove = false;
 
-                    // External tracking script detection
                     if ($src !== '') {
                         foreach (self::TRACKING_SCRIPT_PATTERNS as $pattern) {
                             if (preg_match($pattern, $src)) {
@@ -145,7 +160,6 @@ class PageClonerService
                         }
                     }
 
-                    // Inline tracking or domain lock detection
                     if (! $shouldRemove && $inlineContent !== '') {
                         foreach (self::INLINE_TRACKER_SIGNATURES as $sig) {
                             if (str_contains($inlineContent, $sig)) {
@@ -166,7 +180,7 @@ class PageClonerService
                 }
             }
 
-            // Also strip noscript tracking pixels (e.g. facebook noscript img)
+            // Strip noscript tracking pixels
             $noscripts = $xpath->query('//noscript');
             if ($noscripts) {
                 $noRemove = [];
@@ -185,7 +199,7 @@ class PageClonerService
             }
         }
 
-        // 2. Smart Asset & Relative Path Resolution
+        // 3. Smart Asset & Relative Path Resolution with SSRF validation
         // A) Links, Stylesheets, Icons, Preloads
         $linkElements = $xpath->query('//link[@href]');
         if ($linkElements) {
@@ -193,6 +207,22 @@ class PageClonerService
                 if ($link instanceof DOMElement) {
                     $rawHref = $link->getAttribute('href');
                     $absHref = $this->crawler->resolveAbsoluteUrl($rawHref, $sourceUrl);
+
+                    // SSRF validation on sub-asset URL
+                    if (! $this->crawler->isSafeUrl($absHref)) {
+                        continue;
+                    }
+
+                    if ($localizeAssets && $link->getAttribute('rel') === 'stylesheet') {
+                        $localPath = $this->downloadAndStoreAsset($absHref);
+                        if ($localPath) {
+                            $link->setAttribute('href', $localPath);
+                            $stats['assetsRewritten']++;
+
+                            continue;
+                        }
+                    }
+
                     if ($absHref !== $rawHref) {
                         $link->setAttribute('href', $absHref);
                         $stats['assetsRewritten']++;
@@ -208,6 +238,12 @@ class PageClonerService
                 if ($script instanceof DOMElement) {
                     $rawSrc = $script->getAttribute('src');
                     $absSrc = $this->crawler->resolveAbsoluteUrl($rawSrc, $sourceUrl);
+
+                    // SSRF validation
+                    if (! $this->crawler->isSafeUrl($absSrc)) {
+                        continue;
+                    }
+
                     if ($absSrc !== $rawSrc) {
                         $script->setAttribute('src', $absSrc);
                         $stats['assetsRewritten']++;
@@ -247,19 +283,32 @@ class PageClonerService
                     $stats['lazyImagesPromoted']++;
                 }
 
-                // Resolve src
+                // Resolve src with SSRF protection
                 if ($media->hasAttribute('src')) {
                     $src = $media->getAttribute('src');
                     if ($src !== '' && ! str_starts_with($src, 'data:')) {
                         $absSrc = $this->crawler->resolveAbsoluteUrl($src, $sourceUrl);
-                        if ($absSrc !== $src) {
-                            $media->setAttribute('src', $absSrc);
-                            $stats['assetsRewritten']++;
+
+                        if ($this->crawler->isSafeUrl($absSrc)) {
+                            if ($localizeAssets && $tag === 'img') {
+                                $localImg = $this->downloadAndStoreAsset($absSrc);
+                                if ($localImg) {
+                                    $media->setAttribute('src', $localImg);
+                                    $stats['assetsRewritten']++;
+
+                                    continue;
+                                }
+                            }
+
+                            if ($absSrc !== $src) {
+                                $media->setAttribute('src', $absSrc);
+                                $stats['assetsRewritten']++;
+                            }
                         }
                     }
                 }
 
-                // Resolve srcset
+                // Resolve srcset with SSRF protection
                 if ($media->hasAttribute('srcset')) {
                     $srcset = $media->getAttribute('srcset');
                     $rewrittenSrcset = $this->rewriteSrcset($srcset, $sourceUrl);
@@ -274,7 +323,7 @@ class PageClonerService
                     $poster = $media->getAttribute('poster');
                     if ($poster !== '') {
                         $absPoster = $this->crawler->resolveAbsoluteUrl($poster, $sourceUrl);
-                        if ($absPoster !== $poster) {
+                        if ($this->crawler->isSafeUrl($absPoster) && $absPoster !== $poster) {
                             $media->setAttribute('poster', $absPoster);
                             $stats['assetsRewritten']++;
                         }
@@ -300,7 +349,7 @@ class PageClonerService
             }
         }
 
-        // D) Rewrite CSS url(...) inside <style> tags and inline style attributes
+        // D) Rewrite CSS url(...) inside <style> tags and inline style attributes with SSRF check
         $styleElements = $xpath->query('//style');
         if ($styleElements) {
             foreach ($styleElements as $styleEl) {
@@ -329,7 +378,7 @@ class PageClonerService
             }
         }
 
-        // 3. Automated Affiliate Link Replacement
+        // 4. Automated Affiliate Link Replacement
         $anchors = $xpath->query('//a[@href]');
         $checkoutKeywords = '/(checkout|buy|order|cart|pay|claim|get|special-offer|hop\.clickbank|buygoods|maxweb|digistore24|hotmart)/iu';
 
@@ -404,7 +453,7 @@ class PageClonerService
             }
         }
 
-        // 4. Ensure Responsive Viewport Meta
+        // 5. Ensure Responsive Viewport Meta
         $viewportMeta = $xpath->query('//meta[@name="viewport"]');
         if (! $viewportMeta || $viewportMeta->length === 0) {
             $head = $dom->getElementsByTagName('head')->item(0);
@@ -419,7 +468,8 @@ class PageClonerService
         // Convert DOM back to HTML string
         $finalHtml = $dom->saveHTML();
 
-        // 5. Injections: Custom Head, Custom Body, and Parameter Pass-Through Script
+        // 6. Injections: Custom Head, Custom Body, and Parameter Pass-Through Script
+        // These first-party scripts and attribution forwards are injected AFTER sanitization.
         $paramPassThroughScript = $enableParamPassThrough
             ? $this->generateParamPassThroughScript($affiliateLink)
             : '';
@@ -452,6 +502,137 @@ class PageClonerService
     }
 
     /**
+     * Download and sanitize local storage path for a sub-asset using deterministic content hash.
+     * Enforces SSRF checks on the asset URL, redirect hops, individual size caps, and per-host rate limits.
+     */
+    public function downloadAndStoreAsset(string $assetUrl): ?string
+    {
+        $assetUrl = trim($assetUrl);
+        if ($assetUrl === '' || str_starts_with($assetUrl, 'data:')) {
+            return null;
+        }
+
+        // 1. SSRF validation on sub-asset URL
+        try {
+            $safeUrl = $this->crawler->validateUrlSecurity($assetUrl);
+        } catch (Throwable) {
+            return null;
+        }
+
+        $host = parse_url($safeUrl, PHP_URL_HOST);
+        if (! $host) {
+            return null;
+        }
+
+        // 2. Per-host throttling to prevent target WAF blocks
+        $this->throttleHost($host);
+
+        // 3. Ensure local asset storage directory exists
+        $storageDir = storage_path('app/public/cloned_assets');
+        if (! is_dir($storageDir)) {
+            @mkdir($storageDir, 0755, true);
+        }
+
+        try {
+            $response = Http::withoutVerifying()
+                ->withOptions([
+                    'verify' => false,
+                    'allow_redirects' => false,
+                ])
+                ->connectTimeout(5)
+                ->timeout(10)
+                ->get($safeUrl);
+
+            // Handle redirect if needed with SSRF check
+            if ($response->redirect()) {
+                $location = $response->header('Location');
+                if ($location) {
+                    $nextUrl = $this->crawler->resolveAbsoluteUrl($location, $safeUrl);
+                    $safeUrl = $this->crawler->validateUrlSecurity($nextUrl);
+                    $response = Http::withoutVerifying()
+                        ->withOptions(['verify' => false, 'allow_redirects' => false])
+                        ->connectTimeout(5)
+                        ->timeout(10)
+                        ->get($safeUrl);
+                }
+            }
+
+            if (! $response->successful()) {
+                return null;
+            }
+
+            $contentLength = (int) $response->header('Content-Length');
+            if ($contentLength > self::MAX_ASSET_SIZE_BYTES) {
+                return null;
+            }
+
+            $content = $response->body();
+            if (strlen($content) > self::MAX_ASSET_SIZE_BYTES) {
+                return null;
+            }
+
+            // 4. Sanitize local asset storage path using deterministic content hash
+            $hash = hash('sha256', $content);
+            $extension = $this->determineAssetExtension($safeUrl, (string) $response->header('Content-Type'));
+            $filename = "{$hash}.{$extension}";
+            $destinationPath = $storageDir.DIRECTORY_SEPARATOR.$filename;
+
+            if (! file_exists($destinationPath)) {
+                @file_put_contents($destinationPath, $content);
+            }
+
+            return '/storage/cloned_assets/'.$filename;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Determine a safe asset extension from URL or MIME content-type.
+     */
+    protected function determineAssetExtension(string $url, string $contentType): string
+    {
+        $path = parse_url($url, PHP_URL_PATH) ?: '';
+        $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        $allowed = ['css', 'js', 'jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'avif', 'ico', 'woff', 'woff2', 'ttf', 'eot', 'otf'];
+        if (in_array($ext, $allowed, true)) {
+            return $ext;
+        }
+
+        $mimeMap = [
+            'text/css' => 'css',
+            'image/jpeg' => 'jpg',
+            'image/png' => 'png',
+            'image/gif' => 'gif',
+            'image/svg+xml' => 'svg',
+            'image/webp' => 'webp',
+            'image/avif' => 'avif',
+            'image/x-icon' => 'ico',
+            'font/woff2' => 'woff2',
+            'font/woff' => 'woff',
+            'font/ttf' => 'ttf',
+            'application/font-woff2' => 'woff2',
+            'application/font-woff' => 'woff',
+        ];
+
+        $cleanMime = strtolower(trim(explode(';', $contentType)[0]));
+
+        return $mimeMap[$cleanMime] ?? 'bin';
+    }
+
+    /**
+     * Throttle requests per host to limit concurrent requests and prevent target WAF rate limits.
+     */
+    protected function throttleHost(string $host): void
+    {
+        $this->hostRequestCounters[$host] = ($this->hostRequestCounters[$host] ?? 0) + 1;
+        if ($this->hostRequestCounters[$host] > 1) {
+            usleep(25000); // 25ms delay
+        }
+    }
+
+    /**
      * Rewrite multiple URLs inside an HTML5 `srcset` attribute.
      */
     protected function rewriteSrcset(string $srcset, string $baseUrl): string
@@ -465,12 +646,15 @@ class PageClonerService
                 continue;
             }
 
-            // A candidate looks like "image-320w.jpg 320w" or "image-2x.jpg 2x" or just "image.jpg"
             if (preg_match('/^(\S+)(\s+.+)?$/', $trimmed, $matches)) {
                 $url = $matches[1];
                 $descriptor = $matches[2] ?? '';
                 $absUrl = $this->crawler->resolveAbsoluteUrl($url, $baseUrl);
-                $rewrittenParts[] = $absUrl.$descriptor;
+                if ($this->crawler->isSafeUrl($absUrl)) {
+                    $rewrittenParts[] = $absUrl.$descriptor;
+                } else {
+                    $rewrittenParts[] = $trimmed;
+                }
             } else {
                 $rewrittenParts[] = $trimmed;
             }
@@ -494,6 +678,9 @@ class PageClonerService
             }
 
             $abs = $this->crawler->resolveAbsoluteUrl($url, $baseUrl);
+            if (! $this->crawler->isSafeUrl($abs)) {
+                return $matches[0];
+            }
 
             return "url({$quote}{$abs}{$quote})";
         }, $css) ?? $css;
@@ -503,6 +690,9 @@ class PageClonerService
             $quote = $matches[1];
             $url = trim($matches[2]);
             $abs = $this->crawler->resolveAbsoluteUrl($url, $baseUrl);
+            if (! $this->crawler->isSafeUrl($abs)) {
+                return $matches[0];
+            }
 
             return "@import {$quote}{$abs}{$quote}";
         }, $css) ?? $css;

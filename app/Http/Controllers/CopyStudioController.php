@@ -19,11 +19,14 @@ class CopyStudioController extends Controller
      */
     public function index(Request $request): Response
     {
+        $jobId = (string) $request->query('job_id', '');
+
         return Inertia::render('Copy/Index', [
             'initialUrl' => (string) $request->query('url', ''),
             'initialProduct' => (string) $request->query('product', ''),
             'initialLang' => (string) $request->query('lang', 'en'),
             'initialKeyword' => (string) $request->query('targetKeyword', ''),
+            'jobStatus' => $jobId ? Cache::get("generate_copy_job:{$jobId}") : null,
         ]);
     }
 
@@ -157,6 +160,7 @@ class CopyStudioController extends Controller
                 'job_id' => $jobId,
                 'status' => 'failed',
                 'message' => $cached['error'] ?? 'Copy generation failed.',
+                'error' => $cached['error'] ?? 'Copy generation failed.',
             ], 422);
         }
 

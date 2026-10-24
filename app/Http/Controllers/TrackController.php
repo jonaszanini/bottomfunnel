@@ -8,6 +8,7 @@ use App\Models\Conversion;
 use App\Models\ConversionAction;
 use App\Models\GoogleAdsAccount;
 use App\Models\GoogleAdsCampaign;
+use App\Models\IpBlock;
 use App\Models\Page;
 use App\Models\Track;
 use App\Models\Visit;
@@ -73,6 +74,16 @@ class TrackController extends Controller
     {
         $track->load('account:id,name,customer_id', 'conversionAction:id,name');
 
+        $activeBlocks = IpBlock::query()
+            ->where('track_id', $track->id)
+            ->whereIn('status', ['applied', 'pending', 'whitelisted'])
+            ->pluck('status', 'ip_address')
+            ->all();
+
+        $totalVisits = $track->visits()->count();
+        $hopVisits = $track->visits()->where('presell_hop', true)->count();
+        $hopCtr = $totalVisits > 0 ? round(($hopVisits / $totalVisits) * 100, 2) : 0;
+
         return Inertia::render('Tracks/Show', [
             'track' => [
                 'id' => $track->id,
@@ -97,6 +108,9 @@ class TrackController extends Controller
                 'account_customer_id' => $track->account?->customer_id,
                 'conversion_action' => $track->conversionAction?->name,
                 'campaign_ids' => $track->campaign_ids ?? [],
+                'total_visits' => $totalVisits,
+                'hop_visits' => $hopVisits,
+                'presell_hop_ctr' => $hopCtr,
             ],
             'conversions' => $track->conversions()->latest()->limit(100)->get()->map(fn (Conversion $conversion): array => [
                 'id' => $conversion->id,
@@ -112,14 +126,38 @@ class TrackController extends Controller
                 'visit_id' => $conversion->visit_id,
                 'created_at' => $conversion->created_at?->toDateTimeString(),
             ]),
-            'visits' => $track->visits()->latest('landed_at')->limit(50)->get(['id', 'session_id', 'gclid', 'ip_address', 'landed_at', 'converted'])
+            'visits' => $track->visits()->latest('landed_at')->limit(100)
+                ->get([
+                    'id',
+                    'session_id',
+                    'gclid',
+                    'ip_address',
+                    'landed_at',
+                    'time_on_page_seconds',
+                    'converted',
+                    'presell_hop',
+                    'hopped_at',
+                    'fraud_score',
+                    'fraud_reason',
+                    'flagged',
+                    'auto_blocked',
+                ])
                 ->map(fn (Visit $visit): array => [
                     'id' => $visit->id,
                     'session_id' => $visit->session_id,
                     'gclid' => $visit->gclid,
                     'ip_address' => $visit->ip_address,
                     'landed_at' => $visit->landed_at?->toDateTimeString(),
-                    'converted' => $visit->converted,
+                    'time_on_page_seconds' => (int) ($visit->time_on_page_seconds ?? 0),
+                    'converted' => (bool) $visit->converted,
+                    'presell_hop' => (bool) $visit->presell_hop,
+                    'hopped_at' => $visit->hopped_at?->toDateTimeString(),
+                    'fraud_score' => (int) ($visit->fraud_score ?? 0),
+                    'fraud_reason' => $visit->fraud_reason,
+                    'flagged' => (bool) $visit->flagged,
+                    'auto_blocked' => (bool) $visit->auto_blocked,
+                    'is_blocked' => isset($activeBlocks[$visit->ip_address]),
+                    'block_status' => $activeBlocks[$visit->ip_address] ?? null,
                 ]),
             'spend' => $track->adSpend()->latest()->limit(20)->get()->map(fn (AdSpend $spend): array => [
                 'id' => $spend->id,

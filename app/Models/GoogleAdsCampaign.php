@@ -41,4 +41,19 @@ class GoogleAdsCampaign extends Model
     {
         return $this->hasMany(Page::class, 'campaign_id', 'campaign_id');
     }
+
+    public function alerts(): HasMany
+    {
+        return $this->hasMany(CampaignAlert::class, 'campaign_id', 'campaign_id');
+    }
+
+    public function activeAlerts(): HasMany
+    {
+        return $this->hasMany(CampaignAlert::class, 'campaign_id', 'campaign_id')->whereNull('dismissed_at');
+    }
+
+    public function isPaused(): bool
+    {
+        return strtoupper((string) $this->status) === 'PAUSED';
+    }
 }

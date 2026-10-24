@@ -52,10 +52,11 @@ class ApplyIpBlockJob implements ShouldQueue
         }
 
         foreach ($campaigns as $campaignId) {
+            $campaignIdStr = (string) $campaignId;
             $block = IpBlock::query()->firstOrNew([
                 'track_id' => $track->id,
                 'ip_address' => $this->ip,
-                'campaign_id' => (string) $campaignId,
+                'campaign_id' => $campaignIdStr,
             ]);
             if (in_array($block->status, ['applied', 'whitelisted'], true) && $block->criterion_resource_name) {
                 continue;
@@ -64,10 +65,14 @@ class ApplyIpBlockJob implements ShouldQueue
             $block->fill([
                 'google_ads_account_id' => $account->id,
                 'reason' => $this->reason,
-            ]);
+                'status' => 'pending',
+            ])->save();
 
             try {
-                $resource = $googleAds->blockIp($account, (string) $campaignId, $this->ip);
+                // Check active IP exclusions and enforce 500 limit (consolidate subnets or rotate oldest)
+                $googleAds->enforceIpExclusionLimit($account, $campaignIdStr);
+
+                $resource = $googleAds->blockIp($account, $campaignIdStr, $this->ip);
                 $block->fill([
                     'criterion_resource_name' => $resource,
                     'status' => 'applied',

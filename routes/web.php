@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/theme', [ThemeController::class, 'update'])->name('theme.update');
-Route::view('/welcome', 'welcome')->name('welcome');
+Route::redirect('/welcome', '/')->name('welcome');
 
 Route::get('/terms-of-service', [LegalController::class, 'terms'])->name('terms.show');
 Route::redirect('/terms', '/terms-of-service');
@@ -83,6 +83,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/pages/{page}/preview', [PageController::class, 'preview'])->name('pages.preview');
     Route::get('/pages/{page}/export', [PageController::class, 'export'])->name('pages.export');
     Route::post('/pages/{page}/assign-campaign', [PageController::class, 'assignCampaign'])->name('pages.assign-campaign');
+    Route::post('/pages/{page}/retry', [PageController::class, 'retry'])->name('pages.retry');
     Route::delete('/pages/{page}', [PageController::class, 'destroy'])->name('pages.destroy');
 
     Route::get('/google-ads', [GoogleAdsController::class, 'index'])->name('google.index');
@@ -108,6 +109,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/internal/google-ads/ad-groups/{adGroup}/ads', [InternalGoogleAdsController::class, 'listAds'])->name('internal.google.ads.index');
 
     Route::get('/ip-blocks', [IpBlockController::class, 'index'])->name('blocks.index');
+    Route::post('/ip-blocks/block', [IpBlockController::class, 'block'])->name('blocks.block');
     Route::post('/ip-blocks/{ipBlock}/unblock', [IpBlockController::class, 'unblock'])->name('blocks.unblock');
     Route::post('/ip-blocks/{ipBlock}/whitelist', [IpBlockController::class, 'whitelist'])->name('blocks.whitelist');
 

@@ -12,8 +12,10 @@ use App\Services\WatchingProducts\RankService;
 use App\Services\WatchingProducts\SerpApiClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Throwable;
 
 class RefreshSingleWatchedProductJob implements ShouldQueue
@@ -22,12 +24,28 @@ class RefreshSingleWatchedProductJob implements ShouldQueue
 
     public int $tries = 2;
 
-    public int $timeout = 60;
+    public int $timeout = 90;
+
+    public array $backoff = [15, 45];
 
     public function __construct(
         public int $productId,
         public bool $forceFresh = true,
     ) {}
+
+    /**
+     * Prevent duplicate concurrent executions for the same watched product ID.
+     *
+     * @return array<int, object>
+     */
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping((string) $this->productId))
+                ->releaseAfter(15)
+                ->expireAfter(120),
+        ];
+    }
 
     public function handle(
         SerpApiClient $serpClient,
@@ -58,8 +76,14 @@ class RefreshSingleWatchedProductJob implements ShouldQueue
             return;
         }
 
+        // Mark processing state on model
+        $startFlags = is_array($product->score_flags) ? $product->score_flags : [];
+        $startFlags['refresh_status'] = 'processing';
+        $startFlags['refresh_started_at'] = now()->toIso8601String();
+        $product->update(['score_flags' => $startFlags]);
+
         try {
-            $data = $serpClient->fetchProductData($product, forceFresh: $this->forceFresh);
+            $data = $serpClient->fetchProductData($product, forceFresh: $this->forceFresh, isManual: true);
 
             if ($data['success']) {
                 if (! empty($data['trends'])) {
@@ -96,10 +120,15 @@ class RefreshSingleWatchedProductJob implements ShouldQueue
 
             // Rescore and record score history
             $scoreResult = $scoreService->score($product);
+            $flags = is_array($scoreResult['flags']) ? $scoreResult['flags'] : [];
+            $flags['refresh_status'] = 'completed';
+            $flags['refresh_error'] = null;
+            $flags['refresh_completed_at'] = now()->toIso8601String();
+
             $product->update([
                 'score' => $scoreResult['score'],
                 'score_breakdown' => $scoreResult['breakdown'],
-                'score_flags' => $scoreResult['flags'],
+                'score_flags' => $flags,
                 'scored_at' => now(),
             ]);
 
@@ -107,7 +136,7 @@ class RefreshSingleWatchedProductJob implements ShouldQueue
                 'product_id' => $product->id,
                 'score' => $scoreResult['score'],
                 'breakdown' => $scoreResult['breakdown'],
-                'flags' => $scoreResult['flags'],
+                'flags' => $flags,
                 'inputs_snapshot' => [
                     'name' => $product->name,
                     'payout_amount' => $product->payout_amount,
@@ -128,9 +157,40 @@ class RefreshSingleWatchedProductJob implements ShouldQueue
                 'exception' => $e,
             ]);
 
+            $userMessage = Str::limit($e->getMessage(), 250);
+            $failFlags = is_array($product->score_flags) ? $product->score_flags : [];
+            $failFlags['refresh_status'] = 'failed';
+            $failFlags['refresh_error'] = $userMessage;
+            $failFlags['refresh_failed_at'] = now()->toIso8601String();
+            $product->update(['score_flags' => $failFlags]);
+
             throw $e;
         } finally {
             $lock->release();
+        }
+    }
+
+    /**
+     * Handle permanent job failure.
+     */
+    public function failed(Throwable $exception): void
+    {
+        Log::error("RefreshSingleWatchedProductJob permanently failed for product {$this->productId}: {$exception->getMessage()}", [
+            'product_id' => $this->productId,
+            'exception' => $exception,
+        ]);
+
+        $product = WatchedProduct::query()->find($this->productId);
+        if ($product) {
+            $userMessage = Str::limit($exception->getMessage(), 250);
+            $flags = is_array($product->score_flags) ? $product->score_flags : [];
+            $flags['refresh_status'] = 'failed';
+            $flags['refresh_error'] = $userMessage;
+            $flags['refresh_failed_at'] = now()->toIso8601String();
+
+            $product->update([
+                'score_flags' => $flags,
+            ]);
         }
     }
 }
