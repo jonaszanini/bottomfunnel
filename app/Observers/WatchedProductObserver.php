@@ -7,6 +7,7 @@ use App\Models\ProductScoreHistory;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\Fx\FrankfurterFx;
+use App\Services\WatchingProducts\Money;
 use App\Services\WatchingProducts\NegativeKeywordGenerator;
 use App\Services\WatchingProducts\PotentialScoreService;
 use App\Services\WatchingProducts\RankService;
@@ -30,7 +31,7 @@ class WatchedProductObserver
     {
         // Compute payout_cad cache if payout_amount is present but payout_cad is not
         if ($product->payout_amount !== null && $product->payout_cad === null) {
-            $cad = $this->fx->toCad((float) $product->payout_amount, $product->payout_currency ?? 'USD');
+            $cad = Money::make($product->payout_amount, $product->payout_currency ?? 'USD')->toCad();
             $product->payout_cad = $cad;
         }
 
@@ -76,9 +77,6 @@ class WatchedProductObserver
 
         // Copy seeds and generate negative keywords
         $this->negativeGenerator->generateForProduct($product, [], true);
-
-        // Recalculate ranks across watchlist
-        $this->rankService->recalculateRanks();
     }
 
     /**
@@ -146,13 +144,6 @@ class WatchedProductObserver
                 ],
                 'created_at' => now(),
             ]);
-
-            $this->rankService->recalculateRanks();
-        }
-
-        // When relevant ranking attributes change, recalculate rank
-        if ($product->wasChanged(['score', 'trends_30d', 'kp_volume', 'payout_amount', 'status'])) {
-            $this->rankService->recalculateRanks();
         }
     }
 }

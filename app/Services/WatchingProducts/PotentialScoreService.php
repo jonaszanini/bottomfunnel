@@ -291,7 +291,7 @@ class PotentialScoreService
 
         $amount = (float) ($product->payout_amount ?? $product->payout_cad ?? 0.0);
         $currency = $product->payout_currency ?? 'USD';
-        $payoutUsd = $this->fx->toUsd($amount, $currency);
+        $payoutUsd = Money::make($amount, $currency)->toUsd($this->fx);
 
         // Hard gate floor: US$20 / R$100
         if ($payoutUsd < 20.0) {
@@ -330,13 +330,13 @@ class PotentialScoreService
     {
         $amount = (float) ($product->payout_amount ?? $product->payout_cad ?? 0.0);
         $currency = $product->payout_currency ?? 'USD';
-        $payoutUsd = $this->fx->toUsd($amount, $currency);
+        $payoutUsd = Money::make($amount, $currency)->toUsd($this->fx);
 
         $cvr = $product->est_cvr !== null ? (float) $product->est_cvr : 0.02;
 
         $brandCpc = (float) ($product->brand_cpc_amount ?? 0.0);
         $brandCpcCurrency = $product->brand_cpc_currency ?? 'USD';
-        $brandCpcUsd = $this->fx->toUsd($brandCpc, $brandCpcCurrency);
+        $brandCpcUsd = Money::make($brandCpc, $brandCpcCurrency)->toUsd($this->fx);
 
         // Margin per click: payout × est_cvr − brand_cpc
         $expectedMargin = ($payoutUsd * $cvr) - $brandCpcUsd;

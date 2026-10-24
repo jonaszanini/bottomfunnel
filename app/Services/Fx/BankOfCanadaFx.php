@@ -3,8 +3,10 @@
 namespace App\Services\Fx;
 
 use App\Models\FxRate;
+use App\Services\WatchingProducts\Fx\FrankfurterFx;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Throwable;
 
 class BankOfCanadaFx
 {
@@ -36,7 +38,7 @@ class BankOfCanadaFx
             ->where('currency', $currency)
             ->whereDate('rate_date', today())
             ->first();
-        if ($today) {
+        if ($today && (float) $today->cad_per_unit > 0) {
             return (string) $today->cad_per_unit;
         }
 
@@ -44,11 +46,28 @@ class BankOfCanadaFx
             $rate = $this->fetchLatest($currency);
             $row = FxRate::query()->updateOrCreate(
                 ['rate_date' => today()->toDateString(), 'currency' => $currency],
-                ['cad_per_unit' => $rate],
+                ['cad_per_unit' => $rate, 'source' => 'bank_of_canada'],
             );
 
             return (string) $row->cad_per_unit;
-        } catch (RuntimeException $exception) {
+        } catch (Throwable $exception) {
+            // Fallback to FrankfurterFx for currencies Bank of Canada does not cover or if BoC failed
+            try {
+                $frankfurter = app(FrankfurterFx::class);
+                $fallbackRate = $frankfurter->fetchDirect($currency, 'CAD');
+                if ($fallbackRate !== null && $fallbackRate > 0) {
+                    $formattedRate = number_format($fallbackRate, 8, '.', '');
+                    $row = FxRate::query()->updateOrCreate(
+                        ['rate_date' => today()->toDateString(), 'currency' => $currency],
+                        ['cad_per_unit' => $formattedRate, 'source' => 'frankfurter'],
+                    );
+
+                    return (string) $row->cad_per_unit;
+                }
+            } catch (Throwable) {
+                // Ignore and proceed to database fallback
+            }
+
             $fallback = FxRate::query()->where('currency', $currency)->orderByDesc('rate_date')->first();
             if ($fallback && $fallback->rate_date->greaterThanOrEqualTo(today()->subDays(7))) {
                 return (string) $fallback->cad_per_unit;

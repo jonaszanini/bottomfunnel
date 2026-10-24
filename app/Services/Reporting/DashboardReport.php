@@ -35,7 +35,7 @@ class DashboardReport
             ->whereBetween('created_at', [$from, $to])
             ->when($trackIds !== null, fn (Builder $query) => $query->whereIn('track_id', $trackIds))
             ->when($filters['conversion_status'] ?? null, fn (Builder $query, string $status) => $query->where('status', $status));
-        $conversionRows = (clone $conversions)->get(['track_id', 'commission_value_cad', 'status']);
+        $conversionRows = (clone $conversions)->get(['id', 'track_id', 'amount', 'currency', 'commission_value_cad', 'status']);
 
         $spendRows = AdSpend::query()
             ->whereDate('start_date', '<=', $to->toDateString())
@@ -75,7 +75,11 @@ class DashboardReport
         foreach ($tracks as $track) {
             $trackVisits = $visitRows->where('track_id', $track->id);
             $trackConversions = $conversionRows->where('track_id', $track->id);
-            $commission = round((float) $trackConversions->sum('commission_value_cad'), 2);
+            $commission = round((float) $trackConversions->sum(function (Conversion $conv): float {
+                return (float) $conv->commission_value_cad > 0
+                    ? (float) $conv->commission_value_cad
+                    : $conv->money()->toCad();
+            }), 2);
             $spend = round((float) $spendRows->where('track_id', $track->id)->sum('amount_cad'), 2);
             $sessions = $trackVisits->count();
             $ctaSessions = $trackVisits->filter(fn (Visit $visit): bool => (int) ($visit->engagement['cta_clicks'] ?? 0) > 0)->count();
@@ -105,7 +109,11 @@ class DashboardReport
 
         $sessionCount = $visitRows->count();
         $ctaSessions = $visitRows->filter(fn (Visit $visit): bool => (int) ($visit->engagement['cta_clicks'] ?? 0) > 0)->count();
-        $commission = round((float) $conversionRows->sum('commission_value_cad'), 2);
+        $commission = round((float) $conversionRows->sum(function (Conversion $conv): float {
+            return (float) $conv->commission_value_cad > 0
+                ? (float) $conv->commission_value_cad
+                : $conv->money()->toCad();
+        }), 2);
         $spend = round((float) $spendRows->sum('amount_cad'), 2);
         $profit = round($commission - $spend, 2);
 

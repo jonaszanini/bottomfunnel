@@ -4,6 +4,7 @@ namespace App\Services\Tracking;
 
 use App\Models\Track;
 use App\Models\Visit;
+use App\Services\WatchingProducts\Money;
 
 class ConversionMatcher
 {
@@ -34,5 +35,15 @@ class ConversionMatcher
         }
 
         return null;
+    }
+
+    public function expectedMoney(Track $track): Money
+    {
+        return Money::make($track->typical_commission_cad, 'CAD');
+    }
+
+    public function postbackMoney(ParsedPostback $postback): Money
+    {
+        return Money::make($postback->amount, $postback->currency);
     }
 }

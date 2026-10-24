@@ -2,6 +2,7 @@
 
 namespace App\Services\WatchingProducts;
 
+use App\Models\FxRate;
 use App\Services\WatchingProducts\Fx\FrankfurterFx;
 use JsonSerializable;
 
@@ -21,6 +22,20 @@ class Money implements JsonSerializable
 
     public function toCad(?FrankfurterFx $fx = null): float
     {
+        if ($this->currency === 'CAD') {
+            return round($this->amount, 2);
+        }
+
+        // Fast path: if today's FxRate exists for this currency
+        $today = FxRate::query()
+            ->where('currency', $this->currency)
+            ->whereDate('rate_date', today())
+            ->first();
+
+        if ($today && (float) $today->cad_per_unit > 0) {
+            return round($this->amount * (float) $today->cad_per_unit, 2);
+        }
+
         $fx ??= app(FrankfurterFx::class);
 
         return $fx->toCad($this->amount, $this->currency);
@@ -28,9 +43,21 @@ class Money implements JsonSerializable
 
     public function toUsd(?FrankfurterFx $fx = null): float
     {
+        if ($this->currency === 'USD') {
+            return round($this->amount, 2);
+        }
+
         $fx ??= app(FrankfurterFx::class);
 
         return $fx->toUsd($this->amount, $this->currency);
+    }
+
+    public function toFxRate(): ?FxRate
+    {
+        return FxRate::query()
+            ->where('currency', $this->currency)
+            ->orderByDesc('rate_date')
+            ->first();
     }
 
     public function format(bool $withCode = true): string

@@ -97,7 +97,7 @@ class PostbackRecorder
                 'cad' => $converted['cad'],
                 'error' => null,
             ];
-        } catch (RuntimeException $exception) {
+        } catch (\Throwable $exception) {
             return [
                 'amount' => $parsed->amount,
                 'currency' => $parsed->currency,

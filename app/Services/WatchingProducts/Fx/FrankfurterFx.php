@@ -60,82 +60,34 @@ class FrankfurterFx
             return 1.0;
         }
 
-        // Check if to is CAD and we already have a CAD rate cached in fx_rates
+        // CAD pairs: Bank of Canada is the primary source of truth
         if ($to === 'CAD') {
-            $cachedCad = $this->getCachedCadRate($from);
-            if ($cachedCad !== null) {
-                return $cachedCad;
+            return $this->getCadRate($from);
+        }
+
+        if ($from === 'CAD') {
+            $cadPerTo = $this->getCadRate($to);
+            if ($cadPerTo > 0) {
+                return 1.0 / $cadPerTo;
             }
         }
 
-        // Check if from is CAD and to is USD (can use inverse of USD->CAD)
-        if ($from === 'CAD' && $to === 'USD') {
-            $usdCadRate = $this->getRate('USD', 'CAD');
-            if ($usdCadRate > 0) {
-                return 1.0 / $usdCadRate;
-            }
-        }
-
-        // Attempt Frankfurter API call
+        // When converting between two non-CAD currencies (e.g. BRL to USD or USD to BRL):
+        // Try cross-rate via CAD from Bank of Canada first
         try {
-            $response = Http::timeout(10)
-                ->acceptJson()
-                ->get('https://api.frankfurter.app/latest', [
-                    'amount' => 1,
-                    'from' => $from,
-                    'to' => $to,
-                ]);
-
-            if ($response->successful()) {
-                $rates = $response->json('rates');
-                if (is_array($rates) && isset($rates[$to]) && is_numeric($rates[$to])) {
-                    $rate = (float) $rates[$to];
-
-                    // Cache in fx_rates if converting to CAD
-                    if ($to === 'CAD') {
-                        FxRate::query()->updateOrCreate(
-                            [
-                                'rate_date' => today()->toDateString(),
-                                'currency' => $from,
-                            ],
-                            [
-                                'cad_per_unit' => number_format($rate, 8, '.', ''),
-                                'source' => 'frankfurter',
-                            ]
-                        );
-                    }
-
-                    return $rate;
-                }
+            $cadFrom = $this->getCadRate($from);
+            $cadTo = $this->getCadRate($to);
+            if ($cadFrom > 0 && $cadTo > 0) {
+                return $cadFrom / $cadTo;
             }
-
-            Log::warning("FrankfurterFx request failed with status: {$response->status()}");
-        } catch (Throwable $e) {
-            Log::warning("FrankfurterFx HTTP error: {$e->getMessage()}");
+        } catch (Throwable) {
+            // Proceed to direct Frankfurter fetch
         }
 
-        // Secondary fallback to Bank of Canada if converting to CAD
-        if ($to === 'CAD') {
-            try {
-                $bocCad = $this->bankOfCanadaFx->cadPerUnit($from);
-                if (is_numeric($bocCad) && (float) $bocCad > 0) {
-                    $rate = (float) $bocCad;
-                    FxRate::query()->updateOrCreate(
-                        [
-                            'rate_date' => today()->toDateString(),
-                            'currency' => $from,
-                        ],
-                        [
-                            'cad_per_unit' => number_format($rate, 8, '.', ''),
-                            'source' => 'bank_of_canada',
-                        ]
-                    );
-
-                    return $rate;
-                }
-            } catch (Throwable $e) {
-                Log::warning("BankOfCanadaFx secondary fallback failed: {$e->getMessage()}");
-            }
+        // Frankfurter API fallback for non-CAD pairs
+        $direct = $this->fetchDirect($from, $to);
+        if ($direct !== null && $direct > 0) {
+            return $direct;
         }
 
         // Fallback to latest known rate in fx_rates
@@ -173,10 +125,16 @@ class FrankfurterFx
     }
 
     /**
-     * Get today's cached rate for converting from $currency to CAD.
+     * Get CAD rate per unit of $currency using BankOfCanadaFx as primary source.
      */
-    protected function getCachedCadRate(string $currency): ?float
+    protected function getCadRate(string $currency): float
     {
+        $currency = strtoupper(trim($currency));
+        if ($currency === 'CAD') {
+            return 1.0;
+        }
+
+        // 1. Check if rate is cached for today
         $today = FxRate::query()
             ->where('currency', $currency)
             ->whereDate('rate_date', today())
@@ -184,6 +142,93 @@ class FrankfurterFx
 
         if ($today && (float) $today->cad_per_unit > 0) {
             return (float) $today->cad_per_unit;
+        }
+
+        // 2. Primary: BankOfCanadaFx
+        try {
+            $bocCad = $this->bankOfCanadaFx->cadPerUnit($currency);
+            if (is_numeric($bocCad) && (float) $bocCad > 0) {
+                return (float) $bocCad;
+            }
+        } catch (Throwable $e) {
+            Log::info("BankOfCanadaFx failed for {$currency}, attempting Frankfurter fallback: {$e->getMessage()}");
+        }
+
+        // 3. Fallback: Frankfurter
+        $frankfurterRate = $this->fetchDirect($currency, 'CAD');
+        if ($frankfurterRate !== null && $frankfurterRate > 0) {
+            FxRate::query()->updateOrCreate(
+                [
+                    'rate_date' => today()->toDateString(),
+                    'currency' => $currency,
+                ],
+                [
+                    'cad_per_unit' => number_format($frankfurterRate, 8, '.', ''),
+                    'source' => 'frankfurter',
+                ]
+            );
+
+            return $frankfurterRate;
+        }
+
+        // 4. Fallback to latest known rate in fx_rates
+        $historical = FxRate::query()
+            ->where('currency', $currency)
+            ->orderByDesc('rate_date')
+            ->first();
+
+        if ($historical && (float) $historical->cad_per_unit > 0) {
+            return (float) $historical->cad_per_unit;
+        }
+
+        return match ($currency) {
+            'USD' => 1.38,
+            'EUR' => 1.49,
+            'GBP' => 1.79,
+            'BRL' => 0.24,
+            default => 1.0,
+        };
+    }
+
+    /**
+     * Direct call to Frankfurter API.
+     */
+    public function fetchDirect(string $from, string $to): ?float
+    {
+        try {
+            $response = Http::timeout(10)
+                ->acceptJson()
+                ->get('https://api.frankfurter.app/latest', [
+                    'amount' => 1,
+                    'from' => $from,
+                    'to' => $to,
+                ]);
+
+            if ($response->successful()) {
+                $rates = $response->json('rates');
+                if (is_array($rates) && isset($rates[$to]) && is_numeric($rates[$to])) {
+                    $rate = (float) $rates[$to];
+
+                    if ($to === 'CAD') {
+                        FxRate::query()->updateOrCreate(
+                            [
+                                'rate_date' => today()->toDateString(),
+                                'currency' => $from,
+                            ],
+                            [
+                                'cad_per_unit' => number_format($rate, 8, '.', ''),
+                                'source' => 'frankfurter',
+                            ]
+                        );
+                    }
+
+                    return $rate;
+                }
+            }
+
+            Log::warning("FrankfurterFx request failed with status: {$response->status()}");
+        } catch (Throwable $e) {
+            Log::warning("FrankfurterFx HTTP error: {$e->getMessage()}");
         }
 
         return null;

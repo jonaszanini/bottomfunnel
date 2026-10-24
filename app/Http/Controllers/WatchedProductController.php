@@ -366,13 +366,13 @@ class WatchedProductController extends Controller
         // Compute CAD cache
         if (isset($validated['payout_amount']) && $validated['payout_amount'] !== null) {
             $currency = $validated['payout_currency'] ?? 'USD';
-            $validated['payout_cad'] = $this->fx->toCad((float) $validated['payout_amount'], $currency);
+            $validated['payout_cad'] = Money::make($validated['payout_amount'], $currency)->toCad($this->fx);
         }
 
         $product = WatchedProduct::query()->create($validated);
 
         return redirect()->route('watching-products.index')
-            ->with('success', "Product '{$product->name}' added to watchlist with rank #{$product->rank}.");
+            ->with('success', "Product '{$product->name}' added to watchlist.");
     }
 
     /**
@@ -385,7 +385,7 @@ class WatchedProductController extends Controller
         // Update CAD computed cache if payout changed
         if (isset($validated['payout_amount']) && $validated['payout_amount'] !== null) {
             $currency = $validated['payout_currency'] ?? $watchedProduct->payout_currency ?? 'USD';
-            $validated['payout_cad'] = $this->fx->toCad((float) $validated['payout_amount'], $currency);
+            $validated['payout_cad'] = Money::make($validated['payout_amount'], $currency)->toCad($this->fx);
         }
 
         $watchedProduct->update($validated);

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\WatchingProducts\Money;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -19,10 +20,21 @@ class Conversion extends Model
         'status',
         'match_source',
         'upload_attempts',
+        'request_id',
         'last_error',
         'raw_payload',
         'uploaded_at',
     ];
+
+    public function money(): Money
+    {
+        return Money::make($this->amount, $this->currency);
+    }
+
+    public function commissionMoneyCad(): Money
+    {
+        return Money::make($this->commission_value_cad, 'CAD');
+    }
 
     protected function casts(): array
     {
