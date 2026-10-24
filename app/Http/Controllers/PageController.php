@@ -66,13 +66,27 @@ class PageController extends Controller
         ];
 
         return Inertia::render('Pages/Index', [
-            'pages' => Page::query()->with('track:id,product_name')->latest()->get()->map(fn (Page $page): array => [
-                'id' => $page->id,
-                'name' => $page->name,
-                'page_type' => config('flowhub.page_types.'.$page->page_type, $page->page_type),
-                'product_name' => $page->track?->product_name ?? 'Standalone Offer',
-                'updated_at' => $page->updated_at?->toDateTimeString(),
-            ]),
+            'pages' => Page::query()
+                ->with([
+                    'track:id,product_name',
+                    'campaign:id,campaign_id,name,status,google_ads_account_id',
+                    'campaign.account:id,name,customer_id',
+                ])
+                ->latest()
+                ->get()
+                ->map(fn (Page $page): array => [
+                    'id' => $page->id,
+                    'name' => $page->name,
+                    'page_type' => config('flowhub.page_types.'.$page->page_type, $page->page_type),
+                    'product_name' => $page->track?->product_name ?? 'Standalone Offer',
+                    'track_product_name' => $page->track?->product_name ?? 'Standalone Offer',
+                    'track_id' => $page->track_id,
+                    'campaign_id' => $page->campaign_id,
+                    'campaign_name' => $page->campaign?->name,
+                    'campaign_account_name' => $page->campaign?->account?->name,
+                    'updated_at' => $page->updated_at?->toDateTimeString(),
+                    'created_at' => $page->created_at?->toDateTimeString(),
+                ]),
             'tracks' => Track::query()
                 ->with([
                     'account:id,name,customer_id',
@@ -291,6 +305,7 @@ class PageController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'track_id' => ['nullable', 'integer', 'exists:tracks,id'],
+            'campaign_id' => ['nullable', 'string', 'max:64'],
             'page_type' => ['nullable', 'string', 'max:64'],
             'language' => ['nullable', 'string', 'max:10'],
             'variation' => ['nullable', 'array'],
@@ -321,6 +336,7 @@ class PageController extends Controller
 
         $page = Page::query()->create([
             'track_id' => $trackId,
+            'campaign_id' => ! empty($data['campaign_id']) ? $data['campaign_id'] : null,
             'name' => $data['name'],
             'page_type' => $data['page_type'] ?? ($data['variation']['strategyType'] ?? 'presell'),
             'language' => $data['language'] ?? ($data['variation']['language'] ?? 'en'),
@@ -330,6 +346,34 @@ class PageController extends Controller
         ]);
 
         return redirect()->route('pages.index')->with('success', "Presell page '{$page->name}' saved successfully.");
+    }
+
+    /**
+     * Assign or unassign a page to a Google Ads campaign.
+     */
+    public function assignCampaign(Request $request, Page $page): RedirectResponse|JsonResponse
+    {
+        $data = $request->validate([
+            'campaign_id' => ['nullable', 'string', 'max:64'],
+        ]);
+
+        $campaignId = ! empty($data['campaign_id']) ? trim($data['campaign_id']) : null;
+
+        $page->update([
+            'campaign_id' => $campaignId,
+        ]);
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'success' => true,
+                'page_id' => $page->id,
+                'campaign_id' => $page->campaign_id,
+                'message' => $campaignId ? 'Page assigned to campaign.' : 'Page unassigned from campaign.',
+            ]);
+        }
+
+        return back()->with('success', $campaignId ? 'Page assigned to campaign.' : 'Page unassigned from campaign.');
     }
 
     /**

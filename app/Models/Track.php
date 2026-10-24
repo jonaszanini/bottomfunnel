@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -53,6 +54,28 @@ class Track extends Model
     public function pages(): HasMany
     {
         return $this->hasMany(Page::class);
+    }
+
+    /**
+     * Get the Google Ads campaign records associated with this track.
+     *
+     * @return Collection<int, GoogleAdsCampaign>
+     */
+    public function campaigns()
+    {
+        $ids = array_filter((array) ($this->campaign_ids ?? []));
+        if (empty($ids) && ! $this->google_ads_account_id) {
+            return GoogleAdsCampaign::query()->whereRaw('1 = 0')->get();
+        }
+
+        $query = GoogleAdsCampaign::query();
+        if (! empty($ids)) {
+            $query->whereIn('campaign_id', $ids);
+        } elseif ($this->google_ads_account_id) {
+            $query->where('google_ads_account_id', $this->google_ads_account_id);
+        }
+
+        return $query->with('account:id,name,customer_id')->get();
     }
 
     public function visits(): HasMany

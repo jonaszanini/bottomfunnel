@@ -7,6 +7,8 @@ use App\Models\AdSpend;
 use App\Models\Conversion;
 use App\Models\ConversionAction;
 use App\Models\GoogleAdsAccount;
+use App\Models\GoogleAdsCampaign;
+use App\Models\Page;
 use App\Models\Track;
 use App\Models\Visit;
 use App\Services\Google\GoogleAdsClient;
@@ -126,6 +128,62 @@ class TrackController extends Controller
                 'amount_cad' => $spend->amount_cad,
                 'note' => $spend->note,
             ]),
+            'pages' => $track->pages()
+                ->with(['campaign.account'])
+                ->latest()
+                ->get()
+                ->map(fn (Page $page): array => [
+                    'id' => $page->id,
+                    'name' => $page->name,
+                    'page_type' => config('flowhub.page_types.'.$page->page_type, $page->page_type),
+                    'campaign_id' => $page->campaign_id,
+                    'campaign_name' => $page->campaign?->name,
+                    'campaign_status' => $page->campaign?->status,
+                    'campaign_account_name' => $page->campaign?->account?->name ?? $track->account?->name,
+                    'campaign' => $page->campaign ? [
+                        'id' => $page->campaign->id,
+                        'campaign_id' => $page->campaign->campaign_id,
+                        'name' => $page->campaign->name,
+                        'status' => $page->campaign->status,
+                        'account_name' => $page->campaign->account?->name ?? $track->account?->name,
+                    ] : null,
+                    'created_at' => $page->created_at?->toDateTimeString(),
+                    'updated_at' => $page->updated_at?->toDateTimeString(),
+                ]),
+            'track_campaigns' => (function () use ($track) {
+                $campaignIds = array_filter((array) ($track->campaign_ids ?? []));
+                $campaigns = GoogleAdsCampaign::query()
+                    ->when($track->google_ads_account_id, fn ($q) => $q->where('google_ads_account_id', $track->google_ads_account_id))
+                    ->when(! empty($campaignIds) && ! $track->google_ads_account_id, fn ($q) => $q->whereIn('campaign_id', $campaignIds))
+                    ->with('account:id,name,customer_id')
+                    ->orderBy('name')
+                    ->get()
+                    ->map(fn (GoogleAdsCampaign $camp): array => [
+                        'campaign_id' => $camp->campaign_id,
+                        'name' => $camp->name,
+                        'status' => $camp->status,
+                        'account_id' => $camp->google_ads_account_id,
+                        'account_name' => $camp->account?->name ?? $track->account?->name,
+                        'customer_id' => $camp->account?->customer_id ?? $track->account?->customer_id,
+                        'is_assigned_to_track' => in_array($camp->campaign_id, $campaignIds, true),
+                    ]);
+
+                foreach ($campaignIds as $cid) {
+                    if (! $campaigns->contains('campaign_id', (string) $cid)) {
+                        $campaigns->push([
+                            'campaign_id' => (string) $cid,
+                            'name' => "Campaign #{$cid}",
+                            'status' => 'ACTIVE',
+                            'account_id' => $track->google_ads_account_id,
+                            'account_name' => $track->account?->name,
+                            'customer_id' => $track->account?->customer_id,
+                            'is_assigned_to_track' => true,
+                        ]);
+                    }
+                }
+
+                return $campaigns->values();
+            })(),
         ]);
     }
 

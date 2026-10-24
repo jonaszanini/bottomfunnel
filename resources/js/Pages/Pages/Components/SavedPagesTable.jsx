@@ -162,6 +162,7 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
                                     <tr>
                                         {renderSortTh('Page Name', 'name')}
                                         {renderSortTh('Linked Offer / Track', 'product_name')}
+                                        {renderSortTh('Assigned Campaign', 'campaign_name')}
                                         {renderSortTh('Strategy / Format', 'page_type')}
                                         {renderSortTh('Updated', 'updated_at')}
                                         <th className="px-4 py-3 text-right select-none">Actions</th>
@@ -174,7 +175,40 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
                                                 {p.name}
                                             </td>
                                             <td className="px-4 py-3 text-theme-secondary">
-                                                {p.product_name || 'Standalone Offer'}
+                                                {p.track_id ? (
+                                                    <Link
+                                                        href={`/tracks/${p.track_id}`}
+                                                        className="font-medium text-theme-primary hover:text-theme-accent hover:underline inline-flex items-center gap-1"
+                                                    >
+                                                        <span>{p.product_name || `Track #${p.track_id}`}</span>
+                                                        <svg className="w-3 h-3 text-theme-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                                            <polyline points="15 3 21 3 21 9" />
+                                                            <line x1="10" y1="14" x2="21" y2="3" />
+                                                        </svg>
+                                                    </Link>
+                                                ) : (
+                                                    <span>{p.product_name || 'Standalone Offer'}</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {p.campaign_name ? (
+                                                    <div>
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                            <svg className="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                <polyline points="20 6 9 17 4 12" />
+                                                            </svg>
+                                                            <span>{p.campaign_name}</span>
+                                                        </span>
+                                                        {p.campaign_account_name && (
+                                                            <span className="block text-[10px] text-theme-muted mt-0.5 font-mono">
+                                                                {p.campaign_account_name}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-theme-muted text-[11px]">Unassigned</span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-theme-card border border-theme text-theme-secondary">
@@ -231,13 +265,30 @@ export default function SavedPagesTable({ pages = [], onStartGenerator }) {
                                                 {p.name}
                                             </h4>
                                             <div className="mt-0.5 text-xs text-theme-muted">
-                                                <span>{p.product_name || 'Standalone Offer'}</span>
+                                                {p.track_id ? (
+                                                    <Link
+                                                        href={`/tracks/${p.track_id}`}
+                                                        className="text-theme-primary hover:text-theme-accent hover:underline font-medium"
+                                                    >
+                                                        {p.product_name || `Track #${p.track_id}`}
+                                                    </Link>
+                                                ) : (
+                                                    <span>{p.product_name || 'Standalone Offer'}</span>
+                                                )}
                                             </div>
                                         </div>
                                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-theme-card border border-theme text-theme-secondary shrink-0">
                                             {p.page_type}
                                         </span>
                                     </div>
+
+                                    {p.campaign_name && (
+                                        <div className="text-xs">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                                <span>Campaign: {p.campaign_name}</span>
+                                            </span>
+                                        </div>
+                                    )}
 
                                     <div className="text-[11px] text-theme-muted">
                                         Updated: {p.updated_at ? new Date(p.updated_at).toLocaleDateString() : 'Recent'}

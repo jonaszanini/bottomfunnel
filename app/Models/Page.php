@@ -10,6 +10,7 @@ class Page extends Model
 {
     protected $fillable = [
         'track_id',
+        'campaign_id',
         'name',
         'page_type',
         'language',
@@ -28,6 +29,11 @@ class Page extends Model
     public function track(): BelongsTo
     {
         return $this->belongsTo(Track::class);
+    }
+
+    public function campaign(): BelongsTo
+    {
+        return $this->belongsTo(GoogleAdsCampaign::class, 'campaign_id', 'campaign_id');
     }
 
     public function visits(): HasMany

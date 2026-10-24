@@ -38,7 +38,11 @@ class GoogleAdsController extends Controller
             ]);
 
         $campaigns = GoogleAdsCampaign::query()
-            ->with('account:id,name,customer_id')
+            ->with([
+                'account:id,name,customer_id',
+                'pages:id,name,campaign_id,track_id',
+                'pages.track:id,product_name',
+            ])
             ->latest()
             ->get()
             ->map(fn (GoogleAdsCampaign $camp): array => [
@@ -54,6 +58,12 @@ class GoogleAdsController extends Controller
                     'name' => $camp->account->name,
                     'customer_id' => $camp->account->customer_id,
                 ] : null,
+                'pages' => $camp->pages->map(fn ($p): array => [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'track_id' => $p->track_id,
+                    'product_name' => $p->track?->product_name,
+                ])->values(),
             ]);
 
         return Inertia::render('Google/Index', [

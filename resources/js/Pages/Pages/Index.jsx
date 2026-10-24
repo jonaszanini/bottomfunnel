@@ -32,6 +32,26 @@ export default function Index({ pages = [], tracks = [], google_ads_accounts = [
             const trackId = params.get('track_id') || '';
             const requestedTab = params.get('tab') || '';
 
+            if (trackId) {
+                const matchedTrack = tracks.find((t) => String(t.id) === String(trackId));
+                if (matchedTrack) {
+                    setConfig((prev) => ({
+                        ...prev,
+                        trackId: matchedTrack.id,
+                        productName: matchedTrack.product_name || prodName || prev.productName,
+                        language: matchedTrack.language || prev.language,
+                        affiliateUrl: matchedTrack.affiliate_url || affLink || prev.affiliateUrl,
+                    }));
+                } else {
+                    setConfig((prev) => ({
+                        ...prev,
+                        trackId: trackId,
+                        productName: prodName || prev.productName,
+                        affiliateUrl: affLink || prev.affiliateUrl,
+                    }));
+                }
+            }
+
             if (cloneUrl || affLink || requestedTab === 'cloner') {
                 setActiveTab('cloner');
                 setPrefillCloner({
@@ -42,7 +62,7 @@ export default function Index({ pages = [], tracks = [], google_ads_accounts = [
                 });
             } else if (requestedTab === 'saved') {
                 setActiveTab('saved');
-            } else if (requestedTab === 'studio') {
+            } else if (requestedTab === 'studio' || trackId) {
                 setActiveTab('studio');
             }
         }

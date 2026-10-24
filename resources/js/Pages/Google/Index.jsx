@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { router, useForm } from '@inertiajs/react';
+import { Link, router, useForm } from '@inertiajs/react';
 import Layout, { Field, button, control, quiet, money } from '../../Components/Layout';
 import GoogleAdsAccountSelect from '../../Components/GoogleAdsAccountSelect';
 
@@ -313,6 +313,7 @@ export default function Index({ accounts = [], campaigns = [], default_account_i
                                     <tr>
                                         <th className="px-4 py-3">Campaign</th>
                                         <th className="px-4 py-3">Account Ownership</th>
+                                        <th className="px-4 py-3">Assigned Presell Page</th>
                                         <th className="px-4 py-3">Status</th>
                                         <th className="px-4 py-3">Daily Budget</th>
                                         <th className="px-4 py-3">Bidding Strategy</th>
@@ -333,6 +334,35 @@ export default function Index({ accounts = [], campaigns = [], default_account_i
                                                     </div>
                                                 ) : (
                                                     <span className="text-xs text-theme-muted">Account #{camp.account_id}</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {camp.pages && camp.pages.length > 0 ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        {camp.pages.map((p) => (
+                                                            <div key={p.id} className="flex items-center gap-1.5 text-xs">
+                                                                <Link
+                                                                    href={`/pages/${p.id}/edit`}
+                                                                    className="font-medium text-theme-accent hover:underline inline-flex items-center gap-1 truncate max-w-[200px]"
+                                                                    title={p.name}
+                                                                >
+                                                                    <span>📄</span>
+                                                                    <span className="truncate">{p.name}</span>
+                                                                </Link>
+                                                                {p.track_id && (
+                                                                    <Link
+                                                                        href={`/tracks/${p.track_id}`}
+                                                                        className="inline-flex rounded border border-theme bg-theme-subtle/50 px-1.5 py-0.5 text-[10px] text-theme-muted hover:text-theme-primary whitespace-nowrap"
+                                                                        title={`Linked Track #${p.track_id}${p.product_name ? ` - ${p.product_name}` : ''}`}
+                                                                    >
+                                                                        Track #{p.track_id}
+                                                                    </Link>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-theme-muted italic">None assigned</span>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">

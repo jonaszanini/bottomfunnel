@@ -82,6 +82,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/pages/{page}', [PageController::class, 'update'])->name('pages.update');
     Route::post('/pages/{page}/preview', [PageController::class, 'preview'])->name('pages.preview');
     Route::get('/pages/{page}/export', [PageController::class, 'export'])->name('pages.export');
+    Route::post('/pages/{page}/assign-campaign', [PageController::class, 'assignCampaign'])->name('pages.assign-campaign');
     Route::delete('/pages/{page}', [PageController::class, 'destroy'])->name('pages.destroy');
 
     Route::get('/google-ads', [GoogleAdsController::class, 'index'])->name('google.index');
