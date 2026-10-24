@@ -121,6 +121,7 @@ export default function Show({
     const [activeTab, setActiveTab] = useState('overview'); // overview, negatives, guidance, history
     const [selectedSourceFilter, setSelectedSourceFilter] = useState('all');
     const [isAddingNegative, setIsAddingNegative] = useState(false);
+    const [isGeneratingCampaign, setIsGeneratingCampaign] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
 
     // Negative form
@@ -196,6 +197,33 @@ export default function Show({
         }
     };
 
+    const handleGenerateCampaignNegatives = () => {
+        if (quotaExceeded) {
+            showToast('SerpApi monthly quota exceeded (250/250). Cannot perform new SERP analysis.');
+            return;
+        }
+
+        setIsGeneratingCampaign(true);
+        router.post(
+            `/watching-products/${product.id}/negatives/generate-campaign`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    showToast('Campaign negatives generated successfully!');
+                    setIsGeneratingCampaign(false);
+                },
+                onError: () => {
+                    showToast('Failed to generate campaign negatives.');
+                    setIsGeneratingCampaign(false);
+                },
+                onFinish: () => {
+                    setIsGeneratingCampaign(false);
+                },
+            }
+        );
+    };
+
     const handleStrategyChange = (newStrategy) => {
         if (confirm(`Change strategy to ${newStrategy}? This will recompute default negative keyword rules.`)) {
             router.post(`/watching-products/${product.id}/strategy`, {
@@ -258,6 +286,24 @@ export default function Show({
         if (selectedSourceFilter === 'all') return negative_keywords;
         return negative_keywords.filter((k) => k.source === selectedSourceFilter);
     }, [negative_keywords, selectedSourceFilter]);
+
+    const hasCampaignNegatives = useMemo(() => {
+        return negative_keywords.some((kw) =>
+            ['competitor', 'homonym', 'serp_intruder'].includes(kw.source)
+        );
+    }, [negative_keywords]);
+
+    const campaignNegativesCount = useMemo(() => {
+        return negative_keywords.filter((kw) =>
+            ['competitor', 'homonym', 'serp_intruder'].includes(kw.source)
+        ).length;
+    }, [negative_keywords]);
+
+    const quotaExceeded = useMemo(() => {
+        const used = serpapi_usage?.used_this_month ?? 0;
+        const total = serpapi_usage?.total_limit ?? 250;
+        return used >= total;
+    }, [serpapi_usage]);
 
     const scoreHsl = getScoreHsl(product.score);
     const bofComp = getComponentScoreColor(product.score_breakdown?.bof_name, 20);
@@ -712,6 +758,15 @@ export default function Show({
                     <span className="rounded-full bg-theme-subtle px-1.5 py-0.2 text-[11px] font-mono">
                         {negative_keywords.length}
                     </span>
+                    {!hasCampaignNegatives ? (
+                        <span className="rounded-full bg-amber-500/20 text-amber-500 text-[10px] px-1.5 py-0.5 font-medium" title="Base seeds only. Campaign negatives not generated yet.">
+                            Base
+                        </span>
+                    ) : (
+                        <span className="rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0.5 font-medium" title="Full campaign negatives active">
+                            Campaign
+                        </span>
+                    )}
                 </button>
                 <button
                     type="button"
@@ -1062,6 +1117,34 @@ export default function Show({
             {/* TAB 2: NEGATIVE KEYWORD MANAGER */}
             {activeTab === 'negatives' && (
                 <div className="space-y-4">
+                    {/* Status Badge Banner */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            {hasCampaignNegatives ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-500">
+                                    <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                                    Campaign Negatives Ready ({campaignNegativesCount} terms)
+                                </span>
+                            ) : (
+                                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-500">
+                                    <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                                    Campaign negatives not generated yet (Base seeds only)
+                                </span>
+                            )}
+                            <span className="text-xs text-theme-muted">
+                                {hasCampaignNegatives
+                                    ? 'SERP competitors, homonyms, and intruders populated.'
+                                    : 'Light mode active: base seeds & qualifier rule. Run generation when launching campaigns.'}
+                            </span>
+                        </div>
+
+                        {quotaExceeded && (
+                            <span className="text-xs font-medium text-rose-500 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-lg">
+                                ⚠️ SerpApi quota ceiling reached ({serpapi_usage?.used_this_month ?? 0}/{serpapi_usage?.total_limit ?? 250})
+                            </span>
+                        )}
+                    </div>
+
                     {/* Actions and Export Bar */}
                     <div className="rounded-2xl border border-theme bg-theme-surface p-4 shadow-xs flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2">
@@ -1079,6 +1162,30 @@ export default function Show({
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={handleGenerateCampaignNegatives}
+                                disabled={isGeneratingCampaign || quotaExceeded}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs ${
+                                    quotaExceeded
+                                        ? 'border border-rose-500/30 bg-rose-500/10 text-rose-400 cursor-not-allowed opacity-60'
+                                        : 'border border-amber-500/40 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 active:scale-95 cursor-pointer'
+                                }`}
+                                title={quotaExceeded ? `SerpApi quota exceeded (${serpapi_usage?.used_this_month ?? 0}/${serpapi_usage?.total_limit ?? 250})` : 'Run full pass: extract competitor, homonym, and intruder negative keywords from Google SERP'}
+                            >
+                                {isGeneratingCampaign ? (
+                                    <>
+                                        <span className="h-3 w-3 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
+                                        <span>Extracting Negatives...</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span>⚡</span>
+                                        <span>Generate campaign negatives</span>
+                                    </>
+                                )}
+                            </button>
+
                             <button
                                 type="button"
                                 onClick={() => setIsAddingNegative(!isAddingNegative)}

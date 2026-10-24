@@ -179,10 +179,11 @@ class RefreshWatchingProducts extends Command
                         }
                     }
 
-                    $negativeGenerator->generateForProduct($product, $data['serp'] ?? []);
+                    // Light pass: sync base seeds, rules, and generic meanings only (no noisy SERP negatives)
+                    $negativeGenerator->generateBase($product);
                 } else {
-                    // Even if SerpApi fails or 429, ensure base seeds, rules, and translation are synced
-                    $negativeGenerator->generateForProduct($product, []);
+                    // Even if SerpApi fails or 429, ensure base seeds and rules are synced
+                    $negativeGenerator->generateBase($product);
                     if (! $product->bof_translation && $bofChecker->detectTranslationPass($product->name)) {
                         $product->bof_translation = true;
                     }

@@ -3,6 +3,7 @@
 namespace App\Observers;
 
 use App\Enums\StrategySource;
+use App\Enums\WatchedProductStatus;
 use App\Models\ProductScoreHistory;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\BofChecker;
@@ -75,8 +76,8 @@ class WatchedProductObserver
             'created_at' => now(),
         ]);
 
-        // Copy seeds and generate negative keywords
-        $this->negativeGenerator->generateForProduct($product, [], true);
+        // Light pass: copy base seeds, qualifier rules, and generic meanings
+        $this->negativeGenerator->generateBase($product);
     }
 
     /**
@@ -87,6 +88,11 @@ class WatchedProductObserver
         // When strategy changes, recompute enabled flags on negative keywords
         if ($product->wasChanged('strategy') && $product->strategy) {
             $this->negativeGenerator->syncStrategyRules($product, $product->strategy);
+        }
+
+        // Auto-generate campaign negatives when promoted to Test status (ready for campaign)
+        if ($product->wasChanged('status') && $product->status === WatchedProductStatus::Test) {
+            $this->negativeGenerator->generateCampaign($product);
         }
 
         // When scoring fields change without an explicit score change, trigger rescore

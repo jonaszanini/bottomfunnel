@@ -9,17 +9,31 @@ use App\Models\NegativeKeywordSeed;
 use App\Models\ProductNegativeKeyword;
 use App\Models\WatchedProduct;
 use Database\Seeders\NegativeKeywordSeedSeeder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class NegativeKeywordGenerator
 {
+    public function __construct(
+        protected ?SerpApiClient $serpClient = null,
+        protected ?QuotaBudget $budget = null
+    ) {}
+
+    protected function getSerpClient(): SerpApiClient
+    {
+        return $this->serpClient ??= app(SerpApiClient::class);
+    }
+
+    protected function getBudget(): QuotaBudget
+    {
+        return $this->budget ??= app(QuotaBudget::class);
+    }
+
     /**
-     * Generate or re-generate negative keywords for a product.
-     * Preserves any existing manual terms and manually overridden toggles.
-     *
-     * @param  array<string, mixed>  $serpData
+     * Light pass: copies enabled base seeds, qualifier rules, and generic meanings.
+     * Does NOT perform SERP competitor, homonym, or intruder extraction.
      */
-    public function generateForProduct(WatchedProduct $product, array $serpData = [], bool $isCreation = false): void
+    public function generateBase(WatchedProduct $product): void
     {
         $currentStrategy = $product->strategy instanceof Strategy
             ? $product->strategy
@@ -33,13 +47,79 @@ class NegativeKeywordGenerator
 
         // 3. Enrich from generic meanings dictionary
         $this->syncGenericMeanings($product);
+    }
 
-        // 4. Enrich from SERP data if available
+    /**
+     * Full campaign pass: extracts and enriches competitor, homonym, and intruder terms from SERP.
+     * Always ensures base seeds are present and never overwrites manual entries.
+     *
+     * @param  array<string, mixed>  $serpData
+     * @return int Number of newly inserted campaign negative keywords
+     */
+    public function generateCampaign(WatchedProduct $product, array $serpData = []): int
+    {
+        // 1. Always ensure light base seeds and rule items are in place
+        $this->generateBase($product);
+
+        // 2. Resolve SERP data if not passed explicitly
+        if (empty($serpData)) {
+            $query = $product->name;
+            $gl = config('watching.serpapi_gl', 'ca');
+            $cacheKey = 'serpapi_search_'.md5(strtolower(trim($query)).'_'.$gl);
+
+            $cached = Cache::get($cacheKey);
+            if (! empty($cached) && is_array($cached)) {
+                $serpData = $cached;
+            } elseif ($this->getBudget()->canSpendManual(1)) {
+                $serpData = $this->getSerpClient()->fetchGoogleSerp($product->name, forceFresh: false);
+            } else {
+                Log::warning("NegativeKeywordGenerator: SerpApi quota budget exceeded. Cannot fetch fresh SERP for product {$product->id}.");
+            }
+        }
+
+        // 3. Extract campaign competitor & intruder terms
+        $beforeCount = ProductNegativeKeyword::query()
+            ->where('product_id', $product->id)
+            ->whereIn('source', [
+                NegativeKeywordSource::Competitor,
+                NegativeKeywordSource::Homonym,
+                NegativeKeywordSource::SerpIntruder,
+            ])
+            ->count();
+
         if (! empty($serpData)) {
             $this->syncSerpData($product, $serpData);
         }
 
-        // 5. Optional LLM enrichment on creation only
+        if (config('watching.negatives_llm', false)) {
+            $this->runLlmEnrichment($product);
+        }
+
+        $afterCount = ProductNegativeKeyword::query()
+            ->where('product_id', $product->id)
+            ->whereIn('source', [
+                NegativeKeywordSource::Competitor,
+                NegativeKeywordSource::Homonym,
+                NegativeKeywordSource::SerpIntruder,
+            ])
+            ->count();
+
+        return max(0, $afterCount - $beforeCount);
+    }
+
+    /**
+     * Backward-compatible helper to generate negatives for a product.
+     *
+     * @param  array<string, mixed>  $serpData
+     */
+    public function generateForProduct(WatchedProduct $product, array $serpData = [], bool $isCreation = false): void
+    {
+        $this->generateBase($product);
+
+        if (! empty($serpData)) {
+            $this->syncSerpData($product, $serpData);
+        }
+
         if ($isCreation && config('watching.negatives_llm', false)) {
             $this->runLlmEnrichment($product);
         }

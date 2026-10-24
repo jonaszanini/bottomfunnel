@@ -88,8 +88,8 @@ class RefreshSingleWatchedProductJob implements ShouldQueue
                 }
             }
 
-            // Generate and sync base seeds, qualifier rules, and clean SERP data
-            $negativeGenerator->generateForProduct($product, $data['serp'] ?? []);
+            // Light pass: sync base seeds, qualifier rules, and generic meanings (no noisy SERP negatives)
+            $negativeGenerator->generateBase($product);
 
             $product->last_refreshed_at = now();
             $product->save();

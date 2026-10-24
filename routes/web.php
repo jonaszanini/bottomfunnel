@@ -124,6 +124,7 @@ Route::middleware('auth')->group(function () {
     Route::patch('/watching-products/{watchedProduct}/negatives/{negativeKeyword}', [WatchedProductController::class, 'updateNegative'])->name('watching-products.negatives.update');
     Route::delete('/watching-products/{watchedProduct}/negatives/{negativeKeyword}', [WatchedProductController::class, 'destroyNegative'])->name('watching-products.negatives.destroy');
     Route::get('/watching-products/{watchedProduct}/negatives/export', [WatchedProductController::class, 'exportNegatives'])->name('watching-products.negatives.export');
+    Route::post('/watching-products/{watchedProduct}/negatives/generate-campaign', [WatchedProductController::class, 'generateCampaignNegatives'])->name('watching-products.negatives.generate-campaign');
 
     Route::get('/copy', [CopyStudioController::class, 'index'])->name('copy.index');
     Route::post('/api/copy/generate-base', [CopyStudioController::class, 'generateBase'])->name('copy.generate-base');

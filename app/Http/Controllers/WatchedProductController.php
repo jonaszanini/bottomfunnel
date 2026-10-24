@@ -27,6 +27,7 @@ use App\Services\WatchingProducts\PotentialScoreService;
 use App\Services\WatchingProducts\QuotaBudget;
 use App\Services\WatchingProducts\RankService;
 use App\Services\WatchingProducts\StrategyRecommender;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
@@ -240,7 +241,7 @@ class WatchedProductController extends Controller
 
         // Ensure base seeds are populated if missing
         if ($watchedProduct->negativeKeywords()->where('source', NegativeKeywordSource::Base)->doesntExist()) {
-            $this->negativeGenerator->generateForProduct($watchedProduct);
+            $this->negativeGenerator->generateBase($watchedProduct);
         }
 
         // Negative keywords
@@ -612,6 +613,29 @@ class WatchedProductController extends Controller
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ]);
+    }
+
+    /**
+     * Generate full campaign negative keywords (SERP competitor, homonym, and intruder extraction).
+     */
+    public function generateCampaignNegatives(Request $request, WatchedProduct $watchedProduct): RedirectResponse|JsonResponse
+    {
+        $added = $this->negativeGenerator->generateCampaign($watchedProduct);
+
+        $message = $added > 0
+            ? "Generated {$added} new campaign negative keyword(s) from SERP analysis."
+            : 'Campaign negative generation complete. No new competitor terms found.';
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'success' => true,
+                'added' => $added,
+                'message' => $message,
+            ]);
+        }
+
+        return back()->with('success', $message);
     }
 
     /**

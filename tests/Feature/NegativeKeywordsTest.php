@@ -6,12 +6,16 @@ use App\Enums\NegativeKeywordMatchType;
 use App\Enums\NegativeKeywordSource;
 use App\Enums\Strategy;
 use App\Enums\StrategySource;
+use App\Enums\WatchedProductStatus;
 use App\Models\NegativeKeywordSeed;
 use App\Models\ProductNegativeKeyword;
+use App\Models\User;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\NegativeKeywordGenerator;
 use Database\Seeders\NegativeKeywordSeedSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -414,6 +418,197 @@ class NegativeKeywordsTest extends TestCase
         $this->assertDatabaseHas('product_negative_keywords', [
             'id' => $manual->id,
             'term' => 'audifort--custom-manual',
+        ]);
+    }
+
+    public function test_creating_a_product_only_inserts_base_qualifier_and_generic_terms(): void
+    {
+        config(['watching.generic_meanings.cleanser' => ['cleanser detox formula']]);
+
+        $product = WatchedProduct::factory()->create([
+            'name' => 'Alpha Cleanser Tea',
+            'bof_qualifier' => 'Tea',
+            'strategy' => Strategy::BofDirect,
+            'strategy_source' => StrategySource::Manual,
+            'status' => WatchedProductStatus::Watch,
+        ]);
+
+        // Base seeds are populated
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'affiliate',
+            'source' => NegativeKeywordSource::Base->value,
+        ]);
+
+        // Qualifier rule is populated
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'alpha cleanser',
+            'source' => NegativeKeywordSource::QualifierRule->value,
+            'match_type' => NegativeKeywordMatchType::Exact->value,
+        ]);
+
+        // Generic meaning is populated
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'cleanser detox formula',
+            'source' => NegativeKeywordSource::GenericMeaning->value,
+        ]);
+
+        // No competitor or intruder terms created in light pass
+        $campaignCount = ProductNegativeKeyword::query()
+            ->where('product_id', $product->id)
+            ->whereIn('source', [
+                NegativeKeywordSource::Competitor,
+                NegativeKeywordSource::Homonym,
+                NegativeKeywordSource::SerpIntruder,
+            ])
+            ->count();
+
+        $this->assertSame(0, $campaignCount);
+    }
+
+    public function test_calling_campaign_endpoint_adds_competitor_terms_and_preserves_manual_ones(): void
+    {
+        $user = User::factory()->create();
+
+        $product = WatchedProduct::factory()->create([
+            'name' => 'Zenith Peak Male',
+            'strategy' => Strategy::BofDirect,
+            'status' => WatchedProductStatus::Watch,
+        ]);
+
+        // Manual keyword added by user
+        $manual = ProductNegativeKeyword::query()->create([
+            'product_id' => $product->id,
+            'term' => 'manual-kept-negative',
+            'match_type' => NegativeKeywordMatchType::Exact,
+            'source' => NegativeKeywordSource::Manual,
+            'enabled' => true,
+            'manually_overridden' => true,
+        ]);
+
+        // Cache SERP competitor candidate data
+        $query = $product->name;
+        $gl = config('watching.serpapi_gl', 'ca');
+        $cacheKey = 'serpapi_search_'.md5(strtolower(trim($query)).'_'.$gl);
+        Cache::put($cacheKey, [
+            'organic_domains' => ['competitorbrand.com', 'rivalherbals.net'],
+            'organic_titles' => ['RivalBrand vs Zenith Peak Male Vitality'],
+            'related_searches' => ['zenith peak male reviews', 'unrelated intruder term here'],
+        ], now()->addHour());
+
+        $response = $this->actingAs($user)
+            ->post("/watching-products/{$product->id}/negatives/generate-campaign");
+
+        $response->assertRedirect();
+        $response->assertSessionHas('success');
+
+        // Competitor terms added
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'competitorbrand',
+            'source' => NegativeKeywordSource::Competitor->value,
+        ]);
+
+        // Intruder search query added
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'unrelated intruder term here',
+            'source' => NegativeKeywordSource::SerpIntruder->value,
+        ]);
+
+        // Manual user term is completely preserved
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'id' => $manual->id,
+            'term' => 'manual-kept-negative',
+            'source' => NegativeKeywordSource::Manual->value,
+            'manually_overridden' => 1,
+        ]);
+    }
+
+    public function test_refresh_does_not_explode_list_with_serp_terms(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'name' => 'QuietMind Drops',
+            'strategy' => Strategy::BofDirect,
+            'status' => WatchedProductStatus::Watch,
+        ]);
+
+        // Fake SerpApi HTTP calls during refresh command
+        Http::fake([
+            'https://serpapi.com/search.json?*engine=google_trends*' => Http::response([
+                'interest_over_time' => [
+                    'timeline_data' => [
+                        ['values' => [65]],
+                        ['values' => [70]],
+                    ],
+                ],
+            ], 200),
+            'https://serpapi.com/search.json?*engine=google*' => Http::response([
+                'organic_results' => [
+                    ['link' => 'https://competitordomain123.com/product', 'title' => 'Rival Product'],
+                ],
+                'related_searches' => [
+                    ['query' => 'noisy intruder term 99'],
+                ],
+            ], 200),
+        ]);
+
+        // Run refresh command for this product
+        Artisan::call('watching:refresh', [
+            '--product' => $product->id,
+        ]);
+
+        // Refresh should NOT populate competitor or intruder negative keywords (light pass only)
+        $campaignCount = ProductNegativeKeyword::query()
+            ->where('product_id', $product->id)
+            ->whereIn('source', [
+                NegativeKeywordSource::Competitor,
+                NegativeKeywordSource::Homonym,
+                NegativeKeywordSource::SerpIntruder,
+            ])
+            ->count();
+
+        $this->assertSame(0, $campaignCount);
+    }
+
+    public function test_status_change_to_test_triggers_campaign_negative_generation(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'name' => 'Alpha Vitality',
+            'strategy' => Strategy::BofDirect,
+            'status' => WatchedProductStatus::Watch,
+        ]);
+
+        // Verify no campaign negatives initially
+        $this->assertSame(0, ProductNegativeKeyword::query()
+            ->where('product_id', $product->id)
+            ->whereIn('source', [NegativeKeywordSource::Competitor, NegativeKeywordSource::SerpIntruder])
+            ->count());
+
+        // Pre-populate cached SERP data
+        $query = $product->name;
+        $gl = config('watching.serpapi_gl', 'ca');
+        $cacheKey = 'serpapi_search_'.md5(strtolower(trim($query)).'_'.$gl);
+        Cache::put($cacheKey, [
+            'organic_domains' => ['rivalherbals.org'],
+            'related_searches' => ['noisy intruder search query'],
+        ], now()->addHour());
+
+        // Status transition to Test (campaign ready)
+        $product->update(['status' => WatchedProductStatus::Test]);
+
+        // Competitor and intruder terms are now automatically generated
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'rivalherbals',
+            'source' => NegativeKeywordSource::Competitor->value,
+        ]);
+        $this->assertDatabaseHas('product_negative_keywords', [
+            'product_id' => $product->id,
+            'term' => 'noisy intruder search query',
+            'source' => NegativeKeywordSource::SerpIntruder->value,
         ]);
     }
 }
