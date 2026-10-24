@@ -51,6 +51,11 @@ class GoogleAdsAccount extends Model
         return $this->hasMany(IpBlock::class);
     }
 
+    public function googleLoginAccounts(): HasMany
+    {
+        return $this->hasMany(GoogleLoginAccount::class, 'linked_google_ads_account_id');
+    }
+
     /**
      * Resolve the active default Google Ads account using user preference, session,
      * database default flag, or config fallback.

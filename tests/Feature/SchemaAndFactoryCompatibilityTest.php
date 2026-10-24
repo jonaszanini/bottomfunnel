@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\WatchedProductStatus;
 use App\Models\AdSpend;
 use App\Models\ApiUsage;
 use App\Models\CampaignAlert;
@@ -111,18 +112,21 @@ class SchemaAndFactoryCompatibilityTest extends TestCase
         WatchedProduct::factory()->create([
             'name' => 'High Score Product',
             'score' => 95,
+            'status' => WatchedProductStatus::Watch,
             'rank' => null,
         ]);
 
         WatchedProduct::factory()->create([
             'name' => 'Medium Score Product',
             'score' => 70,
+            'status' => WatchedProductStatus::Watch,
             'rank' => null,
         ]);
 
         WatchedProduct::factory()->create([
             'name' => 'Low Score Product',
             'score' => 40,
+            'status' => WatchedProductStatus::Watch,
             'rank' => null,
         ]);
 

@@ -80,5 +80,9 @@ class SidebarLayoutTest extends TestCase
         $this->actingAs($user)
             ->get('/watching-products')
             ->assertOk();
+
+        $this->actingAs($user)
+            ->get('/google-login-accounts')
+            ->assertOk();
     }
 }

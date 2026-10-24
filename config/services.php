@@ -35,4 +35,17 @@ return [
         ],
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Google Accounts Inventory Encryption
+    |--------------------------------------------------------------------------
+    |
+    | Dedicated key for encrypting passwords of manually managed Google accounts.
+    | IMPORTANT: Losing this key makes stored passwords unrecoverable.
+    |
+    */
+    'google_accounts' => [
+        'encryption_key' => env('GOOGLE_ACCOUNTS_ENCRYPTION_KEY'),
+    ],
+
 ];
