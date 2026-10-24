@@ -216,6 +216,10 @@ export default function Index({ accounts = [], filters = {}, googleAdsAccounts =
                     closeModal();
                     showToast('Account updated successfully.');
                 },
+                onError: (errors) => {
+                    const first = Object.values(errors || {})[0];
+                    showToast(first ? `Save failed: ${first}` : 'Save failed. Please check the form and try again.');
+                },
             });
         } else {
             form.post('/google-login-accounts', {
@@ -223,6 +227,10 @@ export default function Index({ accounts = [], filters = {}, googleAdsAccounts =
                 onSuccess: () => {
                     closeModal();
                     showToast('Account created successfully.');
+                },
+                onError: (errors) => {
+                    const first = Object.values(errors || {})[0];
+                    showToast(first ? `Save failed: ${first}` : 'Save failed. Please check the form and try again.');
                 },
             });
         }
