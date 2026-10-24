@@ -96,9 +96,12 @@ class GoogleLoginAccountController extends Controller
             'email' => ['required', 'email', 'max:255'],
             'password' => ['required', 'string', 'min:1', 'max:500'],
             'customer_id' => [
-                'required',
+                'nullable',
                 'string',
                 function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || trim((string) $value) === '') {
+                        return;
+                    }
                     $digits = preg_replace('/\D/', '', (string) $value) ?? '';
                     if (strlen($digits) !== 10) {
                         $fail('The Customer ID must contain exactly 10 digits.');
@@ -128,7 +131,9 @@ class GoogleLoginAccountController extends Controller
             'campaigns.*.status' => ['nullable', 'string', 'in:active,paused,removed'],
         ]);
 
-        $customerId = preg_replace('/\D/', '', (string) $validated['customer_id']) ?? '';
+        $customerId = ! empty($validated['customer_id'])
+            ? (preg_replace('/\D/', '', (string) $validated['customer_id']) ?: null)
+            : null;
         $loginCustomerId = ! empty($validated['login_customer_id'])
             ? (preg_replace('/\D/', '', (string) $validated['login_customer_id']) ?? null)
             : null;
@@ -164,9 +169,12 @@ class GoogleLoginAccountController extends Controller
             'email' => ['required', 'email', 'max:255'],
             'password' => ['nullable', 'string', 'min:1', 'max:500'],
             'customer_id' => [
-                'required',
+                'nullable',
                 'string',
                 function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value === null || trim((string) $value) === '') {
+                        return;
+                    }
                     $digits = preg_replace('/\D/', '', (string) $value) ?? '';
                     if (strlen($digits) !== 10) {
                         $fail('The Customer ID must contain exactly 10 digits.');
@@ -196,7 +204,9 @@ class GoogleLoginAccountController extends Controller
             'campaigns.*.status' => ['nullable', 'string', 'in:active,paused,removed'],
         ]);
 
-        $customerId = preg_replace('/\D/', '', (string) $validated['customer_id']) ?? '';
+        $customerId = ! empty($validated['customer_id'])
+            ? (preg_replace('/\D/', '', (string) $validated['customer_id']) ?: null)
+            : null;
         $loginCustomerId = ! empty($validated['login_customer_id'])
             ? (preg_replace('/\D/', '', (string) $validated['login_customer_id']) ?? null)
             : null;

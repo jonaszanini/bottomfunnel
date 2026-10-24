@@ -42,8 +42,8 @@ export default function Index({ accounts = [], filters = {}, googleAdsAccounts =
             const matchesSearch =
                 acc.email.toLowerCase().includes(q) ||
                 (acc.notes && acc.notes.toLowerCase().includes(q)) ||
-                (digits && (acc.customer_id.includes(digits) || (acc.login_customer_id && acc.login_customer_id.includes(digits)))) ||
-                acc.formatted_customer_id.toLowerCase().includes(q);
+                (digits && ((acc.customer_id && acc.customer_id.includes(digits)) || (acc.login_customer_id && acc.login_customer_id.includes(digits)))) ||
+                (acc.formatted_customer_id && acc.formatted_customer_id.toLowerCase().includes(q));
 
             return matchesStatus && matchesSearch;
         });
@@ -435,21 +435,25 @@ export default function Index({ accounts = [], filters = {}, googleAdsAccounts =
 
                                             {/* Customer ID */}
                                             <td className="px-5 py-4 whitespace-nowrap">
-                                                <div className="flex items-center gap-1.5 font-mono text-xs text-theme-primary font-medium">
-                                                    <span>{account.formatted_customer_id}</span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleCopy(account.customer_id, 'Customer ID')}
-                                                        className="text-theme-muted hover:text-theme-primary transition-colors cursor-pointer p-0.5"
-                                                        title="Copy Customer ID"
-                                                        aria-label={`Copy customer ID ${account.customer_id}`}
-                                                    >
-                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                                            <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
-                                                            <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
-                                                        </svg>
-                                                    </button>
-                                                </div>
+                                                {account.customer_id ? (
+                                                    <div className="flex items-center gap-1.5 font-mono text-xs text-theme-primary font-medium">
+                                                        <span>{account.formatted_customer_id || account.customer_id}</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCopy(account.customer_id, 'Customer ID')}
+                                                            className="text-theme-muted hover:text-theme-primary transition-colors cursor-pointer p-0.5"
+                                                            title="Copy Customer ID"
+                                                            aria-label={`Copy customer ID ${account.customer_id}`}
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                                                                <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-xs text-theme-muted">—</span>
+                                                )}
                                                 {account.login_customer_id && (
                                                     <div className="text-[11px] text-theme-muted mt-0.5 font-mono">
                                                         MCC: {account.login_customer_id}
@@ -624,13 +628,12 @@ export default function Index({ accounts = [], filters = {}, googleAdsAccounts =
                                     />
                                 </Field>
 
-                                <Field label="Customer ID (Google Ads ID)" error={form.errors.customer_id}>
+                                <Field label="Customer ID (Google Ads ID - Optional)" error={form.errors.customer_id}>
                                     <input
                                         type="text"
-                                        required
                                         value={form.data.customer_id}
                                         onChange={(e) => form.setData('customer_id', e.target.value)}
-                                        placeholder="123-456-7890 or 1234567890"
+                                        placeholder="123-456-7890 or 1234567890 (optional)"
                                         className={control}
                                     />
                                 </Field>
@@ -921,7 +924,7 @@ export default function Index({ accounts = [], filters = {}, googleAdsAccounts =
 
                         <div className="mt-4 rounded-lg bg-theme-subtle p-3 text-xs font-mono text-theme-primary">
                             <div><strong>Email:</strong> {deleteModalAccount.email}</div>
-                            <div><strong>Customer ID:</strong> {deleteModalAccount.formatted_customer_id}</div>
+                            <div><strong>Customer ID:</strong> {deleteModalAccount.formatted_customer_id || deleteModalAccount.customer_id || '—'}</div>
                         </div>
 
                         <div className="mt-6 flex items-center justify-end gap-2">

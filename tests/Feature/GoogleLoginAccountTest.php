@@ -172,6 +172,43 @@ class GoogleLoginAccountTest extends TestCase
         ])->assertSessionHasErrors(['customer_id']);
     }
 
+    public function test_customer_id_is_optional(): void
+    {
+        $response = $this->actingAs($this->user)->post('/google-login-accounts', [
+            'email' => 'no.cid@example.com',
+            'password' => 'Pass1234!',
+            'customer_id' => '',
+            'status' => 'active',
+        ]);
+
+        $response->assertRedirect('/google-login-accounts');
+
+        $account = GoogleLoginAccount::where('email', 'no.cid@example.com')->firstOrFail();
+        $this->assertNull($account->customer_id);
+        $this->assertNull($account->formatted_customer_id);
+
+        // Update with 10-digit CID
+        $this->actingAs($this->user)->put("/google-login-accounts/{$account->id}", [
+            'email' => 'no.cid@example.com',
+            'customer_id' => '123-456-7890',
+            'status' => 'active',
+        ])->assertRedirect('/google-login-accounts');
+
+        $account->refresh();
+        $this->assertEquals('1234567890', $account->customer_id);
+        $this->assertEquals('123-456-7890', $account->formatted_customer_id);
+
+        // Update back to empty
+        $this->actingAs($this->user)->put("/google-login-accounts/{$account->id}", [
+            'email' => 'no.cid@example.com',
+            'customer_id' => '',
+            'status' => 'active',
+        ])->assertRedirect('/google-login-accounts');
+
+        $account->refresh();
+        $this->assertNull($account->customer_id);
+    }
+
     public function test_status_transitions_manage_cancelled_at_timestamp(): void
     {
         $account = GoogleLoginAccount::factory()->create([

@@ -15,7 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('email');
             $table->text('password'); // Encrypted string using GOOGLE_ACCOUNTS_ENCRYPTION_KEY
-            $table->string('customer_id', 20); // 10-digit Google Ads account ID
+            $table->string('customer_id', 20)->nullable(); // Optional 10-digit Google Ads account ID
             $table->string('login_customer_id', 20)->nullable(); // Optional MCC manager customer ID
             $table->string('status', 32)->default('active'); // 'active', 'cancelled', 'suspended'
             $table->char('currency', 3)->nullable();

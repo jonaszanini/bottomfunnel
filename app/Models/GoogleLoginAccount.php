@@ -97,7 +97,11 @@ class GoogleLoginAccount extends Model
     protected function formattedCustomerId(): Attribute
     {
         return Attribute::make(
-            get: function (): string {
+            get: function (): ?string {
+                if ($this->customer_id === null || trim((string) $this->customer_id) === '') {
+                    return null;
+                }
+
                 $raw = (string) $this->customer_id;
                 $clean = preg_replace('/[^0-9]/', '', $raw) ?? '';
                 if (strlen($clean) === 10) {
