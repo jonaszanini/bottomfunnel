@@ -25,22 +25,31 @@ class TrackController extends Controller
     public function index(): Response
     {
         return Inertia::render('Tracks/Index', [
-            'tracks' => Track::query()->with('account:id,name')->latest()->get()->map(fn (Track $track): array => [
+            'tracks' => Track::query()->with('account:id,name,customer_id')->latest()->get()->map(fn (Track $track): array => [
                 'id' => $track->id,
                 'product_name' => $track->product_name,
                 'platform' => config('flowhub.platforms.'.$track->platform, $track->platform),
                 'page_type' => config('flowhub.page_types.'.$track->page_type, $track->page_type),
                 'strategy' => config('flowhub.strategies.'.$track->strategy, $track->strategy),
-                'account' => $track->account?->name,
+                'google_ads_account_id' => $track->google_ads_account_id,
+                'account' => $track->account ? [
+                    'id' => $track->account->id,
+                    'name' => $track->account->name,
+                    'customer_id' => $track->account->customer_id,
+                ] : null,
+                'account_name' => $track->account?->name,
             ]),
         ]);
     }
 
     public function create(): Response
     {
+        $defaultAccount = GoogleAdsAccount::getDefault(request()->user());
+
         return Inertia::render('Tracks/Form', [
             'track' => null,
             'accounts' => $this->accounts(),
+            'default_account_id' => $defaultAccount?->id,
             ...Options::forForms(),
         ]);
     }
@@ -76,7 +85,14 @@ class TrackController extends Controller
                 'postback_url' => $track->postbackUrl(),
                 'script' => $track->scriptTag(),
                 'click_param' => $track->clickParam(),
-                'account' => $track->account?->name,
+                'google_ads_account_id' => $track->google_ads_account_id,
+                'account' => $track->account ? [
+                    'id' => $track->account->id,
+                    'name' => $track->account->name,
+                    'customer_id' => $track->account->customer_id,
+                ] : null,
+                'account_name' => $track->account?->name,
+                'account_customer_id' => $track->account?->customer_id,
                 'conversion_action' => $track->conversionAction?->name,
                 'campaign_ids' => $track->campaign_ids ?? [],
             ],
@@ -130,6 +146,7 @@ class TrackController extends Controller
                 'campaign_ids' => $track->campaign_ids ?? [],
             ],
             'accounts' => $this->accounts(),
+            'default_account_id' => GoogleAdsAccount::getDefault(request()->user())?->id,
             ...Options::forForms(),
         ]);
     }
@@ -249,15 +266,24 @@ class TrackController extends Controller
     }
 
     /**
-     * @return list<array{id: int, name: string, customer_id: string}>
+     * @return list<array{id: int, name: string, customer_id: string, login_customer_id: ?string, is_default: bool, status: string}>
      */
     private function accounts(): array
     {
-        return GoogleAdsAccount::query()->orderBy('name')->get(['id', 'name', 'customer_id'])
+        $defaultAccount = GoogleAdsAccount::getDefault(request()->user());
+        $defaultId = $defaultAccount?->id;
+
+        return GoogleAdsAccount::query()
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get(['id', 'name', 'customer_id', 'login_customer_id', 'status', 'is_default'])
             ->map(fn (GoogleAdsAccount $account): array => [
                 'id' => $account->id,
                 'name' => $account->name,
                 'customer_id' => $account->customer_id,
+                'login_customer_id' => $account->login_customer_id,
+                'status' => $account->status,
+                'is_default' => $account->id === $defaultId || (bool) $account->is_default,
             ])->all();
     }
 }

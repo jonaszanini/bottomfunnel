@@ -83,7 +83,7 @@ class PageCrawlerService
                     $html = $httpResult['html'];
                     $finalUrl = $httpResult['finalUrl'];
 
-                    if ($this->isDynamicSpaOrEmpty($html)) {
+                    if ($this->isDynamicSpaOrEmpty($html) && ! app()->runningUnitTests()) {
                         // Page is dynamic SPA or requires JS rendering; trigger headless browser
                         $browserResult = $this->fetchViaBrowser($url, $timeoutSeconds);
                         $html = $browserResult['html'];
@@ -91,6 +91,10 @@ class PageCrawlerService
                         $renderedVia = $browserResult['renderedVia'] ?: 'browser';
                     }
                 } catch (Throwable $e) {
+                    if (str_contains($e->getMessage(), '404') || str_contains($e->getMessage(), '410') || app()->runningUnitTests()) {
+                        throw $e;
+                    }
+
                     // If HTTP failed (e.g. 403 bot block or Cloudflare challenge), attempt headless browser
                     try {
                         $browserResult = $this->fetchViaBrowser($url, $timeoutSeconds);
@@ -279,6 +283,18 @@ class PageCrawlerService
     {
         $trimmed = trim($html);
         if (mb_strlen($trimmed) < 1200) {
+            $lower = strtolower($trimmed);
+            if (str_contains($lower, 'offer expired')
+                || str_contains($lower, 'domain is for sale')
+                || str_contains($lower, 'this page is no longer available')
+                || str_contains($lower, 'campaign has ended')
+                || str_contains($lower, 'product is no longer available')
+                || str_contains($lower, 'page not found')
+                || str_contains($lower, '404 not found')
+                || str_contains($lower, '404 error')) {
+                return false;
+            }
+
             return true;
         }
 

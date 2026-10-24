@@ -1,8 +1,11 @@
 import { Link, useForm } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import Layout, { Field, button, control } from '../../Components/Layout';
+import GoogleAdsAccountSelect from '../../Components/GoogleAdsAccountSelect';
 
-export default function Form({ track, accounts, pageTypes, strategies, platforms, languages }) {
+export default function Form({ track, accounts, default_account_id, pageTypes, strategies, platforms, languages }) {
+    const defaultAccId = track?.google_ads_account_id || default_account_id || accounts.find((a) => a.is_default)?.id || (accounts.length === 1 ? accounts[0].id : '');
+
     const form = useForm({
         product_name: track?.product_name || '',
         platform: track?.platform || 'clickbank',
@@ -11,7 +14,7 @@ export default function Form({ track, accounts, pageTypes, strategies, platforms
         strategy: track?.strategy || 'target_cpa',
         language: track?.language || '',
         typical_commission_cad: track?.typical_commission_cad || '',
-        google_ads_account_id: track?.google_ads_account_id || '',
+        google_ads_account_id: defaultAccId,
         conversion_mode: 'existing',
         conversion_action_id: track?.conversion_action_id || '',
         conversion_action_name: '',
@@ -100,12 +103,16 @@ export default function Form({ track, accounts, pageTypes, strategies, platforms
                 <Field label="Typical commission for one sale, CAD$" error={form.errors.typical_commission_cad}>
                     <input className={control} value={form.data.typical_commission_cad} onChange={(event) => form.setData('typical_commission_cad', event.target.value)} />
                 </Field>
-                <Field label="Google Ads account" error={form.errors.google_ads_account_id}>
-                    <select className={control} value={form.data.google_ads_account_id} onChange={(event) => form.setData('google_ads_account_id', event.target.value)}>
-                        <option value="">Choose an account</option>
-                        {accounts.map((account) => <option key={account.id} value={account.id}>{account.name} ({account.customer_id})</option>)}
-                    </select>
-                </Field>
+                <div>
+                    <span className="mb-1 block text-sm font-medium text-theme-secondary">Google Ads account *</span>
+                    <GoogleAdsAccountSelect
+                        accounts={accounts}
+                        value={form.data.google_ads_account_id}
+                        onChange={(val) => form.setData('google_ads_account_id', val)}
+                        error={form.errors.google_ads_account_id}
+                        required
+                    />
+                </div>
                 {loadError && <p className="text-sm text-[var(--dangerColor)]">{loadError}</p>}
                 <fieldset className="grid gap-3">
                     <legend className="text-sm font-medium text-theme-secondary">Offline conversion action</legend>

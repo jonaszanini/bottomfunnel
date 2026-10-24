@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\GoogleAdsAccount;
+use App\Models\GoogleAdsCampaign;
 use App\Services\Google\GoogleAdsClient;
 use App\Services\Google\GoogleRequestException;
 use Illuminate\Http\JsonResponse;
@@ -14,6 +15,40 @@ class InternalGoogleAdsController extends Controller
     public function __construct(
         protected GoogleAdsClient $googleAds
     ) {}
+
+    /**
+     * GET /internal/google-ads/campaigns
+     * List all tracked campaigns with their account ownership.
+     */
+    public function listCampaigns(Request $request): JsonResponse
+    {
+        $accountId = $request->query('account_id');
+        $query = GoogleAdsCampaign::query()->with('account:id,name,customer_id');
+
+        if ($accountId) {
+            $query->where('google_ads_account_id', $accountId);
+        }
+
+        $campaigns = $query->latest()->get()->map(fn (GoogleAdsCampaign $c) => [
+            'id' => $c->id,
+            'campaign_id' => $c->campaign_id,
+            'name' => $c->name,
+            'status' => $c->status,
+            'budget_amount_micros' => $c->budget_amount_micros,
+            'bidding_strategy' => $c->bidding_strategy,
+            'account_id' => $c->google_ads_account_id,
+            'account' => $c->account ? [
+                'id' => $c->account->id,
+                'name' => $c->account->name,
+                'customer_id' => $c->account->customer_id,
+            ] : null,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'data' => $campaigns,
+        ]);
+    }
 
     /**
      * POST /internal/google-ads/campaigns
@@ -39,9 +74,30 @@ class InternalGoogleAdsController extends Controller
                 $validated['bidding_strategy'] ?? 'MANUAL_CPC'
             );
 
+            // Store the campaign and its account ownership
+            GoogleAdsCampaign::query()->updateOrCreate(
+                [
+                    'google_ads_account_id' => $account->id,
+                    'campaign_id' => $result['campaign_id'],
+                ],
+                [
+                    'customer_id' => $account->customer_id,
+                    'name' => $validated['name'],
+                    'status' => 'PAUSED',
+                    'budget_amount_micros' => (int) $validated['budget_amount_micros'],
+                    'bidding_strategy' => $validated['bidding_strategy'] ?? 'MANUAL_CPC',
+                    'resource_name' => $result['campaign_resource'] ?? null,
+                ]
+            );
+
             return response()->json([
                 'ok' => true,
-                'data' => $result,
+                'data' => [
+                    ...$result,
+                    'account_id' => $account->id,
+                    'customer_id' => $account->customer_id,
+                    'account_name' => $account->name,
+                ],
             ], 201);
         } catch (GoogleRequestException $e) {
             return response()->json([
@@ -237,6 +293,11 @@ class InternalGoogleAdsController extends Controller
         try {
             $this->googleAds->updateCampaignStatus($account, $campaign, $status, $confirm);
 
+            GoogleAdsCampaign::query()
+                ->where('google_ads_account_id', $account->id)
+                ->where('campaign_id', $campaign)
+                ->update(['status' => $status]);
+
             return response()->json([
                 'ok' => true,
                 'message' => "Campaign status updated to {$status}.",
@@ -345,7 +406,8 @@ class InternalGoogleAdsController extends Controller
     }
 
     /**
-     * Resolve target GoogleAdsAccount from request or fall back to default account.
+     * Resolve target GoogleAdsAccount from request or fall back to configured default account.
+     * Never silently defaults to "the latest" account when multiple accounts exist.
      */
     protected function resolveAccount(Request $request): GoogleAdsAccount
     {
@@ -356,15 +418,28 @@ class InternalGoogleAdsController extends Controller
 
         if ($accountId) {
             $account = $query->find($accountId);
-        } elseif ($customerId) {
-            $digits = preg_replace('/\D/', '', (string) $customerId);
-            $account = $query->where('customer_id', $digits)->first();
-        } else {
-            $account = $query->latest()->first();
+            if (! $account) {
+                abort(404, "Google Ads account ID {$accountId} not found.");
+            }
+
+            return $account;
         }
 
+        if ($customerId) {
+            $digits = preg_replace('/\D/', '', (string) $customerId);
+            $account = $query->where('customer_id', $digits)->first();
+            if (! $account) {
+                abort(404, "Google Ads customer ID {$customerId} not found.");
+            }
+
+            return $account;
+        }
+
+        // Explicit account wasn't passed: check configured default fallback
+        $account = GoogleAdsAccount::getDefault($request->user());
+
         if (! $account) {
-            abort(404, 'No Google Ads account found. Link an account first.');
+            abort(422, 'Target Google Ads account must be explicitly selected, or a default account must be configured.');
         }
 
         return $account;

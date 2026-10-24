@@ -80,10 +80,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/google-ads/connect', [GoogleAdsController::class, 'connect'])->name('google.connect');
     Route::get('/google-ads/callback', [GoogleAdsController::class, 'callback'])->name('google.callback');
     Route::post('/google-ads/accounts', [GoogleAdsController::class, 'store'])->name('google.store');
+    Route::post('/google-ads/accounts/{account}/default', [GoogleAdsController::class, 'setDefault'])->name('google.accounts.default');
     Route::delete('/google-ads/accounts/{account}', [GoogleAdsController::class, 'destroy'])->name('google.destroy');
     Route::get('/google-ads/accounts/{account}/options', [GoogleAdsController::class, 'options'])->name('google.options');
 
     // Internal & Bot API for Google Ads management
+    Route::get('/internal/google-ads/campaigns', [InternalGoogleAdsController::class, 'listCampaigns'])->name('internal.google.campaigns.index');
     Route::post('/internal/google-ads/campaigns', [InternalGoogleAdsController::class, 'createCampaign'])->name('internal.google.campaigns.store');
     Route::post('/internal/google-ads/campaigns/{campaign}/ad-groups', [InternalGoogleAdsController::class, 'createAdGroup'])->name('internal.google.ad-groups.store');
     Route::post('/internal/google-ads/ad-groups/{adGroup}/keywords', [InternalGoogleAdsController::class, 'addKeywords'])->name('internal.google.keywords.store');

@@ -3,6 +3,7 @@
 namespace App\Services\Reporting;
 
 use App\Models\AdSpend;
+use App\Models\CampaignAlert;
 use App\Models\Conversion;
 use App\Models\IpBlock;
 use App\Models\Track;
@@ -134,6 +135,28 @@ class DashboardReport
             'tracks' => $rows,
             'page_types' => $pageTypes,
             'flags' => $flags,
+            'safety_alerts' => CampaignAlert::query()
+                ->whereNull('dismissed_at')
+                ->latest()
+                ->limit(20)
+                ->get()
+                ->map(fn (CampaignAlert $alert): array => [
+                    'id' => $alert->id,
+                    'type' => $alert->type,
+                    'product_name' => $alert->product_name,
+                    'track_id' => $alert->track_id,
+                    'campaign_id' => $alert->campaign_id,
+                    'reason' => $alert->reason,
+                    'message' => $alert->message,
+                    'severity' => $alert->severity,
+                    'spend_cad' => $alert->spend_cad ? (float) $alert->spend_cad : null,
+                    'payout_cad' => $alert->payout_cad ? (float) $alert->payout_cad : null,
+                    'threshold_cad' => $alert->threshold_cad ? (float) $alert->threshold_cad : null,
+                    'window_days' => $alert->window_days,
+                    'action_taken' => $alert->action_taken,
+                    'created_at' => $alert->created_at?->diffForHumans() ?? 'Just now',
+                ])
+                ->all(),
             'blocked' => IpBlock::query()
                 ->with('track:id,product_name')
                 ->where('status', 'applied')

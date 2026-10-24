@@ -2,10 +2,12 @@
 
 namespace App\Console\Commands;
 
+use App\Enums\ListingStatus;
 use App\Enums\StrategySource;
 use App\Enums\WatchedProductStatus;
 use App\Models\ProductScoreHistory;
 use App\Models\WatchedProduct;
+use App\Services\Google\CampaignSafetyService;
 use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\Fx\FrankfurterFx;
 use App\Services\WatchingProducts\ListingChecker;
@@ -49,7 +51,8 @@ class RefreshWatchingProducts extends Command
         StrategyRecommender $strategyRecommender,
         NegativeKeywordGenerator $negativeGenerator,
         RankService $rankService,
-        BofChecker $bofChecker
+        BofChecker $bofChecker,
+        CampaignSafetyService $campaignSafety
     ): int {
         $isDryRun = (bool) $this->option('dry-run');
         $noSerp = (bool) $this->option('no-serp');
@@ -129,6 +132,15 @@ class RefreshWatchingProducts extends Command
                 $product->bof_translation = true;
             }
             $product->saveQuietly();
+
+            // Safety Rule: Auto-pause campaigns if listing is down/expired
+            if ($product->listing_status === ListingStatus::Expired) {
+                $campaignSafety->pauseCampaignsForProduct(
+                    $product,
+                    dryRun: $isDryRun,
+                    reason: 'Listing marked as unavailable/expired during weekly refresh.'
+                );
+            }
         }
 
         // 3. Budgeted SerpApi calls

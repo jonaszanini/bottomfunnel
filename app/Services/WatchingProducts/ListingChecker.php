@@ -39,11 +39,18 @@ class ListingChecker
             $crawlResult = $this->crawler->crawl($targetUrl);
             $html = strtolower($crawlResult['html'] ?? '');
 
-            // Check if page indicates expiration or takedown
+            // Check if page indicates expiration, takedown, or broken state
             $isExpired = str_contains($html, 'offer expired')
                 || str_contains($html, 'domain is for sale')
                 || str_contains($html, 'this page is no longer available')
-                || str_contains($html, 'campaign has ended');
+                || str_contains($html, 'campaign has ended')
+                || str_contains($html, 'product is no longer available')
+                || str_contains($html, 'offer is no longer available')
+                || str_contains($html, 'this listing has ended')
+                || str_contains($html, 'domain has expired')
+                || str_contains($html, 'page not found')
+                || str_contains($html, '404 not found')
+                || str_contains($html, '404 error');
 
             $listingStatus = $isExpired ? ListingStatus::Expired : ListingStatus::Active;
 
@@ -67,10 +74,26 @@ class ListingChecker
                 'detected_platform' => $detectedPlatform,
             ];
         } catch (Throwable $e) {
-            Log::info("ListingChecker: Failed checking URL '{$targetUrl}': {$e->getMessage()}");
+            $msg = strtolower($e->getMessage());
+            $isBrokenOrUnavailable = str_contains($msg, '404')
+                || str_contains($msg, '410')
+                || str_contains($msg, '502')
+                || str_contains($msg, '503')
+                || str_contains($msg, 'could not resolve host')
+                || str_contains($msg, 'failed to connect')
+                || str_contains($msg, 'connection refused')
+                || str_contains($msg, 'name or service not known')
+                || str_contains($msg, 'nxdomain');
+
+            $listingStatus = $isBrokenOrUnavailable ? ListingStatus::Expired : ($product->listing_status ?? ListingStatus::Unknown);
+
+            Log::info("ListingChecker: Failed checking URL '{$targetUrl}': {$e->getMessage()}", [
+                'is_unavailable' => $isBrokenOrUnavailable,
+                'listing_status' => $listingStatus->value,
+            ]);
 
             return [
-                'listing_status' => $product->listing_status ?? ListingStatus::Unknown,
+                'listing_status' => $listingStatus,
                 'brand_bidding' => null,
                 'detected_platform' => null,
             ];

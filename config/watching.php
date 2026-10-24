@@ -117,4 +117,30 @@ return [
         'flex' => ['ford flex', 'flex schedule', 'flex hose'],
         'clarity' => ['diamond clarity', 'clarity act', 'clarity call'],
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Automated Campaign Safety Rules
+    |--------------------------------------------------------------------------
+    |
+    | When auto_pause_enabled is false, safety rules (listing-down and
+    | spend-without-conversion bleeders) only raise alerts and will NEVER
+    | mutate Google Ads campaign statuses unless explicitly enabled.
+    |
+    */
+    'auto_pause_enabled' => (bool) env('SAFETY_AUTO_PAUSE_ENABLED', false),
+
+    'safety_rules' => [
+        'auto_pause_enabled' => (bool) env('SAFETY_AUTO_PAUSE_ENABLED', false),
+        'listing_down' => [
+            'enabled' => (bool) env('SAFETY_LISTING_DOWN_ENABLED', true),
+            'action' => env('SAFETY_LISTING_DOWN_ACTION', 'alert'),
+        ],
+        'bleeder' => [
+            'enabled' => (bool) env('SAFETY_BLEEDER_ENABLED', true),
+            'spend_payout_multiplier' => (float) env('SAFETY_BLEEDER_MULTIPLIER', 1.5),
+            'window_days' => (int) env('SAFETY_BLEEDER_WINDOW_DAYS', 7),
+            'action' => env('SAFETY_BLEEDER_ACTION', 'alert'),
+        ],
+    ],
 ];

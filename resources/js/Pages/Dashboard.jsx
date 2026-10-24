@@ -77,6 +77,59 @@ export default function Dashboard({ filters, report, trackOptions, pageTypes, st
                 ))}
             </div>
 
+            {/* Dedicated Safety Alerts Section (Listing Down & Bleeders) */}
+            {report.safety_alerts && report.safety_alerts.length > 0 && (
+                <section className="mt-4 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400 flex items-center gap-1.5">
+                            <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                            </svg>
+                            Campaign Safety Alerts ({report.safety_alerts.length})
+                        </h2>
+                        <span className="text-[11px] text-theme-muted">Auto-pause is disabled; alerts require manual action</span>
+                    </div>
+
+                    <div className="grid gap-2">
+                        {report.safety_alerts.map((alert) => (
+                            <div
+                                key={alert.id}
+                                className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-900 dark:text-rose-200 shadow-2xs"
+                            >
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-sm text-theme-primary">{alert.product_name}</span>
+                                        <span className="rounded bg-rose-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300 border border-rose-500/30">
+                                            {alert.reason}
+                                        </span>
+                                        {alert.campaign_id && (
+                                            <span className="text-theme-muted text-xs">
+                                                Campaign {alert.campaign_id} {alert.track_id ? `(Track #${alert.track_id})` : ''}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <span className="text-[11px] text-theme-muted">{alert.created_at}</span>
+                                </div>
+
+                                <p className="mt-1 text-theme-secondary text-xs">{alert.message}</p>
+
+                                {alert.type === 'bleeder' && alert.spend_cad !== null && (
+                                    <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-theme-muted pt-1.5 border-t border-rose-500/20">
+                                        <span>Spend: <strong className="text-theme-primary font-bold">CA${Number(alert.spend_cad).toFixed(2)}</strong></span>
+                                        <span>•</span>
+                                        <span>Typical Payout: <strong className="text-theme-primary font-bold">CA${Number(alert.payout_cad).toFixed(2)}</strong></span>
+                                        <span>•</span>
+                                        <span>Window: <strong className="text-theme-primary font-bold">{alert.window_days} days</strong></span>
+                                        <span>•</span>
+                                        <span>Conversions: <strong className="text-rose-600 dark:text-rose-400 font-bold">0</strong></span>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
             {report.flags.length > 0 && (
                 <section className="mt-4 space-y-2">
                     {report.flags.map((flag, index) => (

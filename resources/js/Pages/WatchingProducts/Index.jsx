@@ -123,9 +123,23 @@ export default function Index({ products, filters, metrics, options }) {
                 if (aPriority !== bPriority) {
                     return sortConfig.direction === 'asc' ? aPriority - bPriority : bPriority - aPriority;
                 }
-            } else if (sortConfig.key === 'brand_bidding') {
-                aVal = a.brand_bidding_label || a.brand_bidding || '';
-                bVal = b.brand_bidding_label || b.brand_bidding || '';
+            } else if (sortConfig.key === 'trends_trend' || sortConfig.key === 'momentum') {
+                const priority = { rising: 4, stable: 3, unknown: 2, falling: 1, dead_post_peak: 0 };
+                const aP = priority[a.trends_trend] ?? 2;
+                const bP = priority[b.trends_trend] ?? 2;
+                if (aP !== bP) {
+                    return sortConfig.direction === 'asc' ? aP - bP : bP - aP;
+                }
+            } else if (sortConfig.key === 'brand_bidding' || sortConfig.key === 'compliance') {
+                const aBof = (a.true_bof === 'yes' ? 2 : (a.true_bof === 'ambiguous' ? 1 : 0));
+                const aBb = (a.brand_bidding === 'allowed' ? 2 : (a.brand_bidding === 'unknown' ? 1 : 0));
+                const bBof = (b.true_bof === 'yes' ? 2 : (b.true_bof === 'ambiguous' ? 1 : 0));
+                const bBb = (b.brand_bidding === 'allowed' ? 2 : (b.brand_bidding === 'unknown' ? 1 : 0));
+                const aTotal = aBof * 2 + aBb;
+                const bTotal = bBof * 2 + bBb;
+                if (aTotal !== bTotal) {
+                    return sortConfig.direction === 'asc' ? aTotal - bTotal : bTotal - aTotal;
+                }
             } else if (sortConfig.key === 'true_bof') {
                 aVal = a.true_bof_label || a.true_bof || '';
                 bVal = b.true_bof_label || b.true_bof || '';
@@ -404,41 +418,128 @@ export default function Index({ products, filters, metrics, options }) {
         }
     };
 
-    const getBrandBiddingBadge = (bb) => {
-        switch (bb) {
-            case 'allowed':
-                return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
-            case 'banned':
-                return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
-            case 'confirm_with_am':
-                return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
-            default:
-                return 'bg-theme-subtle text-theme-muted border-theme';
+    const getCompliancePill = (product) => {
+        const bof = String(product.true_bof || '').toLowerCase();
+        const bb = String(product.brand_bidding || '').toLowerCase();
+
+        const isBofSafe = bof === 'yes' || bof === 'true';
+        const isBofFail = bof === 'no' || bof === 'false';
+        const isBbAllowed = bb === 'allowed';
+        const isBbBanned = bb === 'banned';
+
+        let pillStyle = 'bg-theme-subtle text-theme-muted border-theme';
+        let dotStyle = 'bg-theme-muted';
+
+        if (isBofSafe && isBbAllowed) {
+            pillStyle = 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30';
+            dotStyle = 'bg-emerald-500';
+        } else if (isBofFail || isBbBanned) {
+            pillStyle = 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30';
+            dotStyle = 'bg-rose-500';
+        } else {
+            pillStyle = 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30';
+            dotStyle = 'bg-amber-500';
         }
+
+        const bofText = isBofSafe ? 'BoF' : (isBofFail ? 'Non-BoF' : 'BoF?');
+        const bbText = isBbAllowed ? 'BB Allowed' : (isBbBanned ? 'No BB' : (bb === 'confirm_with_am' ? 'Confirm AM' : 'BB?'));
+
+        const fullTitle = `Compliance:\n• True BoF: ${product.true_bof_label || product.true_bof || 'Unknown'}\n• Brand Bidding: ${product.brand_bidding_label || product.brand_bidding || 'Unknown'}`;
+
+        return (
+            <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${pillStyle}`}
+                title={fullTitle}
+            >
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotStyle}`} />
+                <span>{bofText}</span>
+                <span className="opacity-30">•</span>
+                <span>{bbText}</span>
+            </span>
+        );
     };
 
-    const getTrueBofBadge = (bof) => {
-        switch (bof) {
-            case 'true':
-                return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
-            case 'false':
-                return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
-            default:
-                return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
-        }
-    };
+    const getMomentumIndicator = (product) => {
+        const trend = product.trends_trend || 'unknown';
+        const delta = product.score_delta;
+        const hasDelta = delta !== null && delta !== undefined && Number(delta) !== 0;
+        const deltaNum = Number(delta);
 
-    const getTrendBadge = (trend) => {
+        let icon = null;
+        let label = product.trends_trend_label || 'Stable';
+        let textClass = 'text-theme-muted font-medium';
+        let iconBg = 'bg-theme-subtle text-theme-muted';
+
         switch (trend) {
             case 'rising':
-                return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20';
+                label = 'Rising';
+                textClass = 'text-emerald-600 dark:text-emerald-400 font-semibold';
+                iconBg = 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+                icon = (
+                    <svg className="w-3 h-3 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
+                    </svg>
+                );
+                break;
+            case 'stable':
+                label = 'Stable';
+                textClass = 'text-theme-secondary font-medium';
+                iconBg = 'bg-slate-500/10 text-slate-500 dark:text-slate-400';
+                icon = (
+                    <svg className="w-3 h-3 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12h15m-4-4l4 4-4 4" />
+                    </svg>
+                );
+                break;
             case 'falling':
-                return 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20';
+                label = 'Falling';
+                textClass = 'text-amber-600 dark:text-amber-400 font-medium';
+                iconBg = 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+                icon = (
+                    <svg className="w-3 h-3 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 4.5l15 15m0 0V8.25m0 11.25H8.25" />
+                    </svg>
+                );
+                break;
             case 'dead_post_peak':
-                return 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20';
+                label = 'Dead Peak';
+                textClass = 'text-rose-600 dark:text-rose-400 font-bold';
+                iconBg = 'bg-rose-500/10 text-rose-600 dark:text-rose-400';
+                icon = (
+                    <svg className="w-3 h-3 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <circle cx="12" cy="12" r="9" />
+                        <line x1="9" y1="9" x2="15" y2="15" strokeLinecap="round" />
+                        <line x1="15" y1="9" x2="9" y2="15" strokeLinecap="round" />
+                    </svg>
+                );
+                break;
             default:
-                return 'bg-theme-subtle text-theme-secondary border-theme';
+                label = '—';
+                icon = <span className="text-[10px] leading-none">•</span>;
+                break;
         }
+
+        const title = `Momentum: ${label}${hasDelta ? ` (${deltaNum > 0 ? `+${deltaNum}` : deltaNum} score change)` : ''}`;
+
+        return (
+            <div className="flex items-center gap-1.5 whitespace-nowrap" title={title}>
+                <span className={`flex items-center justify-center w-5 h-5 rounded-full shrink-0 ${iconBg}`}>
+                    {icon}
+                </span>
+                <span className={`text-xs ${textClass}`}>{label}</span>
+                {hasDelta && (
+                    <span
+                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                            deltaNum > 0
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                        }`}
+                    >
+                        {deltaNum > 0 ? `+${deltaNum}` : deltaNum}
+                    </span>
+                )}
+            </div>
+        );
     };
 
     return (
@@ -686,310 +787,293 @@ export default function Index({ products, filters, metrics, options }) {
                     <>
                         <div className="hidden md:block overflow-x-auto">
                             <table className="min-w-full divide-y divide-theme text-left text-sm">
-                            <thead className="bg-theme-subtle/40 text-xs font-semibold uppercase tracking-wider text-theme-muted">
-                                <tr>
-                                    {renderSortTh('#', 'rank', 'w-14 text-center')}
-                                    {renderSortTh('Score', 'score', 'w-24 text-center')}
-                                    {renderSortTh('Product Name', 'name')}
-                                    {renderSortTh('Status', 'status')}
-                                    {renderSortTh('Strategy', 'strategy')}
-                                    {renderSortTh('Kind', 'product_kind')}
-                                    {renderSortTh('Payout', 'payout_cad')}
-                                    {renderSortTh('Demand', 'trends_trend')}
-                                    {renderSortTh('Brand Bidding', 'brand_bidding')}
-                                    {renderSortTh('Refreshed', 'last_refreshed_at')}
-                                    <th scope="col" className="px-3 py-3 text-right select-none">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-theme">
-                                {sortedProducts.map((product) => {
-                                    const scoreHsl = getScoreHsl(product.score);
-                                    const flags = product.score_flags || {};
+                                <thead className="bg-theme-subtle/40 text-xs font-semibold uppercase tracking-wider text-theme-muted">
+                                    <tr>
+                                        {renderSortTh('#', 'rank', 'w-12 text-center')}
+                                        {renderSortTh('Score', 'score', 'w-20 text-center')}
+                                        {renderSortTh('Product Name', 'name')}
+                                        {renderSortTh('Net Payout (CAD)', 'payout_cad', 'w-36 text-right')}
+                                        {renderSortTh('Momentum', 'momentum', 'w-36')}
+                                        {renderSortTh('Compliance', 'compliance', 'w-44 text-center')}
+                                        {renderSortTh('Status', 'status', 'w-24 text-center')}
+                                        <th scope="col" className="px-3 py-3 text-right select-none w-28">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-theme">
+                                    {sortedProducts.map((product) => {
+                                        const scoreHsl = getScoreHsl(product.score);
 
-                                    return (
-                                        <tr
-                                            key={product.id}
-                                            className="hover:bg-theme-subtle/30 transition-colors"
-                                        >
-                                            {/* Rank */}
-                                            <td className="px-3 py-3 text-center whitespace-nowrap font-bold text-xs text-theme-secondary">
-                                                {product.rank ? `#${product.rank}` : '—'}
-                                            </td>
+                                        return (
+                                            <tr
+                                                key={product.id}
+                                                className="hover:bg-theme-subtle/30 transition-colors"
+                                            >
+                                                {/* Rank */}
+                                                <td className="px-3 py-3 text-center whitespace-nowrap font-bold text-xs text-theme-secondary">
+                                                    {product.rank ? `#${product.rank}` : '—'}
+                                                </td>
 
-                                            {/* Score with Continuous HSL Gradient & ⓘ Popover Trigger */}
-                                            <td className="px-3 py-3 whitespace-nowrap text-center">
-                                                <div className="flex items-center justify-center gap-1">
-                                                    <span
-                                                        style={scoreHsl.style}
-                                                        className="inline-block rounded-md border px-2 py-0.5 text-xs font-black min-w-[34px] text-center shadow-2xs"
-                                                        title={`Score: ${product.score ?? 'N/A'} (Band: ${scoreHsl.band})`}
+                                                {/* Potential Score with Continuous HSL Gradient & ⓘ Popover Trigger */}
+                                                <td className="px-3 py-3 whitespace-nowrap text-center">
+                                                    <div className="flex items-center justify-center gap-1.5">
+                                                        <span
+                                                            style={scoreHsl.style}
+                                                            className="inline-block rounded-md border px-2 py-0.5 text-xs font-black min-w-[34px] text-center shadow-2xs"
+                                                            title={`Score: ${product.score ?? 'N/A'} (Band: ${scoreHsl.band})`}
+                                                        >
+                                                            {product.score !== null ? product.score : '—'}
+                                                        </span>
+
+                                                        {/* ⓘ Info Button to reveal breakdown */}
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setScoreModalProduct(product)}
+                                                            className="text-theme-muted hover:text-theme-accent p-0.5 rounded cursor-pointer transition-colors"
+                                                            title="Click to view score breakdown & flags"
+                                                            aria-label="View score breakdown"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                <circle cx="12" cy="12" r="10" />
+                                                                <line x1="12" y1="16" x2="12" y2="12" />
+                                                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </td>
+
+                                                {/* Product Name & Typographic Subtitle (Replaces bulky strategy/kind/esteira/approval badges) */}
+                                                <td className="px-3 py-3 font-medium text-theme-primary">
+                                                    <div className="flex flex-col">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <Link
+                                                                href={`/watching-products/${product.id}`}
+                                                                className="font-bold text-sm text-theme-primary hover:text-theme-accent transition-colors"
+                                                            >
+                                                                {product.name}
+                                                            </Link>
+                                                            {product.sales_page_url && (
+                                                                <a
+                                                                    href={product.sales_page_url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-theme-muted hover:text-theme-accent inline-flex items-center"
+                                                                    title="Open Sales Page"
+                                                                >
+                                                                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                                                        <polyline points="15 3 21 3 21 9" />
+                                                                        <line x1="10" y1="14" x2="21" y2="3" />
+                                                                    </svg>
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-theme-muted">
+                                                            <span>{product.page_type || 'General'}</span>
+                                                            <span>•</span>
+                                                            <span>{product.strategy_label || 'BoF Direct'}</span>
+                                                            <span>•</span>
+                                                            <span>{product.product_kind_label || 'Nutra'}</span>
+                                                            {product.esteira && (
+                                                                <>
+                                                                    <span>•</span>
+                                                                    <span className="text-indigo-600 dark:text-indigo-400 font-medium">Esteira</span>
+                                                                </>
+                                                            )}
+                                                            {product.approval_required && (
+                                                                <>
+                                                                    <span>•</span>
+                                                                    <span className="text-amber-600 dark:text-amber-400 font-medium">Approval req</span>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </td>
+
+                                                {/* Net Payout (CAD) */}
+                                                <td className="px-3 py-3 whitespace-nowrap text-right text-xs">
+                                                    <div className="font-bold text-sm text-theme-primary">
+                                                        {formatCad(product.payout_cad)}
+                                                    </div>
+                                                    {product.payout_currency && product.payout_currency !== 'CAD' && product.payout_formatted && (
+                                                        <div className="text-[11px] text-theme-muted">
+                                                            {product.payout_formatted}
+                                                        </div>
+                                                    )}
+                                                </td>
+
+                                                {/* Momentum Indicator (TrendsTrend + Recent Score Delta) */}
+                                                <td className="px-3 py-3 whitespace-nowrap text-xs">
+                                                    {getMomentumIndicator(product)}
+                                                </td>
+
+                                                {/* Grouped Compliance Pill (TrueBoF + Brand Bidding) */}
+                                                <td className="px-3 py-3 whitespace-nowrap text-center text-xs">
+                                                    {getCompliancePill(product)}
+                                                </td>
+
+                                                {/* Quick Status Select */}
+                                                <td className="px-3 py-3 whitespace-nowrap text-center">
+                                                    <select
+                                                        value={product.status}
+                                                        onChange={(e) => handleQuickStatusChange(product, e.target.value)}
+                                                        className={`rounded-md border px-2 py-0.5 text-xs font-semibold cursor-pointer focus:outline-none ${getStatusBadge(product.status)}`}
+                                                        aria-label={`Change status for ${product.name}`}
                                                     >
-                                                        {product.score !== null ? product.score : '—'}
-                                                    </span>
+                                                        <option value="test">Test</option>
+                                                        <option value="watch">Watch</option>
+                                                        <option value="rejected">Rejected</option>
+                                                    </select>
+                                                </td>
 
-                                                    {/* ⓘ Info Button to reveal breakdown */}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setScoreModalProduct(product)}
-                                                        className="text-theme-muted hover:text-theme-accent p-0.5 rounded cursor-pointer transition-colors"
-                                                        title="Click to view score breakdown & flags"
-                                                        aria-label="View score breakdown"
-                                                    >
-                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                                            <circle cx="12" cy="12" r="10" />
-                                                            <line x1="12" y1="16" x2="12" y2="12" />
-                                                            <line x1="12" y1="8" x2="12.01" y2="8" />
-                                                        </svg>
-                                                    </button>
-                                                </div>
+                                                {/* Actions */}
+                                                <td className="px-3 py-3 whitespace-nowrap text-right">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <Link
+                                                            href={`/watching-products/${product.id}`}
+                                                            className="px-2 py-1 rounded text-theme-accent hover:bg-theme-subtle text-xs font-semibold transition-colors"
+                                                            title="View Product Details"
+                                                        >
+                                                            View
+                                                        </Link>
 
-                                                {/* Mini flag badges below score */}
-                                                <div className="flex items-center justify-center gap-1 mt-0.5">
-                                                    {flags.false_bof && (
-                                                        <span className="text-[10px]" title="False BoF (Score 0)">🚫</span>
-                                                    )}
-                                                    {flags.payout_below_floor && (
-                                                        <span className="text-[10px]" title="Payout below floor ($20)">⚠️</span>
-                                                    )}
-                                                    {flags.compound_keyword_needed && (
-                                                        <span className="text-[10px]" title="Compound keyword needed">🔑</span>
-                                                    )}
-                                                    {flags.bb_risk && (
-                                                        <span className="text-[10px]" title="Brand Bidding Risk">⚡</span>
-                                                    )}
-                                                    {flags.restricted_category && (
-                                                        <span className="text-[10px]" title="Restricted Category (Cap 50)">🔒</span>
-                                                    )}
-                                                </div>
-                                            </td>
+                                                        {product.sales_page_url ? (
+                                                            <Link
+                                                                href={`/pages?tab=cloner&clone_url=${encodeURIComponent(product.sales_page_url)}&affiliate_link=${encodeURIComponent(product.affiliate_link || '')}&product_name=${encodeURIComponent(product.name)}`}
+                                                                className="p-1 rounded text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                                                                title="Clone Sales Page"
+                                                            >
+                                                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                                    <path d="M3 3v5h5" />
+                                                                    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                                                    <path d="M16 21h5v-5" />
+                                                                </svg>
+                                                            </Link>
+                                                        ) : null}
 
-                                            {/* Product Name (Clickable to Show page) */}
-                                            <td className="px-3 py-3 font-medium text-theme-primary">
-                                                <div className="flex flex-col">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => openEditDrawer(product)}
+                                                            className="p-1 rounded text-theme-secondary hover:text-theme-primary transition-colors cursor-pointer"
+                                                            title="Edit parameters"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                <path d="M12 20h9" />
+                                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                                            </svg>
+                                                        </button>
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => confirmDelete(product)}
+                                                            className="p-1 rounded text-theme-secondary hover:text-rose-600 transition-colors cursor-pointer"
+                                                            title="Delete product"
+                                                        >
+                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                <polyline points="3 6 5 6 21 6" />
+                                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Mobile Stacked Responsive Cards (< 768px) */}
+                        <div className="md:hidden divide-y divide-theme">
+                            {sortedProducts.map((product) => {
+                                const scoreHsl = getScoreHsl(product.score);
+                                return (
+                                    <div key={product.id} className="p-4 space-y-3 hover:bg-theme-subtle/20 transition-colors">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-1.5">
+                                                    {product.rank && (
+                                                        <span className="text-xs font-black text-theme-accent">#{product.rank}</span>
+                                                    )}
                                                     <Link
                                                         href={`/watching-products/${product.id}`}
-                                                        className="text-left font-bold text-sm hover:text-theme-accent transition-colors"
+                                                        className="text-left font-bold text-base text-theme-primary hover:text-theme-accent transition-colors truncate block"
                                                     >
                                                         {product.name}
                                                     </Link>
-                                                    <div className="mt-0.5 flex items-center gap-1.5 text-xs text-theme-muted">
-                                                        <span>{product.page_type || 'General'}</span>
-                                                        {product.approval_required && (
-                                                            <span className="rounded bg-amber-500/10 px-1 py-0.2 text-[9px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20">
-                                                                Approval
-                                                            </span>
-                                                        )}
-                                                        {product.sales_page_url && (
-                                                            <a
-                                                                href={product.sales_page_url}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-theme-muted hover:text-theme-accent"
-                                                                title="Open Sales Page"
-                                                            >
-                                                                <svg className="w-3 h-3 inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                                                    <polyline points="15 3 21 3 21 9" />
-                                                                    <line x1="10" y1="14" x2="21" y2="3" />
-                                                                </svg>
-                                                            </a>
-                                                        )}
-                                                    </div>
                                                 </div>
-                                            </td>
+                                                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-theme-muted">
+                                                    <span>{product.page_type || 'General'}</span>
+                                                    <span>•</span>
+                                                    <span>{product.strategy_label || 'BoF Direct'}</span>
+                                                    <span>•</span>
+                                                    <span>{product.product_kind_label || 'Nutra'}</span>
+                                                    {product.esteira && (
+                                                        <>
+                                                            <span>•</span>
+                                                            <span className="text-indigo-600 dark:text-indigo-400 font-medium">Esteira</span>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </div>
 
-                                            {/* Status */}
-                                            <td className="px-3 py-3 whitespace-nowrap">
+                                            <button
+                                                type="button"
+                                                onClick={() => setScoreModalProduct(product)}
+                                                style={scoreHsl.style}
+                                                className="rounded-lg border px-2.5 py-1 text-sm font-black shadow-2xs shrink-0 cursor-pointer"
+                                                title="Click to view score breakdown"
+                                            >
+                                                {product.score ?? '—'}
+                                            </button>
+                                        </div>
+
+                                        {/* Metrics Grid: Net Payout (CAD) & Momentum */}
+                                        <div className="grid grid-cols-2 gap-2 text-xs bg-theme-subtle/30 p-2.5 rounded-lg border border-theme items-center">
+                                            <div>
+                                                <span className="text-[10px] text-theme-muted uppercase tracking-wider block font-semibold">Net Payout (CAD)</span>
+                                                <span className="font-bold text-sm text-theme-primary">{formatCad(product.payout_cad)}</span>
+                                                {product.payout_currency && product.payout_currency !== 'CAD' && product.payout_formatted && (
+                                                    <span className="text-[10px] text-theme-muted block">{product.payout_formatted}</span>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <span className="text-[10px] text-theme-muted uppercase tracking-wider block font-semibold mb-1">Momentum</span>
+                                                {getMomentumIndicator(product)}
+                                            </div>
+                                        </div>
+
+                                        {/* Footer: Compliance Pill, Status Selector, and Actions */}
+                                        <div className="flex items-center justify-between gap-2 pt-1">
+                                            <div className="flex items-center gap-2">
+                                                {getCompliancePill(product)}
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
                                                 <select
                                                     value={product.status}
                                                     onChange={(e) => handleQuickStatusChange(product, e.target.value)}
-                                                    className={`rounded-md border px-2 py-0.5 text-xs font-semibold cursor-pointer focus:outline-none ${getStatusBadge(product.status)}`}
+                                                    className={`rounded-md border px-2 py-1 text-xs font-semibold cursor-pointer ${getStatusBadge(product.status)}`}
                                                     aria-label={`Change status for ${product.name}`}
                                                 >
                                                     <option value="test">Test</option>
                                                     <option value="watch">Watch</option>
                                                     <option value="rejected">Rejected</option>
                                                 </select>
-                                            </td>
 
-                                            {/* Strategy */}
-                                            <td className="px-3 py-3 whitespace-nowrap text-xs">
-                                                <span className="rounded-md bg-theme-subtle px-2 py-0.5 font-medium border border-theme text-theme-primary">
-                                                    {product.strategy_label || 'BoF Direct'}
-                                                </span>
-                                            </td>
-
-                                            {/* Category / Kind */}
-                                            <td className="px-3 py-3 whitespace-nowrap text-xs">
-                                                <div className="flex items-center gap-1">
-                                                    <span className="rounded bg-theme-subtle px-1.5 py-0.5 text-[10px] uppercase font-bold text-theme-secondary border border-theme">
-                                                        {product.product_kind_label || 'Nutra'}
-                                                    </span>
-                                                    {product.esteira && (
-                                                        <span className="rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20 px-1 py-0.2 text-[9px] font-bold">
-                                                            E
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </td>
-
-                                            {/* Payout */}
-                                            <td className="px-3 py-3 whitespace-nowrap text-xs">
-                                                <div className="font-bold text-theme-primary">
-                                                    {product.payout_formatted}
-                                                </div>
-                                                <div className="text-[10px] text-theme-muted">
-                                                    CA${Number(product.payout_cad).toFixed(2)}
-                                                </div>
-                                            </td>
-
-                                            {/* Demand Trend */}
-                                            <td className="px-3 py-3 whitespace-nowrap text-xs">
-                                                <span className={`inline-block rounded px-2 py-0.5 text-[11px] font-medium border ${getTrendBadge(product.trends_trend)}`}>
-                                                    {product.trends_trend_label || 'Stable'}
-                                                </span>
-                                            </td>
-
-                                            {/* Brand Bidding */}
-                                            <td className="px-3 py-3 whitespace-nowrap text-xs">
-                                                <span className={`inline-block rounded px-2 py-0.5 text-[11px] font-medium border ${getBrandBiddingBadge(product.brand_bidding)}`}>
-                                                    {product.brand_bidding_label}
-                                                </span>
-                                            </td>
-
-                                            {/* Last Refreshed */}
-                                            <td className="px-3 py-3 whitespace-nowrap text-xs text-theme-muted">
-                                                <span>{product.last_refreshed_formatted || 'Never'}</span>
-                                            </td>
-
-                                            {/* Actions */}
-                                            <td className="px-3 py-3 whitespace-nowrap text-right">
-                                                <div className="flex items-center justify-end gap-1">
-                                                    <Link
-                                                        href={`/watching-products/${product.id}`}
-                                                        className="px-2 py-1 rounded text-theme-accent hover:bg-theme-subtle text-xs font-semibold transition-colors"
-                                                        title="View Product Details"
-                                                    >
-                                                        View
-                                                    </Link>
-
-                                                    {product.sales_page_url ? (
-                                                        <Link
-                                                            href={`/pages?tab=cloner&clone_url=${encodeURIComponent(product.sales_page_url)}&affiliate_link=${encodeURIComponent(product.affiliate_link || '')}&product_name=${encodeURIComponent(product.name)}`}
-                                                            className="p-1 rounded text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                                                            title="Clone Sales Page"
-                                                        >
-                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                                                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                                                <path d="M3 3v5h5" />
-                                                                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                                                                <path d="M16 21h5v-5" />
-                                                            </svg>
-                                                        </Link>
-                                                    ) : null}
-
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => openEditDrawer(product)}
-                                                        className="p-1 rounded text-theme-secondary hover:text-theme-primary transition-colors cursor-pointer"
-                                                        title="Edit parameters"
-                                                    >
-                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                            <path d="M12 20h9" />
-                                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                                                        </svg>
-                                                    </button>
-
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => confirmDelete(product)}
-                                                        className="p-1 rounded text-theme-secondary hover:text-rose-600 transition-colors cursor-pointer"
-                                                        title="Delete product"
-                                                    >
-                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                            <polyline points="3 6 5 6 21 6" />
-                                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                                        </svg>
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    {/* Mobile Stacked Responsive Cards (< 768px) */}
-                    <div className="md:hidden divide-y divide-theme">
-                        {sortedProducts.map((product) => {
-                            const scoreHsl = getScoreHsl(product.score);
-                            return (
-                                <div key={product.id} className="p-4 space-y-3 hover:bg-theme-subtle/20 transition-colors">
-                                    <div className="flex items-start justify-between gap-2">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                                {product.rank && (
-                                                    <span className="text-xs font-black text-theme-accent">#{product.rank}</span>
-                                                )}
                                                 <Link
                                                     href={`/watching-products/${product.id}`}
-                                                    className="text-left font-bold text-base text-theme-primary hover:text-theme-accent transition-colors truncate block"
+                                                    className="text-xs font-semibold text-theme-accent hover:underline whitespace-nowrap"
                                                 >
-                                                    {product.name}
+                                                    Details &rarr;
                                                 </Link>
                                             </div>
-                                            <div className="mt-1 flex items-center gap-2 text-xs text-theme-muted">
-                                                <span>{product.page_type || 'General'}</span>
-                                                <span>•</span>
-                                                <span className="font-semibold text-theme-secondary">{product.strategy_label}</span>
-                                            </div>
-                                        </div>
-
-                                        <span
-                                            style={scoreHsl.style}
-                                            className="rounded-lg border px-2.5 py-1 text-sm font-black shadow-2xs"
-                                        >
-                                            {product.score ?? '—'}
-                                        </span>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-2 text-xs bg-theme-subtle/30 p-2.5 rounded-lg border border-theme">
-                                        <div>
-                                            <span className="text-[11px] text-theme-muted block">Payout:</span>
-                                            <span className="font-bold text-theme-primary">{product.payout_formatted}</span>
-                                        </div>
-                                        <div>
-                                            <span className="text-[11px] text-theme-muted block">CAD Cache:</span>
-                                            <span className="font-bold text-emerald-600 dark:text-emerald-400">CA${Number(product.payout_cad).toFixed(2)}</span>
                                         </div>
                                     </div>
-
-                                    <div className="flex items-center justify-between pt-1">
-                                        <select
-                                            value={product.status}
-                                            onChange={(e) => handleQuickStatusChange(product, e.target.value)}
-                                            className={`rounded-md border px-2 py-1 text-xs font-semibold cursor-pointer ${getStatusBadge(product.status)}`}
-                                        >
-                                            <option value="test">Test</option>
-                                            <option value="watch">Watch</option>
-                                            <option value="rejected">Rejected</option>
-                                        </select>
-
-                                        <div className="flex items-center gap-2">
-                                            <Link
-                                                href={`/watching-products/${product.id}`}
-                                                className="text-xs font-semibold text-theme-accent hover:underline"
-                                            >
-                                                Details &rarr;
-                                            </Link>
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </>
+                                );
+                            })}
+                        </div>
+                    </>
                 )}
             </div>
 

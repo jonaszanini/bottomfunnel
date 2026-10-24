@@ -34,7 +34,17 @@ export default function Show({ track, conversions, visits, spend }) {
                     <pre className="mt-1 overflow-x-auto whitespace-pre-wrap rounded-md border border-theme bg-theme-canvas p-2 font-mono text-xs text-theme-primary">{track.script}</pre>
                     <p className="mt-2 text-theme-secondary">Export index.html from the page builder. The script tag is already in that file and loads on its own. Host the file, then use that URL as the Google Ads destination. You do not paste the script by hand unless you are checking it.</p>
                 </div>
-                <p>Account: <span className="text-theme-secondary">{track.account || 'Not linked'}</span></p>
+                <p>
+                    Account:{' '}
+                    {track.account ? (
+                        <span className="font-medium text-theme-primary">
+                            {track.account.name}{' '}
+                            <span className="font-mono text-xs text-theme-secondary">({track.account.customer_id})</span>
+                        </span>
+                    ) : (
+                        <span className="text-theme-secondary">{track.account_name || 'Not linked'}</span>
+                    )}
+                </p>
                 <p>Conversion action: <span className="text-theme-secondary">{track.conversion_action || 'Not set'}</span></p>
                 <p>Typical commission: <span className="text-theme-secondary">{track.typical_commission_cad ? money(track.typical_commission_cad) : 'Not set'}</span></p>
                 <p>Offer URL: <span className="break-all text-theme-secondary">{track.affiliate_url}</span></p>

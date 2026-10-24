@@ -16,3 +16,13 @@ Schedule::command('watching:refresh')
 Schedule::command('fx:refresh')
     ->dailyAt('05:00')
     ->timezone('America/Toronto');
+
+Schedule::command('campaigns:check-listing-down')
+    ->everyThirtyMinutes()
+    ->timezone('America/Toronto')
+    ->withoutOverlapping();
+
+Schedule::command('campaigns:check-bleeders')
+    ->hourly()
+    ->timezone('America/Toronto')
+    ->withoutOverlapping();

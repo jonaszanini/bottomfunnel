@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\GoogleAdsAccount;
+use App\Models\GoogleAdsCampaign;
 use App\Services\Google\GoogleAdsClient;
 use App\Services\Google\GoogleRequestException;
 use Illuminate\Console\Command;
@@ -80,14 +81,34 @@ class GoogleAdsCampaignCommand extends Command
         $budget = (int) $this->option('budget');
         $strategy = (string) $this->option('strategy');
 
-        $this->info("Creating Search campaign '{$name}' with budget {$budget} micros...");
+        $this->info("Creating Search campaign '{$name}' with budget {$budget} micros for account '{$account->name}' ({$account->customer_id})...");
         $result = $googleAds->createSearchCampaign($account, $name, $budget, $strategy);
 
-        $this->info("Campaign created: ID {$result['campaign_id']} (Status: PAUSED)");
+        GoogleAdsCampaign::query()->updateOrCreate(
+            [
+                'google_ads_account_id' => $account->id,
+                'campaign_id' => $result['campaign_id'],
+            ],
+            [
+                'customer_id' => $account->customer_id,
+                'name' => $name,
+                'status' => 'PAUSED',
+                'budget_amount_micros' => $budget,
+                'bidding_strategy' => $strategy,
+                'resource_name' => $result['campaign_resource'] ?? null,
+            ]
+        );
+
+        $this->info("Campaign created: ID {$result['campaign_id']} (Status: PAUSED) under account '{$account->name}'");
         $this->line("Resource: {$result['campaign_resource']}");
         $this->line("Budget: {$result['budget_resource']}");
 
-        $this->outputJson($result);
+        $this->outputJson([
+            ...$result,
+            'account_id' => $account->id,
+            'customer_id' => $account->customer_id,
+            'account_name' => $account->name,
+        ]);
 
         return self::SUCCESS;
     }
@@ -234,6 +255,12 @@ class GoogleAdsCampaignCommand extends Command
 
         $this->info("Updating campaign {$campaignId} status to {$status}...");
         $googleAds->updateCampaignStatus($account, $campaignId, $status, $confirm);
+
+        GoogleAdsCampaign::query()
+            ->where('google_ads_account_id', $account->id)
+            ->where('campaign_id', $campaignId)
+            ->update(['status' => $status]);
+
         $this->info('Status updated successfully.');
 
         return self::SUCCESS;
@@ -358,7 +385,7 @@ class GoogleAdsCampaignCommand extends Command
             return GoogleAdsAccount::query()->where('customer_id', $digits)->first();
         }
 
-        return GoogleAdsAccount::query()->latest()->first();
+        return GoogleAdsAccount::getDefault();
     }
 
     /**

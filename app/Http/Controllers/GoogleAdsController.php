@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ConversionAction;
 use App\Models\GoogleAdsAccount;
+use App\Models\GoogleAdsCampaign;
 use App\Services\Google\GoogleAdsClient;
 use App\Services\Google\GoogleRequestException;
 use Illuminate\Http\JsonResponse;
@@ -17,8 +18,48 @@ class GoogleAdsController extends Controller
 {
     public function index(Request $request): Response
     {
+        $defaultAccount = GoogleAdsAccount::getDefault($request->user());
+        $defaultId = $defaultAccount?->id;
+
+        $accounts = GoogleAdsAccount::query()
+            ->withCount(['tracks', 'campaigns'])
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->get(['id', 'name', 'customer_id', 'login_customer_id', 'status', 'is_default'])
+            ->map(fn (GoogleAdsAccount $account): array => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'customer_id' => $account->customer_id,
+                'login_customer_id' => $account->login_customer_id,
+                'status' => $account->status,
+                'is_default' => $account->id === $defaultId || (bool) $account->is_default,
+                'tracks_count' => $account->tracks_count,
+                'campaigns_count' => $account->campaigns_count,
+            ]);
+
+        $campaigns = GoogleAdsCampaign::query()
+            ->with('account:id,name,customer_id')
+            ->latest()
+            ->get()
+            ->map(fn (GoogleAdsCampaign $camp): array => [
+                'id' => $camp->id,
+                'campaign_id' => $camp->campaign_id,
+                'name' => $camp->name,
+                'status' => $camp->status,
+                'budget_amount_micros' => $camp->budget_amount_micros,
+                'bidding_strategy' => $camp->bidding_strategy,
+                'account_id' => $camp->google_ads_account_id,
+                'account' => $camp->account ? [
+                    'id' => $camp->account->id,
+                    'name' => $camp->account->name,
+                    'customer_id' => $camp->account->customer_id,
+                ] : null,
+            ]);
+
         return Inertia::render('Google/Index', [
-            'accounts' => GoogleAdsAccount::query()->latest()->get(['id', 'name', 'customer_id', 'login_customer_id', 'status']),
+            'accounts' => $accounts,
+            'campaigns' => $campaigns,
+            'default_account_id' => $defaultId,
             'pending' => $request->session()->get('google_oauth_customers', []),
         ]);
     }
@@ -83,7 +124,8 @@ class GoogleAdsController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
-        GoogleAdsAccount::query()->updateOrCreate(
+        $isFirst = GoogleAdsAccount::query()->count() === 0;
+        $account = GoogleAdsAccount::query()->updateOrCreate(
             ['customer_id' => $customerId],
             [
                 'login_customer_id' => $loginId !== '' ? $loginId : null,
@@ -92,14 +134,32 @@ class GoogleAdsController extends Controller
                 'status' => 'linked',
             ],
         );
+
+        if ($isFirst || ! GoogleAdsAccount::query()->where('is_default', true)->exists()) {
+            $account->makeDefault($request->user());
+        }
+
         $request->session()->forget(['google_oauth_refresh', 'google_oauth_access', 'google_oauth_customers']);
 
         return redirect()->route('google.index')->with('success', 'Google Ads account linked.');
     }
 
-    public function destroy(GoogleAdsAccount $account): RedirectResponse
+    public function setDefault(Request $request, GoogleAdsAccount $account): RedirectResponse
     {
+        $account->makeDefault($request->user());
+
+        return back()->with('success', "Default Google Ads account set to {$account->name} ({$account->customer_id}).");
+    }
+
+    public function destroy(Request $request, GoogleAdsAccount $account): RedirectResponse
+    {
+        $wasDefault = (bool) $account->is_default;
         $account->delete();
+
+        if ($wasDefault) {
+            $remaining = GoogleAdsAccount::query()->latest()->first();
+            $remaining?->makeDefault($request->user());
+        }
 
         return back()->with('success', 'Google Ads account removed.');
     }
@@ -123,9 +183,34 @@ class GoogleAdsController extends Controller
             );
         }
 
+        foreach ($campaigns as $camp) {
+            if ($camp['id'] === '') {
+                continue;
+            }
+            GoogleAdsCampaign::query()->updateOrCreate(
+                ['google_ads_account_id' => $account->id, 'campaign_id' => (string) $camp['id']],
+                [
+                    'customer_id' => $account->customer_id,
+                    'name' => $camp['name'],
+                    'status' => 'PAUSED',
+                ],
+            );
+        }
+
         return response()->json([
+            'account' => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'customer_id' => $account->customer_id,
+            ],
             'conversion_actions' => $account->conversionActions()->orderBy('name')->get(['id', 'name', 'external_id']),
-            'campaigns' => $campaigns,
+            'campaigns' => array_map(fn ($camp) => [
+                'id' => (string) $camp['id'],
+                'name' => $camp['name'],
+                'account_id' => $account->id,
+                'customer_id' => $account->customer_id,
+                'account_name' => $account->name,
+            ], $campaigns),
         ]);
     }
 }

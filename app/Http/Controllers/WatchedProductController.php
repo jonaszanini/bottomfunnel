@@ -63,10 +63,29 @@ class WatchedProductController extends Controller
         ];
 
         $query = WatchedProduct::query()->filter($filters);
+        $productsCollection = $query->get();
+        $productIds = $productsCollection->pluck('id');
 
-        $products = $query->get()->map(function (WatchedProduct $product): array {
+        $scoreHistories = ProductScoreHistory::query()
+            ->whereIn('product_id', $productIds)
+            ->orderByDesc('created_at')
+            ->get(['product_id', 'score', 'created_at'])
+            ->groupBy('product_id');
+
+        $products = $productsCollection->map(function (WatchedProduct $product) use ($scoreHistories): array {
             $recommendation = $this->strategyRecommender->recommend($product);
             $payoutMoney = Money::make($product->payout_amount ?? $product->payout_cad, $product->payout_currency ?? 'USD');
+
+            $history = $scoreHistories->get($product->id);
+            $scoreDelta = null;
+            if ($history && $history->count() >= 2) {
+                $scoreDelta = (int) $history[0]->score - (int) $history[1]->score;
+            } elseif ($history && $history->count() === 1 && $product->score !== null) {
+                $diff = (int) $product->score - (int) $history[0]->score;
+                if ($diff !== 0) {
+                    $scoreDelta = $diff;
+                }
+            }
 
             return [
                 'id' => $product->id,
@@ -75,6 +94,7 @@ class WatchedProductController extends Controller
                 'status_label' => $product->status->label(),
                 'rank' => $product->rank,
                 'score' => $product->score,
+                'score_delta' => $scoreDelta,
                 'score_breakdown' => $product->score_breakdown ?? [],
                 'score_flags' => $product->score_flags ?? [],
                 'payout_amount' => $product->payout_amount !== null ? (float) $product->payout_amount : null,

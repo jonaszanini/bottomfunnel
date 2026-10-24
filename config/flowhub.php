@@ -63,4 +63,28 @@ return [
         'de' => 'German',
         'pt' => 'Portuguese',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Automated Campaign Safety Rules
+    |--------------------------------------------------------------------------
+    |
+    | When auto_pause_enabled is false, safety rules only raise alerts.
+    |
+    */
+    'auto_pause_enabled' => (bool) env('SAFETY_AUTO_PAUSE_ENABLED', false),
+
+    'safety_rules' => [
+        'auto_pause_enabled' => (bool) env('SAFETY_AUTO_PAUSE_ENABLED', false),
+        'listing_down' => [
+            'enabled' => (bool) env('SAFETY_LISTING_DOWN_ENABLED', true),
+            'action' => env('SAFETY_LISTING_DOWN_ACTION', 'alert'), // 'alert' or 'pause'
+        ],
+        'bleeder' => [
+            'enabled' => (bool) env('SAFETY_BLEEDER_ENABLED', true),
+            'spend_payout_multiplier' => (float) env('SAFETY_BLEEDER_MULTIPLIER', 1.5),
+            'window_days' => (int) env('SAFETY_BLEEDER_WINDOW_DAYS', 7),
+            'action' => env('SAFETY_BLEEDER_ACTION', 'alert'), // 'alert' or 'pause'
+        ],
+    ],
 ];

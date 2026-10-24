@@ -16,7 +16,16 @@ export default function Index({ tracks }) {
                             <strong className="text-theme-primary">{track.product_name}</strong>
                             <span className="ml-2 text-theme-muted">{track.platform} · {track.page_type} · {track.strategy}</span>
                         </span>
-                        <span className="text-theme-muted">{track.account || 'No account'}</span>
+                        <span className="text-right">
+                            {track.account ? (
+                                <span className="inline-flex items-center gap-1.5 rounded-md border border-theme bg-theme-subtle/70 px-2 py-0.5 text-xs text-theme-secondary">
+                                    <span className="font-medium text-theme-primary">{track.account.name}</span>
+                                    <span className="font-mono text-theme-muted">({track.account.customer_id})</span>
+                                </span>
+                            ) : (
+                                <span className="text-xs text-theme-muted">{track.account_name || 'No account'}</span>
+                            )}
+                        </span>
                     </Link>
                 ))}
             </div>
