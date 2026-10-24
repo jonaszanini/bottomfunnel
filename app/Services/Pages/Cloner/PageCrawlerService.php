@@ -42,6 +42,8 @@ class PageCrawlerService
         ],
     ];
 
+    public const HARD_TIMEOUT_CAP_SECONDS = 30;
+
     /**
      * Crawl the page using a hybrid architecture:
      * Fast HTTP request first, falling back to headless Chromium for SPAs / dynamic lazy-loading.
@@ -67,54 +69,61 @@ class PageCrawlerService
             throw new RuntimeException("Invalid URL format: {$url}");
         }
 
-        $html = '';
-        $finalUrl = $url;
-        $renderedVia = 'http';
+        // Enforce hard timeout cap to protect shared hosting environments
+        $timeoutSeconds = min(max(5, $timeoutSeconds), self::HARD_TIMEOUT_CAP_SECONDS);
 
-        if (! $forceBrowser) {
-            try {
-                $httpResult = $this->fetchViaHttp($url, $timeoutSeconds);
-                $html = $httpResult['html'];
-                $finalUrl = $httpResult['finalUrl'];
+        try {
+            $html = '';
+            $finalUrl = $url;
+            $renderedVia = 'http';
 
-                if ($this->isDynamicSpaOrEmpty($html)) {
-                    // Page is dynamic SPA or requires JS rendering; trigger headless browser
-                    $browserResult = $this->fetchViaBrowser($url, $timeoutSeconds);
-                    $html = $browserResult['html'];
-                    $finalUrl = $browserResult['finalUrl'] ?: $finalUrl;
-                    $renderedVia = $browserResult['renderedVia'] ?: 'browser';
-                }
-            } catch (Throwable $e) {
-                // If HTTP failed (e.g. 403 bot block or Cloudflare challenge), attempt headless browser
+            if (! $forceBrowser) {
                 try {
-                    $browserResult = $this->fetchViaBrowser($url, $timeoutSeconds);
-                    $html = $browserResult['html'];
-                    $finalUrl = $browserResult['finalUrl'] ?: $url;
-                    $renderedVia = $browserResult['renderedVia'] ?: 'browser';
-                } catch (Throwable $browserError) {
-                    throw new RuntimeException("Failed to crawl URL: {$e->getMessage()}. Browser fallback failed: {$browserError->getMessage()}");
+                    $httpResult = $this->fetchViaHttp($url, $timeoutSeconds);
+                    $html = $httpResult['html'];
+                    $finalUrl = $httpResult['finalUrl'];
+
+                    if ($this->isDynamicSpaOrEmpty($html)) {
+                        // Page is dynamic SPA or requires JS rendering; trigger headless browser
+                        $browserResult = $this->fetchViaBrowser($url, $timeoutSeconds);
+                        $html = $browserResult['html'];
+                        $finalUrl = $browserResult['finalUrl'] ?: $finalUrl;
+                        $renderedVia = $browserResult['renderedVia'] ?: 'browser';
+                    }
+                } catch (Throwable $e) {
+                    // If HTTP failed (e.g. 403 bot block or Cloudflare challenge), attempt headless browser
+                    try {
+                        $browserResult = $this->fetchViaBrowser($url, $timeoutSeconds);
+                        $html = $browserResult['html'];
+                        $finalUrl = $browserResult['finalUrl'] ?: $url;
+                        $renderedVia = $browserResult['renderedVia'] ?: 'browser';
+                    } catch (Throwable $browserError) {
+                        throw new RuntimeException("Failed to crawl URL: {$e->getMessage()}. Browser fallback failed: {$browserError->getMessage()}");
+                    }
                 }
+            } else {
+                $browserResult = $this->fetchViaBrowser($url, $timeoutSeconds);
+                $html = $browserResult['html'];
+                $finalUrl = $browserResult['finalUrl'] ?: $url;
+                $renderedVia = $browserResult['renderedVia'] ?: 'browser';
             }
-        } else {
-            $browserResult = $this->fetchViaBrowser($url, $timeoutSeconds);
-            $html = $browserResult['html'];
-            $finalUrl = $browserResult['finalUrl'] ?: $url;
-            $renderedVia = $browserResult['renderedVia'] ?: 'browser';
+
+            if (trim($html) === '') {
+                throw new RuntimeException("The crawler received an empty response from {$url}");
+            }
+
+            // Extract metadata & conversion signals
+            $metadata = $this->extractMetadata($html, $finalUrl);
+
+            return array_merge([
+                'url' => $url,
+                'finalUrl' => $finalUrl,
+                'html' => $html,
+                'renderedVia' => $renderedVia,
+            ], $metadata);
+        } finally {
+            $this->cleanupTempDirectories();
         }
-
-        if (trim($html) === '') {
-            throw new RuntimeException("The crawler received an empty response from {$url}");
-        }
-
-        // Extract metadata & conversion signals
-        $metadata = $this->extractMetadata($html, $finalUrl);
-
-        return array_merge([
-            'url' => $url,
-            'finalUrl' => $finalUrl,
-            'html' => $html,
-            'renderedVia' => $renderedVia,
-        ], $metadata);
     }
 
     /**
@@ -156,9 +165,10 @@ class PageCrawlerService
                 ],
             ])
             ->withHeaders($headers)
+            ->connectTimeout(min($timeoutSeconds, 5))
             ->timeout($timeoutSeconds);
 
-        $response = $client->retry(2, 300, function (Throwable $exception): bool {
+        $response = $client->retry(1, 100, function (Throwable $exception): bool {
             return true;
         }, throw: false)->get($url);
 
@@ -563,5 +573,56 @@ class PageCrawlerService
         }
 
         return $rootUrl.'/'.implode('/', $resolved);
+    }
+
+    /**
+     * Clean up temporary crawler files and directories to prevent disk exhaustion.
+     */
+    public function cleanupTempDirectories(?string $dir = null): void
+    {
+        $targetDir = $dir ?: storage_path('app/playwright_temp');
+        if (! is_dir($targetDir)) {
+            return;
+        }
+
+        try {
+            $items = @scandir($targetDir) ?: [];
+            foreach ($items as $item) {
+                if ($item === '.' || $item === '..') {
+                    continue;
+                }
+                $path = $targetDir.DIRECTORY_SEPARATOR.$item;
+                if (is_file($path)) {
+                    @unlink($path);
+                } elseif (is_dir($path)) {
+                    $this->deleteDirectoryRecursive($path);
+                }
+            }
+        } catch (Throwable) {
+            // Suppress cleanup errors to avoid failing caller pipeline
+        }
+    }
+
+    /**
+     * Recursively delete a directory and its contents.
+     */
+    protected function deleteDirectoryRecursive(string $dir): void
+    {
+        if (! is_dir($dir)) {
+            return;
+        }
+        $files = @scandir($dir) ?: [];
+        foreach ($files as $file) {
+            if ($file === '.' || $file === '..') {
+                continue;
+            }
+            $current = $dir.DIRECTORY_SEPARATOR.$file;
+            if (is_dir($current)) {
+                $this->deleteDirectoryRecursive($current);
+            } else {
+                @unlink($current);
+            }
+        }
+        @rmdir($dir);
     }
 }

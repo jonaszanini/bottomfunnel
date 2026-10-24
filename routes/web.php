@@ -63,8 +63,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/pages', [PageController::class, 'index'])->name('pages.index');
     Route::post('/pages', [PageController::class, 'store'])->name('pages.store');
     Route::post('/pages/crawl-and-clone', [PageController::class, 'crawlAndClone'])->name('pages.crawl-and-clone');
+    Route::get('/pages/crawl-and-clone/status/{jobId}', [PageController::class, 'crawlStatus'])->name('pages.crawl-status');
     Route::post('/pages/extract-metadata', [PageController::class, 'extractMetadata'])->name('pages.extract-metadata');
     Route::post('/pages/generate-variations', [PageController::class, 'generateVariations'])->name('pages.generate-variations');
+    Route::get('/pages/generate-variations/status/{jobId}', [PageController::class, 'variationsStatus'])->name('pages.variations-status');
     Route::post('/pages/compile', [PageController::class, 'compile'])->name('pages.compile');
     Route::post('/pages/export-direct', [PageController::class, 'exportDirect'])->name('pages.export-direct');
     Route::post('/pages/generate', [PageController::class, 'generate'])->name('pages.generate');
@@ -115,4 +117,5 @@ Route::middleware('auth')->group(function () {
     Route::post('/api/copy/generate-base', [CopyStudioController::class, 'generateBase'])->name('copy.generate-base');
     Route::post('/api/copy/shorten', [CopyStudioController::class, 'shorten'])->name('copy.shorten');
     Route::post('/api/copy/refine-with-screenshot', [CopyStudioController::class, 'refineWithScreenshot'])->name('copy.refine-with-screenshot');
+    Route::get('/api/copy/status/{jobId}', [CopyStudioController::class, 'copyStatus'])->name('copy.status');
 });

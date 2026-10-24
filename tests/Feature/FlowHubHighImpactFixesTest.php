@@ -287,26 +287,27 @@ class FlowHubHighImpactFixesTest extends TestCase
     public function test_ranking_is_stable_on_individual_updates_and_only_updated_in_batch(): void
     {
         $rankService = app(RankService::class);
+        WatchedProduct::query()->delete();
 
         // 1. Create Product A with score 80
         $productA = WatchedProduct::factory()->create([
             'name' => 'Product Alpha',
             'status' => WatchedProductStatus::Watch,
-            'score' => 80,
             'rank' => null,
             'payout_amount' => 50.00,
             'trends_30d' => 50.0,
         ]);
+        $productA->updateQuietly(['score' => 80, 'rank' => null]);
 
         // 2. Create Product B with score 40
         $productB = WatchedProduct::factory()->create([
             'name' => 'Product Beta',
             'status' => WatchedProductStatus::Watch,
-            'score' => 40,
             'rank' => null,
             'payout_amount' => 30.00,
             'trends_30d' => 20.0,
         ]);
+        $productB->updateQuietly(['score' => 40, 'rank' => null]);
 
         // 3. Perform initial batch ranking
         $rankService->recalculateRanks();

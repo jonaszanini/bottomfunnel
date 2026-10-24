@@ -2,25 +2,24 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\ClonePageJob;
+use App\Jobs\GenerateCopyJob;
 use App\Models\Page;
 use App\Models\Track;
-use App\Services\Pages\Cloner\PageClonerService;
 use App\Services\Pages\Cloner\PageCrawlerService;
 use App\Services\Pages\Compiler\PresellCompilerEngine;
 use App\Services\Pages\HtmlDocument;
 use App\Services\Pages\HtmlRenderer;
-use App\Services\Pages\OpenAiPageGenerator;
-use App\Services\Pages\VariationGeneratorService;
 use App\Support\Options;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
-use RuntimeException;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class PageController extends Controller
@@ -82,7 +81,7 @@ class PageController extends Controller
     /**
      * Stage A: Generate 3 distinct structural and visual variations for the chosen strategy.
      */
-    public function generateVariations(Request $request, VariationGeneratorService $generator): JsonResponse
+    public function generateVariations(Request $request): JsonResponse
     {
         $data = $request->validate([
             'strategyType' => ['required', Rule::in(['cookie_popup', 'country_select', 'flash_sale', 'ai_express'])],
@@ -93,11 +92,58 @@ class PageController extends Controller
             'seoEnabled' => ['boolean'],
         ]);
 
-        $variations = $generator->generateVariations($data);
+        $jobId = (string) Str::uuid();
+
+        GenerateCopyJob::dispatch(GenerateCopyJob::TYPE_VARIATIONS, $data, $jobId);
+
+        $cached = Cache::get("generate_copy_job:{$jobId}");
+        if (is_array($cached) && ($cached['status'] ?? null) === 'completed') {
+            return response()->json(array_merge([
+                'job_id' => $jobId,
+                'status' => 'completed',
+            ], $cached['result']));
+        }
 
         return response()->json([
             'success' => true,
-            'variations' => $variations,
+            'job_id' => $jobId,
+            'status' => 'pending',
+            'message' => 'Variations generation job queued.',
+        ], 202);
+    }
+
+    /**
+     * Poll status of an asynchronous variation generation job.
+     */
+    public function variationsStatus(string $jobId): JsonResponse
+    {
+        $cached = Cache::get("generate_copy_job:{$jobId}");
+        if (! $cached) {
+            return response()->json([
+                'status' => 'pending',
+                'job_id' => $jobId,
+            ]);
+        }
+
+        if ($cached['status'] === 'completed') {
+            return response()->json(array_merge([
+                'job_id' => $jobId,
+                'status' => 'completed',
+            ], $cached['result'] ?? []));
+        }
+
+        if ($cached['status'] === 'failed') {
+            return response()->json([
+                'success' => false,
+                'job_id' => $jobId,
+                'status' => 'failed',
+                'message' => $cached['error'] ?? 'Variations generation failed.',
+            ], 422);
+        }
+
+        return response()->json([
+            'status' => $cached['status'] ?? 'processing',
+            'job_id' => $jobId,
         ]);
     }
 
@@ -121,7 +167,7 @@ class PageController extends Controller
     /**
      * Crawl an external sales page and clone it with asset rewriting and affiliate link replacement.
      */
-    public function crawlAndClone(Request $request, PageCrawlerService $crawler, PageClonerService $cloner): JsonResponse
+    public function crawlAndClone(Request $request): JsonResponse
     {
         $data = $request->validate([
             'url' => ['required', 'url', 'max:2048'],
@@ -135,44 +181,60 @@ class PageController extends Controller
             'enable_param_pass_through' => ['boolean'],
         ]);
 
-        try {
-            $forceBrowser = (bool) ($data['force_browser'] ?? false);
-            $crawlResult = $crawler->crawl($data['url'], $forceBrowser, 25);
+        $jobId = (string) Str::uuid();
 
-            $cloneResult = $cloner->clone([
-                'rawHtml' => $crawlResult['html'],
-                'sourceUrl' => $crawlResult['finalUrl'],
-                'affiliateLink' => $data['affiliate_link'],
-                'customHeadScripts' => $data['custom_head'] ?? null,
-                'customBodyScripts' => $data['custom_body'] ?? null,
-                'stripTrackers' => $data['strip_trackers'] ?? true,
-                'optimizeImages' => $data['optimize_images'] ?? true,
-                'enableParamPassThrough' => $data['enable_param_pass_through'] ?? true,
-            ]);
+        ClonePageJob::dispatch($jobId, $data);
 
+        // If running in sync mode, check if the job already stored completed result
+        $cached = Cache::get("clone_job:{$jobId}");
+        if (is_array($cached) && ($cached['status'] ?? null) === 'completed') {
+            return response()->json(array_merge([
+                'job_id' => $jobId,
+                'status' => 'completed',
+            ], $cached['result']));
+        }
+
+        return response()->json([
+            'success' => true,
+            'job_id' => $jobId,
+            'status' => 'pending',
+            'message' => 'Page cloning job queued successfully.',
+        ], 202);
+    }
+
+    /**
+     * Poll status of an asynchronous crawl and clone job.
+     */
+    public function crawlStatus(string $jobId): JsonResponse
+    {
+        $cached = Cache::get("clone_job:{$jobId}");
+        if (! $cached) {
             return response()->json([
-                'success' => true,
-                'url' => $data['url'],
-                'finalUrl' => $crawlResult['finalUrl'],
-                'productName' => $data['product_name'] ?: ($crawlResult['title'] ?: 'Cloned Offer'),
-                'metadata' => [
-                    'title' => $crawlResult['title'],
-                    'description' => $crawlResult['description'],
-                    'image' => $crawlResult['image'],
-                    'priceRange' => $crawlResult['priceRange'],
-                    'detectedPlatform' => $crawlResult['detectedPlatform'],
-                ],
-                'renderedVia' => $crawlResult['renderedVia'],
-                'clonedHtml' => $cloneResult['clonedHtml'],
-                'stats' => $cloneResult['stats'],
-                'links' => $cloneResult['links'],
+                'status' => 'pending',
+                'job_id' => $jobId,
             ]);
-        } catch (Throwable $e) {
+        }
+
+        if ($cached['status'] === 'completed') {
+            return response()->json(array_merge([
+                'job_id' => $jobId,
+                'status' => 'completed',
+            ], $cached['result'] ?? []));
+        }
+
+        if ($cached['status'] === 'failed') {
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
+                'job_id' => $jobId,
+                'status' => 'failed',
+                'message' => $cached['error'] ?? 'Page cloning failed.',
             ], 422);
         }
+
+        return response()->json([
+            'status' => $cached['status'] ?? 'processing',
+            'job_id' => $jobId,
+        ]);
     }
 
     /**
@@ -281,7 +343,7 @@ class PageController extends Controller
     /**
      * Legacy generate endpoint preserved for track integrations.
      */
-    public function generate(Request $request, OpenAiPageGenerator $generator): RedirectResponse
+    public function generate(Request $request): RedirectResponse
     {
         $data = $request->validate([
             'track_id' => ['required', 'integer', 'exists:tracks,id'],
@@ -291,34 +353,19 @@ class PageController extends Controller
             'instructions' => ['nullable', 'string', 'max:4000'],
         ]);
 
-        $track = Track::query()->findOrFail($data['track_id']);
-        try {
-            $generated = $generator->generate(
-                $data['product_name'],
-                $data['page_type'],
-                $data['language'] ?? $track->language,
-                $data['instructions'] ?? null,
-            );
-        } catch (RuntimeException $exception) {
-            return back()->with('error', $exception->getMessage())->withInput();
+        $jobId = (string) Str::uuid();
+
+        GenerateCopyJob::dispatch(GenerateCopyJob::TYPE_OPENAI_PAGE, $data, $jobId);
+
+        $cached = Cache::get("generate_copy_job:{$jobId}");
+        if (is_array($cached) && ($cached['status'] ?? null) === 'completed' && ! empty($cached['result']['page_id'])) {
+            $page = Page::query()->find($cached['result']['page_id']);
+            if ($page) {
+                return redirect()->route('pages.edit', $page)->with('success', 'Page generated. Review it, then export index.html.');
+            }
         }
 
-        $track->update([
-            'page_type' => $data['page_type'],
-            'language' => $data['language'] ?? $track->language,
-        ]);
-
-        $page = $track->pages()->create([
-            'name' => Str::limit($data['product_name'].' '.config('flowhub.page_types.'.$data['page_type']), 160, ''),
-            'page_type' => $data['page_type'],
-            'language' => $data['language'] ?? $track->language,
-            'structure_json' => $generated['structure'],
-            'html' => $generated['html'],
-            'injected_script' => '',
-        ]);
-        $page->update(['injected_script' => $track->scriptTag($page->id)]);
-
-        return redirect()->route('pages.edit', $page)->with('success', 'Page generated. Review it, then export index.html.');
+        return redirect()->route('pages.index')->with('success', 'Page generation job queued.');
     }
 
     public function edit(Page $page): Response

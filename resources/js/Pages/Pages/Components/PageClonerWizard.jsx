@@ -125,7 +125,7 @@ export default function PageClonerWizard({
         abortControllerRef.current = controller;
 
         try {
-            const data = await api.post('/pages/crawl-and-clone', {
+            let data = await api.post('/pages/crawl-and-clone', {
                 url: form.salesPageUrl,
                 affiliate_link: form.affiliateLink,
                 product_name: form.productName,
@@ -139,6 +139,29 @@ export default function PageClonerWizard({
                 signal: controller.signal,
                 timeout: 60000,
             });
+
+            if (data?.job_id && (data?.status === 'pending' || data?.status === 'processing')) {
+                const jobId = data.job_id;
+                let pollAttempts = 0;
+                const maxAttempts = 60;
+                while (pollAttempts < maxAttempts) {
+                    await new Promise((resolve) => setTimeout(resolve, 1500));
+                    if (controller.signal.aborted) {
+                        throw new Error('Cloning cancelled.');
+                    }
+                    pollAttempts++;
+                    const statusRes = await api.get(`/pages/crawl-and-clone/status/${jobId}`, {}, {
+                        signal: controller.signal,
+                    });
+                    if (statusRes?.status === 'completed') {
+                        data = statusRes;
+                        break;
+                    }
+                    if (statusRes?.status === 'failed') {
+                        throw new Error(statusRes.message || 'Cloning process encountered an error.');
+                    }
+                }
+            }
 
             clearInterval(ticker);
             setCurrentStageIndex(stages.length - 1);

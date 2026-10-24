@@ -101,10 +101,35 @@ export default function Index({ pages = [], tracks = [], strategies = [], pageTy
                 }),
             });
 
-            const data = await response.json();
+            let data = await response.json();
 
             if (!response.ok) {
                 throw new Error(data.message || 'Failed to generate variations.');
+            }
+
+            if (data?.job_id && (data?.status === 'pending' || data?.status === 'processing')) {
+                const jobId = data.job_id;
+                let pollAttempts = 0;
+                const maxAttempts = 60;
+                while (pollAttempts < maxAttempts) {
+                    await new Promise((resolve) => setTimeout(resolve, 1500));
+                    pollAttempts++;
+                    const statusRes = await fetch(`/pages/generate-variations/status/${jobId}`, {
+                        headers: {
+                            Accept: 'application/json',
+                            'X-CSRF-TOKEN': getCsrfToken(),
+                            'X-Requested-With': 'XMLHttpRequest',
+                        },
+                    });
+                    const statusJson = await statusRes.json();
+                    if (statusJson?.status === 'completed') {
+                        data = statusJson;
+                        break;
+                    }
+                    if (statusJson?.status === 'failed') {
+                        throw new Error(statusJson.message || 'Failed to generate variations.');
+                    }
+                }
             }
 
             if (data.variations && data.variations.length > 0) {

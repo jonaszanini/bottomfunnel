@@ -14,6 +14,7 @@ use App\Enums\StrategySource;
 use App\Enums\TrendsTrend;
 use App\Enums\TrueBofStatus;
 use App\Enums\WatchedProductStatus;
+use App\Jobs\RefreshSingleWatchedProductJob;
 use App\Models\ProductNegativeKeyword;
 use App\Models\ProductScoreHistory;
 use App\Models\WatchedProduct;
@@ -25,7 +26,6 @@ use App\Services\WatchingProducts\NegativeKeywordGenerator;
 use App\Services\WatchingProducts\PotentialScoreService;
 use App\Services\WatchingProducts\QuotaBudget;
 use App\Services\WatchingProducts\RankService;
-use App\Services\WatchingProducts\SerpApiClient;
 use App\Services\WatchingProducts\StrategyRecommender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -472,75 +472,13 @@ class WatchedProductController extends Controller
     /**
      * Manual "Refresh now" button on detail page.
      */
-    public function refreshNow(WatchedProduct $watchedProduct, SerpApiClient $serpClient): RedirectResponse
+    public function refreshNow(WatchedProduct $watchedProduct): RedirectResponse
     {
         if (! $this->budget->canSpendManual(2)) {
             return redirect()->back()->with('error', 'SerpApi monthly quota limit (250 calls) has been reached.');
         }
 
-        $data = $serpClient->fetchProductData($watchedProduct, forceFresh: true);
-
-        if ($data['success']) {
-            if (! empty($data['trends'])) {
-                $watchedProduct->trends_7d = $data['trends']['trends_7d'] ?? $watchedProduct->trends_7d;
-                $watchedProduct->trends_30d = $data['trends']['trends_30d'] ?? $watchedProduct->trends_30d;
-                $watchedProduct->trends_90d = $data['trends']['trends_90d'] ?? $watchedProduct->trends_90d;
-                if (! empty($data['trends']['trends_trend'])) {
-                    $watchedProduct->trends_trend = $data['trends']['trends_trend'];
-                }
-            }
-
-            if (! empty($data['serp'])) {
-                $watchedProduct->advertiser_count = $data['serp']['advertiser_count'] ?? $watchedProduct->advertiser_count;
-            }
-
-            if (! empty($data['bof'])) {
-                $watchedProduct->bof_vpn_serp = $data['bof']['bof_vpn_serp'];
-                $watchedProduct->bof_image_match_pct = $data['bof']['bof_image_match_pct'];
-                if ($data['bof']['bof_translation']) {
-                    $watchedProduct->bof_translation = true;
-                }
-            }
-        } else {
-            if (! $watchedProduct->bof_translation && $this->bofChecker->detectTranslationPass($watchedProduct->name)) {
-                $watchedProduct->bof_translation = true;
-            }
-        }
-
-        // Generate and sync base seeds, qualifier rules, and clean SERP data
-        $this->negativeGenerator->generateForProduct($watchedProduct, $data['serp'] ?? []);
-
-        $watchedProduct->last_refreshed_at = now();
-        $watchedProduct->save();
-
-        // Rescore and record score history
-        $scoreResult = $this->scoreService->score($watchedProduct);
-        $watchedProduct->update([
-            'score' => $scoreResult['score'],
-            'score_breakdown' => $scoreResult['breakdown'],
-            'score_flags' => $scoreResult['flags'],
-            'scored_at' => now(),
-        ]);
-
-        ProductScoreHistory::query()->create([
-            'product_id' => $watchedProduct->id,
-            'score' => $scoreResult['score'],
-            'breakdown' => $scoreResult['breakdown'],
-            'flags' => $scoreResult['flags'],
-            'inputs_snapshot' => [
-                'name' => $watchedProduct->name,
-                'payout_amount' => $watchedProduct->payout_amount,
-                'payout_currency' => $watchedProduct->payout_currency,
-                'page_type' => $watchedProduct->page_type,
-                'strategy' => $watchedProduct->strategy?->value,
-                'bof_translation' => (bool) $watchedProduct->bof_translation,
-                'bof_vpn_serp' => (bool) $watchedProduct->bof_vpn_serp,
-                'bof_image_match_pct' => (int) ($watchedProduct->bof_image_match_pct ?? 0),
-            ],
-            'created_at' => now(),
-        ]);
-
-        $this->rankService->recalculateRanks();
+        RefreshSingleWatchedProductJob::dispatch($watchedProduct->id);
 
         $used = $this->budget->callsUsedThisMonth();
 
