@@ -44,6 +44,71 @@ export function getScoreHsl(score) {
     };
 }
 
+export function getComponentScoreColor(score, max = 20) {
+    if (score === null || score === undefined) {
+        return {
+            score: 0,
+            max,
+            pct: 0,
+            hue: 0,
+            band: 'red/orange',
+            barClass: 'bg-rose-500',
+            textClass: 'text-rose-500 dark:text-rose-400',
+            barStyle: {
+                width: '0%',
+                backgroundColor: 'hsl(0, 85%, 45%)',
+            },
+            textStyle: {
+                color: 'hsl(0, 85%, 42%)',
+            },
+        };
+    }
+
+    const numScore = Math.max(0, Number(score));
+    const numMax = Math.max(1, Number(max));
+    const pct = Math.max(0, Math.min(100, Math.round((numScore / numMax) * 100)));
+    const hue = (pct / 100) * 120;
+
+    let band = 'red/orange';
+    let barClass = 'bg-rose-500';
+    let textClass = 'text-rose-500 dark:text-rose-400';
+
+    if (pct > 80) {
+        band = 'green';
+        barClass = 'bg-emerald-500';
+        textClass = 'text-emerald-500 dark:text-emerald-400';
+    } else if (pct > 60) {
+        band = 'yellow-green';
+        barClass = 'bg-lime-500';
+        textClass = 'text-lime-500 dark:text-lime-400';
+    } else if (pct > 30) {
+        band = 'amber';
+        barClass = 'bg-amber-500';
+        textClass = 'text-amber-500 dark:text-amber-400';
+    } else {
+        band = 'red/orange';
+        barClass = pct <= 15 ? 'bg-rose-500' : 'bg-orange-500';
+        textClass = pct <= 15 ? 'text-rose-500 dark:text-rose-400' : 'text-orange-500 dark:text-orange-400';
+    }
+
+    return {
+        score: numScore,
+        max: numMax,
+        pct,
+        hue,
+        band,
+        barClass,
+        textClass,
+        barStyle: {
+            width: `${pct}%`,
+            backgroundColor: `hsl(${hue}, 85%, 45%)`,
+        },
+        textStyle: {
+            color: `hsl(${hue}, 85%, 42%)`,
+        },
+    };
+}
+
 export default function Show({
     product,
     score_history = [],
@@ -195,6 +260,18 @@ export default function Show({
     }, [negative_keywords, selectedSourceFilter]);
 
     const scoreHsl = getScoreHsl(product.score);
+    const bofComp = getComponentScoreColor(product.score_breakdown?.bof_name, 20);
+    const demandComp = getComponentScoreColor(
+        product.score_flags?.dead_post_peak ? 0 : product.score_breakdown?.demand,
+        20
+    );
+    const payoutComp = getComponentScoreColor(product.score_breakdown?.payout, 15);
+    const marginComp = getComponentScoreColor(product.score_breakdown?.margin_headroom, 10);
+    const pageTypeComp = getComponentScoreColor(product.score_breakdown?.page_type, 10);
+    const brandComp = getComponentScoreColor(product.score_breakdown?.brand_bidding, 10);
+    const geoComp = getComponentScoreColor(product.score_breakdown?.geo, 5);
+    const compComp = getComponentScoreColor(product.score_breakdown?.competition, 5);
+    const freshComp = getComponentScoreColor(product.score_breakdown?.freshness, 5);
 
     return (
         <Layout>
@@ -675,12 +752,14 @@ export default function Show({
                             <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5">
                                 <div className="flex justify-between text-xs font-semibold">
                                     <span className="text-theme-secondary">BoF Name Triad</span>
-                                    <span className="font-mono text-theme-accent">{product.score_breakdown?.bof_name ?? 0} / 20</span>
+                                    <span className={`font-mono font-bold ${bofComp.textClass}`} style={bofComp.textStyle}>
+                                        {bofComp.score} / {bofComp.max}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="bg-emerald-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${((product.score_breakdown?.bof_name ?? 0) / 20) * 100}%` }}
+                                        className={`h-2 rounded-full transition-all ${bofComp.barClass}`}
+                                        style={bofComp.barStyle}
                                     />
                                 </div>
                                 <div className="text-[11px] text-theme-muted space-y-0.5">
@@ -704,20 +783,14 @@ export default function Show({
                             <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5">
                                 <div className="flex justify-between text-xs font-semibold">
                                     <span className="text-theme-secondary">Demand & Trends</span>
-                                    <span className="font-mono text-theme-accent">{product.score_breakdown?.demand ?? 0} / 20</span>
+                                    <span className={`font-mono font-bold ${demandComp.textClass}`} style={demandComp.textStyle}>
+                                        {demandComp.score} / {demandComp.max}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className={`${
-                                            product.score_flags?.dead_post_peak
-                                                ? 'bg-rose-500'
-                                                : (product.score_breakdown?.demand ?? 0) >= 16
-                                                    ? 'bg-emerald-500'
-                                                    : (product.score_breakdown?.demand ?? 0) >= 10
-                                                        ? 'bg-amber-500'
-                                                        : 'bg-rose-400'
-                                        } h-2 rounded-full transition-all`}
-                                        style={{ width: `${((product.score_breakdown?.demand ?? 0) / 20) * 100}%` }}
+                                        className={`h-2 rounded-full transition-all ${demandComp.barClass}`}
+                                        style={demandComp.barStyle}
                                     />
                                 </div>
                                 <div className="text-[11px] text-theme-muted space-y-0.5">
@@ -750,12 +823,14 @@ export default function Show({
                             <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5">
                                 <div className="flex justify-between text-xs font-semibold">
                                     <span className="text-theme-secondary">Payout Model</span>
-                                    <span className="font-mono text-theme-accent">{product.score_breakdown?.payout ?? 0} / 15</span>
+                                    <span className={`font-mono font-bold ${payoutComp.textClass}`} style={payoutComp.textStyle}>
+                                        {payoutComp.score} / {payoutComp.max}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="bg-emerald-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${((product.score_breakdown?.payout ?? 0) / 15) * 100}%` }}
+                                        className={`h-2 rounded-full transition-all ${payoutComp.barClass}`}
+                                        style={payoutComp.barStyle}
                                     />
                                 </div>
                                 <div className="text-[11px] text-theme-muted">
@@ -767,12 +842,14 @@ export default function Show({
                             <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5">
                                 <div className="flex justify-between text-xs font-semibold">
                                     <span className="text-theme-secondary">Margin Headroom</span>
-                                    <span className="font-mono text-theme-accent">{product.score_breakdown?.margin_headroom ?? 0} / 10</span>
+                                    <span className={`font-mono font-bold ${marginComp.textClass}`} style={marginComp.textStyle}>
+                                        {marginComp.score} / {marginComp.max}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="bg-emerald-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${((product.score_breakdown?.margin_headroom ?? 0) / 10) * 100}%` }}
+                                        className={`h-2 rounded-full transition-all ${marginComp.barClass}`}
+                                        style={marginComp.barStyle}
                                     />
                                 </div>
                                 <div className="text-[11px] text-theme-muted">
@@ -784,12 +861,14 @@ export default function Show({
                             <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5">
                                 <div className="flex justify-between text-xs font-semibold">
                                     <span className="text-theme-secondary">Page Type & Funnel</span>
-                                    <span className="font-mono text-theme-accent">{product.score_breakdown?.page_type ?? 0} / 10</span>
+                                    <span className={`font-mono font-bold ${pageTypeComp.textClass}`} style={pageTypeComp.textStyle}>
+                                        {pageTypeComp.score} / {pageTypeComp.max}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="bg-emerald-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${((product.score_breakdown?.page_type ?? 0) / 10) * 100}%` }}
+                                        className={`h-2 rounded-full transition-all ${pageTypeComp.barClass}`}
+                                        style={pageTypeComp.barStyle}
                                     />
                                 </div>
                                 <div className="text-[11px] text-theme-muted">
@@ -801,12 +880,14 @@ export default function Show({
                             <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5">
                                 <div className="flex justify-between text-xs font-semibold">
                                     <span className="text-theme-secondary">Brand Bidding</span>
-                                    <span className="font-mono text-theme-accent">{product.score_breakdown?.brand_bidding ?? 0} / 10</span>
+                                    <span className={`font-mono font-bold ${brandComp.textClass}`} style={brandComp.textStyle}>
+                                        {brandComp.score} / {brandComp.max}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="bg-emerald-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${((product.score_breakdown?.brand_bidding ?? 0) / 10) * 100}%` }}
+                                        className={`h-2 rounded-full transition-all ${brandComp.barClass}`}
+                                        style={brandComp.barStyle}
                                     />
                                 </div>
                                 <div className="text-[11px] text-theme-muted">
@@ -818,12 +899,14 @@ export default function Show({
                             <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5">
                                 <div className="flex justify-between text-xs font-semibold">
                                     <span className="text-theme-secondary">Geo Coverage (CA/US/AU)</span>
-                                    <span className="font-mono text-theme-accent">{product.score_breakdown?.geo ?? 0} / 5</span>
+                                    <span className={`font-mono font-bold ${geoComp.textClass}`} style={geoComp.textStyle}>
+                                        {geoComp.score} / {geoComp.max}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="bg-emerald-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${((product.score_breakdown?.geo ?? 0) / 5) * 100}%` }}
+                                        className={`h-2 rounded-full transition-all ${geoComp.barClass}`}
+                                        style={geoComp.barStyle}
                                     />
                                 </div>
                                 <div className="text-[11px] text-theme-muted">
@@ -835,12 +918,14 @@ export default function Show({
                             <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5">
                                 <div className="flex justify-between text-xs font-semibold">
                                     <span className="text-theme-secondary">Competition Density</span>
-                                    <span className="font-mono text-theme-accent">{product.score_breakdown?.competition ?? 0} / 5</span>
+                                    <span className={`font-mono font-bold ${compComp.textClass}`} style={compComp.textStyle}>
+                                        {compComp.score} / {compComp.max}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="bg-emerald-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${((product.score_breakdown?.competition ?? 0) / 5) * 100}%` }}
+                                        className={`h-2 rounded-full transition-all ${compComp.barClass}`}
+                                        style={compComp.barStyle}
                                     />
                                 </div>
                                 <div className="text-[11px] text-theme-muted">
@@ -852,12 +937,14 @@ export default function Show({
                             <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5">
                                 <div className="flex justify-between text-xs font-semibold">
                                     <span className="text-theme-secondary">Freshness & Approval</span>
-                                    <span className="font-mono text-theme-accent">{product.score_breakdown?.freshness ?? 0} / 5</span>
+                                    <span className={`font-mono font-bold ${freshComp.textClass}`} style={freshComp.textStyle}>
+                                        {freshComp.score} / {freshComp.max}
+                                    </span>
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className="bg-emerald-500 h-2 rounded-full transition-all"
-                                        style={{ width: `${((product.score_breakdown?.freshness ?? 0) / 5) * 100}%` }}
+                                        className={`h-2 rounded-full transition-all ${freshComp.barClass}`}
+                                        style={freshComp.barStyle}
                                     />
                                 </div>
                                 <div className="text-[11px] text-theme-muted">

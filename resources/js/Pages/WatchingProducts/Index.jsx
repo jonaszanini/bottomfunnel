@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import Layout, { Field, button, control, quiet } from '../../Components/Layout';
+import { getComponentScoreColor } from './Show';
 
 export function getScoreHsl(score) {
     if (score === null || score === undefined) {
@@ -1034,7 +1035,9 @@ export default function Index({ products, filters, metrics, options }) {
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex flex-col gap-0.5">
                                     <div className="flex justify-between">
                                         <span>BoF Name Triad:</span>
-                                        <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.bof_name ?? 0} / 20</strong>
+                                        <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.bof_name, 20).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.bof_name, 20).textStyle}>
+                                            {scoreModalProduct.score_breakdown?.bof_name ?? 0} / 20
+                                        </strong>
                                     </div>
                                     <div className="text-[10px] text-theme-muted">
                                         Images: {scoreModalProduct.bof_image_match_pct ?? 0}% • Trans: {scoreModalProduct.bof_translation ? '✓' : '✗'} • VPN: {scoreModalProduct.bof_vpn_serp ? '✓' : '✗'}
@@ -1043,7 +1046,9 @@ export default function Index({ products, filters, metrics, options }) {
                                 <div className="p-2 rounded bg-theme-subtle border border-theme space-y-0.5">
                                     <div className="flex justify-between">
                                         <span>Demand & Trends:</span>
-                                        <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.demand ?? 0} / 20</strong>
+                                        <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_flags?.dead_post_peak ? 0 : scoreModalProduct.score_breakdown?.demand, 20).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_flags?.dead_post_peak ? 0 : scoreModalProduct.score_breakdown?.demand, 20).textStyle}>
+                                            {scoreModalProduct.score_breakdown?.demand ?? 0} / 20
+                                        </strong>
                                     </div>
                                     <div className="text-[10px] text-theme-muted">
                                         Trend: {scoreModalProduct.trends_trend_label || scoreModalProduct.trends_trend || 'Unknown'}{scoreModalProduct.flowspy_traffic_trend === 'rising' ? ' • FlowSpy Rising' : ''}
@@ -1051,27 +1056,45 @@ export default function Index({ products, filters, metrics, options }) {
                                 </div>
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
                                     <span>Payout Model:</span>
-                                    <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.payout ?? 0} / 15</strong>
+                                    <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.payout, 15).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.payout, 15).textStyle}>
+                                        {scoreModalProduct.score_breakdown?.payout ?? 0} / 15
+                                    </strong>
                                 </div>
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
                                     <span>Margin Headroom:</span>
-                                    <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.margin_headroom ?? 0} / 10</strong>
+                                    <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.margin_headroom, 10).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.margin_headroom, 10).textStyle}>
+                                        {scoreModalProduct.score_breakdown?.margin_headroom ?? 0} / 10
+                                    </strong>
                                 </div>
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
                                     <span>Page Type & Funnel:</span>
-                                    <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.page_type ?? 0} / 10</strong>
+                                    <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.page_type, 10).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.page_type, 10).textStyle}>
+                                        {scoreModalProduct.score_breakdown?.page_type ?? 0} / 10
+                                    </strong>
                                 </div>
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
                                     <span>Brand Bidding:</span>
-                                    <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.brand_bidding ?? 0} / 10</strong>
+                                    <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.brand_bidding, 10).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.brand_bidding, 10).textStyle}>
+                                        {scoreModalProduct.score_breakdown?.brand_bidding ?? 0} / 10
+                                    </strong>
                                 </div>
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
                                     <span>Geo (CA/US/AU):</span>
-                                    <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.geo ?? 0} / 5</strong>
+                                    <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.geo, 5).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.geo, 5).textStyle}>
+                                        {scoreModalProduct.score_breakdown?.geo ?? 0} / 5
+                                    </strong>
                                 </div>
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
                                     <span>Competition Density:</span>
-                                    <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.competition ?? 0} / 5</strong>
+                                    <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.competition, 5).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.competition, 5).textStyle}>
+                                        {scoreModalProduct.score_breakdown?.competition ?? 0} / 5
+                                    </strong>
+                                </div>
+                                <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between col-span-2">
+                                    <span>Freshness & Approval:</span>
+                                    <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.freshness, 5).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.freshness, 5).textStyle}>
+                                        {scoreModalProduct.score_breakdown?.freshness ?? 0} / 5
+                                    </strong>
                                 </div>
                             </div>
                         </div>
