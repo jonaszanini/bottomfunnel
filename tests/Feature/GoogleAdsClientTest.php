@@ -580,6 +580,12 @@ class GoogleAdsClientTest extends TestCase
         ]);
     }
 
+    protected function tearDown(): void
+    {
+        $this->configureOauth();
+        parent::tearDown();
+    }
+
     private function createMockAccount(): GoogleAdsAccount
     {
         $account = new GoogleAdsAccount([

@@ -38,6 +38,12 @@ class FraudAndConversionPipelineTest extends TestCase
     {
         parent::setUp();
         $this->withoutMiddleware(ThrottleRequests::class);
+        config([
+            'flowhub.google_ads.client_id' => 'test-client-id',
+            'flowhub.google_ads.client_secret' => 'test-client-secret',
+            'flowhub.google_ads.developer_token' => 'test-dev-token',
+            'flowhub.google_ads.version' => 'v22',
+        ]);
     }
 
     private function createTrackWithAccount(string $campaignId = '9876543210'): array
@@ -420,11 +426,11 @@ class FraudAndConversionPipelineTest extends TestCase
 
         // Fake Google OAuth and Data Manager Ingest API endpoints
         Http::fake([
-            'https://oauth2.googleapis.com/token' => Http::response([
+            'https://oauth2.googleapis.com/token*' => Http::response([
                 'access_token' => 'mock-dm-token',
                 'expires_in' => 3600,
             ], 200),
-            'https://datamanager.googleapis.com/v1/events:ingest' => Http::response([
+            'https://datamanager.googleapis.com/v1/events:ingest*' => Http::response([
                 'requestId' => 'dm-req-id-uuid-99887766',
             ], 200),
         ]);
