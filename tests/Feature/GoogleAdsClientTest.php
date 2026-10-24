@@ -507,6 +507,70 @@ class GoogleAdsClientTest extends TestCase
         $this->assertEquals(['Headline 1', 'Headline 2', 'Headline 3'], $ads[0]['headlines']);
     }
 
+    public function test_get_conversion_tag_returns_webpage_snippets(): void
+    {
+        $this->configureOauth();
+        $account = $this->createMockAccount();
+
+        Http::fake([
+            'https://googleads.googleapis.com/v22/customers/1234567890/googleAds:search' => Http::response([
+                'results' => [
+                    [
+                        'conversionAction' => [
+                            'resourceName' => 'customers/1234567890/conversionActions/987654',
+                            'id' => '987654',
+                            'name' => 'Purchase',
+                            'tagSnippets' => [
+                                [
+                                    'type' => 'WEBPAGE',
+                                    'pageFormat' => 'HTML',
+                                    'globalSiteTag' => '<!-- Google tag (gtag.js) -->',
+                                    'eventSnippet' => '<!-- Event snippet for Purchase -->',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $client = app(GoogleAdsClient::class);
+        $result = $client->getConversionTag($account, 'customers/1234567890/conversionActions/987654');
+
+        $this->assertTrue($result['has_tag']);
+        $this->assertEquals('<!-- Google tag (gtag.js) -->', $result['global_site_tag']);
+        $this->assertEquals('<!-- Event snippet for Purchase -->', $result['event_snippet']);
+        $this->assertEquals('WEBPAGE', $result['type']);
+    }
+
+    public function test_get_conversion_tag_handles_missing_snippets_gracefully(): void
+    {
+        $this->configureOauth();
+        $account = $this->createMockAccount();
+
+        Http::fake([
+            'https://googleads.googleapis.com/v22/customers/1234567890/googleAds:search' => Http::response([
+                'results' => [
+                    [
+                        'conversionAction' => [
+                            'resourceName' => 'customers/1234567890/conversionActions/987654',
+                            'id' => '987654',
+                            'name' => 'Offline Upload',
+                            'tagSnippets' => [],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $client = app(GoogleAdsClient::class);
+        $result = $client->getConversionTag($account, '987654');
+
+        $this->assertFalse($result['has_tag']);
+        $this->assertStringContainsString('AW-1234567890', $result['global_site_tag']);
+        $this->assertEquals('', $result['event_snippet']);
+    }
+
     private function configureOauth(): void
     {
         config([

@@ -29,11 +29,18 @@ Route::post('/hooks/{platform}/{secret}', HookController::class)->middleware('th
 Route::post('/t/collect', TrackingController::class)->middleware('throttle:120,1');
 Route::get('/t.js', TrackScriptController::class);
 
+/**
+ * External cron trigger for cron-job.org:
+ * Calling URL: https://bottomfunnel.app/cron/run?token=hgytrsd543T4564FGHf7tgfs635GGf
+ *
+ * Runs Artisan::call('schedule:run') which evaluates all scheduled tasks.
+ * Excluded from session/auth middleware and protected by timing-safe token verification.
+ */
 Route::get('/cron/run', function () {
-    $token = request()->query('token');
-    $expected = config('app.cron_token');
+    $token = (string) request()->query('token');
+    $expected = (string) (config('app.cron_token') ?: config('flowhub.cron_token') ?: 'hgytrsd543T4564FGHf7tgfs635GGf');
 
-    if (! $token || $token !== $expected) {
+    if ($token === '' || ! hash_equals($expected, $token)) {
         abort(403, 'Invalid cron token');
     }
 
@@ -41,7 +48,8 @@ Route::get('/cron/run', function () {
 
     return response()->json([
         'ok' => true,
-        'output' => Artisan::output(),
+        'message' => 'Scheduler executed successfully.',
+        'output' => trim(Artisan::output()),
         'time' => now()->toIso8601String(),
     ]);
 })->name('cron.run');
@@ -83,6 +91,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/google-ads/accounts/{account}/default', [GoogleAdsController::class, 'setDefault'])->name('google.accounts.default');
     Route::delete('/google-ads/accounts/{account}', [GoogleAdsController::class, 'destroy'])->name('google.destroy');
     Route::get('/google-ads/accounts/{account}/options', [GoogleAdsController::class, 'options'])->name('google.options');
+    Route::get('/google-ads/accounts/{account}/conversion-actions/{action}/tag', [GoogleAdsController::class, 'conversionTag'])->name('google.conversion-actions.tag');
 
     // Internal & Bot API for Google Ads management
     Route::get('/internal/google-ads/campaigns', [InternalGoogleAdsController::class, 'listCampaigns'])->name('internal.google.campaigns.index');

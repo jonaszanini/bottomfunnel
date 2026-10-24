@@ -45,4 +45,25 @@ Run the production app in AWS `ca-central-1`.
 - A queue worker (`php artisan queue:work`) for conversion upload and IP exclusion. The webhook returns after the job is queued.
 - Secrets stay in the environment: `APP_KEY`, database password, `OPENAI_API_KEY`, Google client id, client secret, developer token, and `FLOW_HUB_PASSWORD`.
 
+## Automated Scheduling (cron-job.org)
+
+All scheduled and background tasks in Flow Hub run **exclusively** through an external HTTPS trigger rather than native server crontab entries (such as Hostinger or cPanel crontabs).
+
+Set up a single recurring job on [cron-job.org](https://cron-job.org) (recommended every 5 to 15 minutes) pointing to:
+
+```text
+https://bottomfunnel.app/cron/run?token=hgytrsd543T4564FGHf7tgfs635GGf
+```
+
+*(If you customize `CRON_TOKEN` in `.env`, use: `https://bottomfunnel.app/cron/run?token=YOUR_TOKEN`)*
+
+When hit, this endpoint executes `Artisan::call('schedule:run')` which runs:
+1. **Weekly Watching Products Refresh**: `watching:refresh` (Mondays at 06:00 America/Toronto)
+2. **Daily FX Rate Sync**: `fx:refresh` (Daily at 05:00 America/Toronto)
+3. **Listing Down Check**: `campaigns:check-listing-down` (Every 30 minutes)
+4. **Spend-without-conversion Bleeder Check**: `campaigns:check-bleeders` (Hourly)
+5. **Shared Hosting Queue Worker**: `queue:work --stop-when-empty --max-time=50` (Processes pending conversions and asynchronous tasks)
+
+Do not add separate cron entries in Hostinger or Linux crontab; this single external trigger handles all scheduled tasks.
+
 Local development stays on this machine.

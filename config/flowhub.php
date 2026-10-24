@@ -87,4 +87,7 @@ return [
             'action' => env('SAFETY_BLEEDER_ACTION', 'alert'), // 'alert' or 'pause'
         ],
     ],
+
+    'cron_token' => env('CRON_TOKEN', 'hgytrsd543T4564FGHf7tgfs635GGf'),
+    'cron_url' => env('CRON_URL', 'https://bottomfunnel.app/cron/run?token='.env('CRON_TOKEN', 'hgytrsd543T4564FGHf7tgfs635GGf')),
 ];

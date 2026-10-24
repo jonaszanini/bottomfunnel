@@ -123,6 +123,7 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
-    'cron_token' => env('CRON_TOKEN'),
+    'cron_token' => env('CRON_TOKEN', 'hgytrsd543T4564FGHf7tgfs635GGf'),
+    'cron_url' => env('CRON_URL', 'https://bottomfunnel.app/cron/run?token='.env('CRON_TOKEN', 'hgytrsd543T4564FGHf7tgfs635GGf')),
 
 ];

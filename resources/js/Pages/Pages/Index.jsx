@@ -16,7 +16,7 @@ function getCsrfToken() {
     return match ? decodeURIComponent(match[1]) : '';
 }
 
-export default function Index({ pages = [], tracks = [], strategies = [], pageTypes = {}, languages = {} }) {
+export default function Index({ pages = [], tracks = [], google_ads_accounts = [], strategies = [], pageTypes = {}, languages = {} }) {
     // Parse URL query parameters if navigated from Watching Products or direct link
     const [prefillCloner, setPrefillCloner] = useState(null);
 
@@ -309,6 +309,7 @@ export default function Index({ pages = [], tracks = [], strategies = [], pageTy
                 {activeTab === 'cloner' ? (
                     <PageClonerWizard
                         tracks={tracks}
+                        googleAdsAccounts={google_ads_accounts}
                         prefillData={prefillCloner}
                         onSaveToDb={handleSaveToDb}
                         isSaving={isSaving}
@@ -377,6 +378,7 @@ export default function Index({ pages = [], tracks = [], strategies = [], pageTy
                         {currentStep === 2 && (
                             <OfferConfigForm
                                 tracks={tracks}
+                                googleAdsAccounts={google_ads_accounts}
                                 config={config}
                                 onChangeConfig={handleConfigChange}
                                 onBack={() => setCurrentStep(1)}

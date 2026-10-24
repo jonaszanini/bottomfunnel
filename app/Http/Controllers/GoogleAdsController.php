@@ -213,4 +213,42 @@ class GoogleAdsController extends Controller
             ], $campaigns),
         ]);
     }
+
+    public function conversionTag(GoogleAdsAccount $account, string $action, GoogleAdsClient $googleAds): JsonResponse
+    {
+        $conversionAction = ConversionAction::query()
+            ->where('google_ads_account_id', $account->id)
+            ->where(function ($query) use ($action) {
+                $query->where('id', $action)
+                    ->orWhere('external_id', $action)
+                    ->orWhere('resource_name', $action);
+            })
+            ->first();
+
+        $resourceName = $conversionAction?->resource_name;
+        if (! $resourceName) {
+            $customerId = $googleAds->digits($account->customer_id);
+            $resourceName = str_starts_with($action, 'customers/')
+                ? $action
+                : "customers/{$customerId}/conversionActions/{$action}";
+        }
+
+        try {
+            $tag = $googleAds->getConversionTag($account, $resourceName);
+
+            return response()->json([
+                'ok' => true,
+                'global_site_tag' => $tag['global_site_tag'],
+                'event_snippet' => $tag['event_snippet'],
+                'type' => $tag['type'] ?? 'WEBPAGE',
+                'has_tag' => (bool) ($tag['has_tag'] ?? false),
+                'action_name' => $conversionAction?->name,
+            ]);
+        } catch (GoogleRequestException $exception) {
+            return response()->json([
+                'ok' => false,
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
+    }
 }

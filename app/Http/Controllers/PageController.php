@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Jobs\ClonePageJob;
 use App\Jobs\GenerateCopyJob;
+use App\Models\GoogleAdsAccount;
 use App\Models\Page;
 use App\Models\Track;
 use App\Services\Pages\Cloner\PageCrawlerService;
@@ -72,7 +73,18 @@ class PageController extends Controller
                 'product_name' => $page->track?->product_name ?? 'Standalone Offer',
                 'updated_at' => $page->updated_at?->toDateTimeString(),
             ]),
-            'tracks' => Track::query()->orderBy('product_name')->get(['id', 'product_name', 'page_type', 'language', 'affiliate_url']),
+            'tracks' => Track::query()
+                ->with([
+                    'account:id,name,customer_id',
+                    'conversionAction:id,name,external_id,resource_name',
+                ])
+                ->orderBy('product_name')
+                ->get(['id', 'product_name', 'page_type', 'language', 'affiliate_url', 'google_ads_account_id', 'conversion_action_id']),
+            'google_ads_accounts' => GoogleAdsAccount::query()
+                ->with(['conversionActions:id,google_ads_account_id,name,external_id,resource_name'])
+                ->orderByDesc('is_default')
+                ->orderBy('name')
+                ->get(['id', 'name', 'customer_id', 'is_default']),
             ...Options::forForms(),
             'strategies' => $strategies,
         ]);

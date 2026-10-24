@@ -152,6 +152,78 @@ class GoogleAdsClient
     }
 
     /**
+     * Query the ConversionAction and return the TagSnippet (global_site_tag + event_snippet) for type WEBPAGE.
+     *
+     * @return array{global_site_tag: string, event_snippet: string, type: ?string, page_format: ?string, has_tag: bool}
+     */
+    public function getConversionTag(GoogleAdsAccount $account, string $conversionActionResourceName): array
+    {
+        $customerId = $this->digits($account->customer_id);
+        $resourceName = str_starts_with($conversionActionResourceName, 'customers/')
+            ? $conversionActionResourceName
+            : "customers/{$customerId}/conversionActions/{$conversionActionResourceName}";
+
+        $escaped = str_replace("'", "\\'", $resourceName);
+
+        $rows = $this->search(
+            $this->accessToken($account),
+            $account->customer_id,
+            $account->login_customer_id,
+            "SELECT conversion_action.id, conversion_action.name, conversion_action.resource_name, conversion_action.tag_snippets FROM conversion_action WHERE conversion_action.resource_name = '{$escaped}' LIMIT 1",
+        );
+
+        $snippets = [];
+        if (! empty($rows)) {
+            $action = $rows[0]['conversionAction'] ?? $rows[0]['conversion_action'] ?? [];
+            $snippets = $action['tagSnippets'] ?? $action['tag_snippets'] ?? [];
+        }
+
+        $selectedSnippet = null;
+        if (is_array($snippets)) {
+            foreach ($snippets as $snippet) {
+                if (! is_array($snippet)) {
+                    continue;
+                }
+                $type = strtoupper((string) ($snippet['type'] ?? ''));
+                if ($type === 'WEBPAGE') {
+                    $selectedSnippet = $snippet;
+                    break;
+                }
+            }
+            if ($selectedSnippet === null && ! empty($snippets) && is_array($snippets[0])) {
+                $selectedSnippet = $snippets[0];
+            }
+        }
+
+        $globalSiteTag = '';
+        $eventSnippet = '';
+        $type = null;
+        $pageFormat = null;
+        $hasTag = false;
+
+        if ($selectedSnippet !== null) {
+            $globalSiteTag = (string) ($selectedSnippet['globalSiteTag'] ?? $selectedSnippet['global_site_tag'] ?? '');
+            $eventSnippet = (string) ($selectedSnippet['eventSnippet'] ?? $selectedSnippet['event_snippet'] ?? '');
+            $type = (string) ($selectedSnippet['type'] ?? 'WEBPAGE');
+            $pageFormat = (string) ($selectedSnippet['pageFormat'] ?? $selectedSnippet['page_format'] ?? 'HTML');
+            $hasTag = $globalSiteTag !== '' || $eventSnippet !== '';
+        }
+
+        // If no tag snippets exist yet in Google Ads, fallback to standard gtag for this customer ID
+        if ($globalSiteTag === '' && $customerId !== '') {
+            $globalSiteTag = "<!-- Google tag (gtag.js) -->\n<script async src=\"https://www.googletagmanager.com/gtag/js?id=AW-{$customerId}\"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n\n  gtag('config', 'AW-{$customerId}');\n</script>";
+        }
+
+        return [
+            'global_site_tag' => $globalSiteTag,
+            'event_snippet' => $eventSnippet,
+            'type' => $type ?? 'WEBPAGE',
+            'page_format' => $pageFormat ?? 'HTML',
+            'has_tag' => $hasTag,
+        ];
+    }
+
+    /**
      * @return list<array{id: string, name: string}>
      */
     public function listCampaigns(GoogleAdsAccount $account): array

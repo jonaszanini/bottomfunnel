@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ConversionAction;
 use App\Models\GoogleAdsAccount;
 use App\Models\GoogleAdsCampaign;
 use App\Models\Track;
@@ -349,5 +350,47 @@ class GoogleAdsMultiAccountTest extends TestCase
             'customer_id' => '1111111111',
             'campaign_id' => '91919',
         ]);
+    }
+
+    public function test_conversion_action_tag_endpoint_returns_snippets(): void
+    {
+        $action = ConversionAction::query()->create([
+            'google_ads_account_id' => $this->accountA->id,
+            'external_id' => '12345',
+            'name' => 'Webpage Purchase',
+            'resource_name' => 'customers/1111111111/conversionActions/12345',
+        ]);
+
+        Http::fake([
+            'https://googleads.googleapis.com/v22/customers/1111111111/googleAds:search' => Http::response([
+                'results' => [
+                    [
+                        'conversionAction' => [
+                            'resourceName' => 'customers/1111111111/conversionActions/12345',
+                            'tagSnippets' => [
+                                [
+                                    'type' => 'WEBPAGE',
+                                    'pageFormat' => 'HTML',
+                                    'globalSiteTag' => '<!-- Global site tag (gtag.js) -->',
+                                    'eventSnippet' => '<!-- Event snippet -->',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $response = $this->actingAs($this->user)
+            ->getJson("/google-ads/accounts/{$this->accountA->id}/conversion-actions/{$action->id}/tag");
+
+        $response->assertOk()
+            ->assertJson([
+                'ok' => true,
+                'global_site_tag' => '<!-- Global site tag (gtag.js) -->',
+                'event_snippet' => '<!-- Event snippet -->',
+                'has_tag' => true,
+                'action_name' => 'Webpage Purchase',
+            ]);
     }
 }

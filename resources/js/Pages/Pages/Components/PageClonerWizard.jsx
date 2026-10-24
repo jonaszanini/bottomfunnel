@@ -4,6 +4,7 @@ import { api, ApiError } from '../../../utils/apiClient';
 
 export default function PageClonerWizard({
     tracks = [],
+    googleAdsAccounts = [],
     prefillData = null,
     onSaveToDb,
     isSaving,
@@ -27,6 +28,86 @@ export default function PageClonerWizard({
     });
 
     const [showAdvanced, setShowAdvanced] = useState(false);
+
+    // Google Ads Tag Injection State
+    const [clonerAccountId, setClonerAccountId] = useState(() => {
+        const initialTrack = tracks.find((t) => String(t.id) === String(prefillData?.trackId || ''));
+        if (initialTrack?.google_ads_account_id) return String(initialTrack.google_ads_account_id);
+        const def = googleAdsAccounts.find((a) => a.is_default);
+        return def ? String(def.id) : (googleAdsAccounts[0] ? String(googleAdsAccounts[0].id) : '');
+    });
+
+    const [clonerActionId, setClonerActionId] = useState(() => {
+        const initialTrack = tracks.find((t) => String(t.id) === String(prefillData?.trackId || ''));
+        return initialTrack?.conversion_action_id ? String(initialTrack.conversion_action_id) : '';
+    });
+
+    const [isFetchingTag, setIsFetchingTag] = useState(false);
+    const [tagNotice, setTagNotice] = useState('');
+
+    const clonerActiveAccount = googleAdsAccounts.find((a) => String(a.id) === String(clonerAccountId));
+    const clonerAvailableActions = clonerActiveAccount?.conversion_actions || [];
+
+    async function handleInsertGoogleAdsTag() {
+        if (!clonerAccountId) {
+            alert('Please select a Google Ads account first.');
+            return;
+        }
+        setIsFetchingTag(true);
+        setTagNotice('');
+
+        try {
+            const actionParam = clonerActionId || 'default';
+            const res = await fetch(`/google-ads/accounts/${clonerAccountId}/conversion-actions/${actionParam}/tag`, {
+                headers: {
+                    Accept: 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+            const data = await res.json();
+            if (!res.ok || !data.ok) {
+                throw new Error(data.message || 'Failed to fetch Google Ads tag');
+            }
+
+            const tagCode = data.global_site_tag;
+            if (!tagCode) {
+                throw new Error('No Google Ads tag could be retrieved for this account.');
+            }
+
+            const current = (form.customHead || '').trim();
+            if (current.length > 0) {
+                if (current.includes(tagCode.trim())) {
+                    setTagNotice('Google Ads tag is already present in custom <head>.');
+                    return;
+                }
+                const confirmed = window.confirm(
+                    'The Custom <head> Code field is not empty.\n\nClick OK to append the Google Ads tag, or Cancel to leave it unchanged.'
+                );
+                if (!confirmed) {
+                    return;
+                }
+                setForm((prev) => ({
+                    ...prev,
+                    customHead: `${current}\n\n${tagCode}`,
+                }));
+            } else {
+                setForm((prev) => ({
+                    ...prev,
+                    customHead: tagCode,
+                }));
+            }
+
+            setTagNotice(
+                data.has_tag
+                    ? 'Google Ads conversion tag inserted!'
+                    : 'Google Ads global site tag (gtag.js) inserted.'
+            );
+        } catch (err) {
+            setTagNotice(err.message || 'Error inserting Google Ads tag.');
+        } finally {
+            setIsFetchingTag(false);
+        }
+    }
 
     // Extraction & Crawl states
     const [isExtractingMeta, setIsExtractingMeta] = useState(false);
@@ -495,7 +576,17 @@ export default function PageClonerWizard({
                                 <select
                                     className={control}
                                     value={form.trackId}
-                                    onChange={(e) => setForm({ ...form, trackId: e.target.value })}
+                                    onChange={(e) => {
+                                        const newTrackId = e.target.value;
+                                        setForm({ ...form, trackId: newTrackId });
+                                        const selectedTrack = tracks.find((t) => String(t.id) === String(newTrackId));
+                                        if (selectedTrack?.google_ads_account_id) {
+                                            setClonerAccountId(String(selectedTrack.google_ads_account_id));
+                                        }
+                                        if (selectedTrack?.conversion_action_id) {
+                                            setClonerActionId(String(selectedTrack.conversion_action_id));
+                                        }
+                                    }}
                                 >
                                     <option value="">Standalone / Unassigned</option>
                                     {tracks.map((t) => (
@@ -585,7 +676,75 @@ export default function PageClonerWizard({
 
                                 <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-theme">
                                     <div>
-                                        <label className="font-semibold block text-theme-primary mb-1">Custom &lt;head&gt; Code (Google Ads Tag / GTM)</label>
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-1">
+                                            <label className="font-semibold block text-theme-primary text-xs sm:text-sm">
+                                                Custom &lt;head&gt; Code (Google Ads Tag / GTM)
+                                            </label>
+
+                                            {googleAdsAccounts.length > 0 && (
+                                                <div className="flex flex-wrap items-center gap-1 text-xs">
+                                                    <select
+                                                        className="py-0.5 px-1.5 text-[11px] rounded border border-theme bg-theme-surface text-theme-primary max-w-[130px]"
+                                                        value={clonerAccountId}
+                                                        onChange={(e) => {
+                                                            setClonerAccountId(e.target.value);
+                                                            setClonerActionId('');
+                                                        }}
+                                                        title="Google Ads Account"
+                                                    >
+                                                        <option value="">Select Account...</option>
+                                                        {googleAdsAccounts.map((acc) => (
+                                                            <option key={acc.id} value={acc.id}>
+                                                                {acc.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+
+                                                    <select
+                                                        className="py-0.5 px-1.5 text-[11px] rounded border border-theme bg-theme-surface text-theme-primary max-w-[130px]"
+                                                        value={clonerActionId}
+                                                        onChange={(e) => setClonerActionId(e.target.value)}
+                                                        disabled={!clonerAccountId || clonerAvailableActions.length === 0}
+                                                        title="Conversion Action (optional)"
+                                                    >
+                                                        <option value="">
+                                                            {clonerAvailableActions.length === 0 ? 'Default gtag' : 'Action (opt)...'}
+                                                        </option>
+                                                        {clonerAvailableActions.map((act) => (
+                                                            <option key={act.id} value={act.id}>
+                                                                {act.name}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleInsertGoogleAdsTag}
+                                                        disabled={!clonerAccountId || isFetchingTag}
+                                                        className="px-2 py-0.5 rounded text-[11px] font-semibold bg-[var(--accentColor)] text-white hover:opacity-90 shadow-2xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        title="Automatically insert Google Ads global site tag (gtag.js)"
+                                                    >
+                                                        {isFetchingTag ? (
+                                                            <span>Fetching...</span>
+                                                        ) : (
+                                                            <>
+                                                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                                                </svg>
+                                                                <span>Insert Google Ads tag</span>
+                                                            </>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {tagNotice && (
+                                            <div className="mb-1 text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                                                {tagNotice}
+                                            </div>
+                                        )}
+
                                         <textarea
                                             rows="3"
                                             placeholder="<!-- Global site tag (gtag.js) - Google Ads -->"
