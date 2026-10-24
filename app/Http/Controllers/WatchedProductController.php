@@ -96,6 +96,7 @@ class WatchedProductController extends Controller
                 'trends_trend' => $product->trends_trend?->value,
                 'trends_trend_label' => $product->trends_trend?->label(),
                 'trends_30d' => $product->trends_30d !== null ? (float) $product->trends_30d : null,
+                'flowspy_traffic_trend' => $product->flowspy_traffic_trend?->value,
                 'brand_bidding' => $product->brand_bidding->value,
                 'brand_bidding_label' => $product->brand_bidding->label(),
                 'true_bof' => $product->true_bof->value,

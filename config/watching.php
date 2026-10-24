@@ -47,6 +47,31 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Demand Component Scoring Points (Max 20)
+    |--------------------------------------------------------------------------
+    |
+    | Point values awarded for the Demand component based on Google Trends
+    | direction (trends_trend), FlowSpy traffic boost, and baseline values
+    | for null/unknown trends.
+    |
+    */
+    'demand_points' => [
+        'rising' => 20,
+        'stable' => 16,
+        'falling' => 10,
+        'dead_post_peak' => 0,
+        'unknown' => 8,
+        'flowspy_rising_min' => 18,
+        'kp_volume_tiers' => [
+            5000 => 18,
+            1000 => 14,
+            250 => 10,
+        ],
+        'kp_growth_bonus' => 2,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Scoring Thresholds & Hard Gates
     |--------------------------------------------------------------------------
     */

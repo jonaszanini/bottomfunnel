@@ -210,9 +210,15 @@ class PotentialScoreService
     {
         $flags = [];
 
-        $trend = $product->trends_trend instanceof TrendsTrend
-            ? $product->trends_trend
-            : TrendsTrend::tryFrom((string) $product->trends_trend);
+        try {
+            $trend = $product->trends_trend instanceof TrendsTrend
+                ? $product->trends_trend
+                : TrendsTrend::tryFrom((string) $product->trends_trend);
+        } catch (\Throwable) {
+            $trend = null;
+        }
+
+        $demandPoints = config('watching.demand_points', []);
 
         if ($trend === TrendsTrend::DeadPostPeak) {
             $flags['dead_post_peak'] = true;
@@ -223,39 +229,55 @@ class PotentialScoreService
                 'reason' => "Demand collapsed post-peak (7d: {$product->trends_7d}, 30d: {$product->trends_30d}, 90d: {$product->trends_90d}). Hard gate caps score at 20.",
             ];
 
-            return ['score' => 0, 'flags' => $flags];
+            return [
+                'score' => (int) ($demandPoints['dead_post_peak'] ?? 0),
+                'flags' => $flags,
+            ];
         }
 
-        $trendsActive = ((float) $product->trends_7d > 0)
-            || ((float) $product->trends_30d > 0)
-            || ((float) $product->trends_90d > 0);
-
-        $trafficTrend = $product->flowspy_traffic_trend instanceof FlowspyTrafficTrend
-            ? $product->flowspy_traffic_trend
-            : FlowspyTrafficTrend::tryFrom((string) $product->flowspy_traffic_trend);
-
-        $trafficRising = ($trafficTrend === FlowspyTrafficTrend::Rising);
-
-        // Full 20 if Trends active OR FlowSpy traffic is rising
-        if ($trendsActive || $trafficRising) {
-            return ['score' => 20, 'flags' => $flags];
-        }
-
-        // Otherwise derive from KP volume tiers
-        $volume = (int) ($product->kp_volume ?? 0);
-        $score = match (true) {
-            $volume >= 5000 => 18,
-            $volume >= 1000 => 14,
-            $volume >= 250 => 10,
-            $volume > 0 => 6,
-            default => 2,
+        $score = match ($trend) {
+            TrendsTrend::Rising => (int) ($demandPoints['rising'] ?? 20),
+            TrendsTrend::Stable => (int) ($demandPoints['stable'] ?? 16),
+            TrendsTrend::Falling => (int) ($demandPoints['falling'] ?? 10),
+            default => null,
         };
 
-        if ((float) $product->kp_yoy > 0 || (float) $product->kp_3m > 0) {
-            $score += 2;
+        // When trend direction is unknown / null, derive from KP volume tiers or use unknown baseline
+        if ($score === null) {
+            $volume = (int) ($product->kp_volume ?? 0);
+            $unknownBase = (int) ($demandPoints['unknown'] ?? 8);
+
+            if ($volume > 0) {
+                $score = match (true) {
+                    $volume >= 5000 => (int) ($demandPoints['kp_volume_tiers'][5000] ?? 18),
+                    $volume >= 1000 => (int) ($demandPoints['kp_volume_tiers'][1000] ?? 14),
+                    $volume >= 250 => (int) ($demandPoints['kp_volume_tiers'][250] ?? 10),
+                    default => $unknownBase,
+                };
+
+                if ((float) $product->kp_yoy > 0 || (float) $product->kp_3m > 0) {
+                    $score += (int) ($demandPoints['kp_growth_bonus'] ?? 2);
+                }
+            } else {
+                $score = $unknownBase;
+            }
         }
 
-        return ['score' => min(20, $score), 'flags' => $flags];
+        try {
+            $trafficTrend = $product->flowspy_traffic_trend instanceof FlowspyTrafficTrend
+                ? $product->flowspy_traffic_trend
+                : FlowspyTrafficTrend::tryFrom((string) $product->flowspy_traffic_trend);
+        } catch (\Throwable) {
+            $trafficTrend = null;
+        }
+
+        // FlowSpy traffic rising can boost or override
+        if ($trafficTrend === FlowspyTrafficTrend::Rising) {
+            $minFlowspyPoints = (int) ($demandPoints['flowspy_rising_min'] ?? 18);
+            $score = max($score, $minFlowspyPoints);
+        }
+
+        return ['score' => max(0, min(20, $score)), 'flags' => $flags];
     }
 
     /**

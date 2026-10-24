@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\BrandBiddingStatus;
+use App\Enums\FlowspyTrafficTrend;
 use App\Enums\ListingStatus;
 use App\Enums\PayoutModel;
 use App\Enums\TrendsTrend;
@@ -291,5 +292,160 @@ class PotentialScoreServiceTest extends TestCase
 
         $this->assertLessThan(20, $result['breakdown']['bof_name']);
         $this->assertEquals(13, $result['breakdown']['bof_name']); // round(0.95 * 10) + 3 = 10 + 3 = 13
+    }
+
+    public function test_demand_component_scores_rising_trend_at_20(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'trends_trend' => TrendsTrend::Rising,
+            'trends_7d' => 45.0,
+            'trends_30d' => 35.0,
+        ]);
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertEquals(20, $result['breakdown']['demand']);
+    }
+
+    public function test_demand_component_scores_stable_trend_at_16(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'trends_trend' => TrendsTrend::Stable,
+            'trends_7d' => 30.0,
+            'trends_30d' => 30.0,
+        ]);
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertEquals(16, $result['breakdown']['demand']);
+    }
+
+    public function test_demand_component_scores_falling_trend_at_10(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'trends_trend' => TrendsTrend::Falling,
+            'trends_7d' => 15.0,
+            'trends_30d' => 35.0,
+        ]);
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertEquals(10, $result['breakdown']['demand']);
+    }
+
+    public function test_demand_component_scores_dead_post_peak_at_zero_and_caps_total_score_at_20(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'bof_translation' => true,
+            'bof_vpn_serp' => true,
+            'bof_image_match_pct' => 95,
+            'trends_trend' => TrendsTrend::DeadPostPeak,
+            'trends_7d' => 5.0,
+            'trends_30d' => 10.0,
+            'trends_90d' => 80.0,
+            'payout_amount' => 150.00,
+        ]);
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertEquals(0, $result['breakdown']['demand']);
+        $this->assertLessThanOrEqual(20, $result['score']);
+        $this->assertTrue($result['flags']['dead_post_peak'] ?? false);
+        $this->assertContains('dead_post_peak', $result['flags']['hard_gates_hit']);
+    }
+
+    public function test_demand_component_scores_null_or_unknown_trend_at_8(): void
+    {
+        $productNull = WatchedProduct::factory()->create([
+            'trends_trend' => null,
+            'kp_volume' => null,
+            'flowspy_traffic_trend' => null,
+        ]);
+
+        $resultNull = $this->scoreService->score($productNull);
+        $this->assertEquals(8, $resultNull['breakdown']['demand']);
+
+        $productRaw = new WatchedProduct;
+        $productRaw->setRawAttributes([
+            'trends_trend' => 'unrecognized_trend',
+            'kp_volume' => null,
+            'flowspy_traffic_trend' => null,
+        ]);
+
+        $resultRaw = $this->scoreService->score($productRaw);
+        $this->assertEquals(8, $resultRaw['breakdown']['demand']);
+    }
+
+    public function test_flowspy_rising_yields_high_demand_score(): void
+    {
+        // Falling trend (normally 10) boosted to 18 by FlowSpy rising
+        $productFalling = WatchedProduct::factory()->create([
+            'trends_trend' => TrendsTrend::Falling,
+            'flowspy_traffic_trend' => FlowspyTrafficTrend::Rising,
+        ]);
+
+        $resultFalling = $this->scoreService->score($productFalling);
+        $this->assertEquals(18, $resultFalling['breakdown']['demand']);
+
+        // Null trend (normally 8) boosted to 18 by FlowSpy rising
+        $productNull = WatchedProduct::factory()->create([
+            'trends_trend' => null,
+            'kp_volume' => null,
+            'flowspy_traffic_trend' => FlowspyTrafficTrend::Rising,
+        ]);
+
+        $resultNull = $this->scoreService->score($productNull);
+        $this->assertEquals(18, $resultNull['breakdown']['demand']);
+
+        // Dead post peak remains hard gate at 0 demand even if FlowSpy is rising
+        $productDead = WatchedProduct::factory()->create([
+            'trends_trend' => TrendsTrend::DeadPostPeak,
+            'flowspy_traffic_trend' => FlowspyTrafficTrend::Rising,
+        ]);
+
+        $resultDead = $this->scoreService->score($productDead);
+        $this->assertEquals(0, $resultDead['breakdown']['demand']);
+    }
+
+    public function test_demand_point_values_are_configurable(): void
+    {
+        config([
+            'watching.demand_points.falling' => 12,
+            'watching.demand_points.stable' => 15,
+            'watching.demand_points.rising' => 19,
+            'watching.demand_points.unknown' => 7,
+            'watching.demand_points.flowspy_rising_min' => 20,
+        ]);
+
+        $fallingProduct = WatchedProduct::factory()->create([
+            'trends_trend' => TrendsTrend::Falling,
+            'flowspy_traffic_trend' => null,
+        ]);
+        $this->assertEquals(12, $this->scoreService->score($fallingProduct)['breakdown']['demand']);
+
+        $stableProduct = WatchedProduct::factory()->create([
+            'trends_trend' => TrendsTrend::Stable,
+            'flowspy_traffic_trend' => null,
+        ]);
+        $this->assertEquals(15, $this->scoreService->score($stableProduct)['breakdown']['demand']);
+
+        $risingProduct = WatchedProduct::factory()->create([
+            'trends_trend' => TrendsTrend::Rising,
+            'flowspy_traffic_trend' => null,
+        ]);
+        $this->assertEquals(19, $this->scoreService->score($risingProduct)['breakdown']['demand']);
+
+        $unknownProduct = WatchedProduct::factory()->create([
+            'trends_trend' => null,
+            'kp_volume' => null,
+            'flowspy_traffic_trend' => null,
+        ]);
+        $this->assertEquals(7, $this->scoreService->score($unknownProduct)['breakdown']['demand']);
+
+        $boostedProduct = WatchedProduct::factory()->create([
+            'trends_trend' => TrendsTrend::Falling,
+            'flowspy_traffic_trend' => FlowspyTrafficTrend::Rising,
+        ]);
+        $this->assertEquals(20, $this->scoreService->score($boostedProduct)['breakdown']['demand']);
     }
 }

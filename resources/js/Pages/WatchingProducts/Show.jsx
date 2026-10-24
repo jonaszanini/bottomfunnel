@@ -708,7 +708,15 @@ export default function Show({
                                 </div>
                                 <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
                                     <div
-                                        className={`${product.score_flags?.dead_post_peak ? 'bg-rose-500' : 'bg-emerald-500'} h-2 rounded-full transition-all`}
+                                        className={`${
+                                            product.score_flags?.dead_post_peak
+                                                ? 'bg-rose-500'
+                                                : (product.score_breakdown?.demand ?? 0) >= 16
+                                                    ? 'bg-emerald-500'
+                                                    : (product.score_breakdown?.demand ?? 0) >= 10
+                                                        ? 'bg-amber-500'
+                                                        : 'bg-rose-400'
+                                        } h-2 rounded-full transition-all`}
                                         style={{ width: `${((product.score_breakdown?.demand ?? 0) / 20) * 100}%` }}
                                     />
                                 </div>
@@ -719,8 +727,16 @@ export default function Show({
                                     <div className="flex items-center gap-1.5">
                                         <span>Trend:</span>
                                         <span className={`font-semibold ${product.score_flags?.dead_post_peak ? 'text-rose-500 font-bold' : 'text-theme-primary'}`}>
-                                            {product.trends_trend_label || 'Stable'}
+                                            {product.trends_trend_label || (product.trends_trend ? String(product.trends_trend) : 'Unknown')}
                                         </span>
+                                        {product.flowspy_traffic_trend === 'rising' && (
+                                            <span className="text-[10px] text-emerald-500 font-medium">
+                                                • FlowSpy Rising Boost
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="text-[10px] text-theme-muted">
+                                        Scoring: Rising (20) • Stable (16) • Falling (10) • Unknown (8)
                                     </div>
                                     {product.score_flags?.dead_post_peak && (
                                         <div className="text-[10px] text-rose-500 font-semibold">

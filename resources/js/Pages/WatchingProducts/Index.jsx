@@ -1040,9 +1040,14 @@ export default function Index({ products, filters, metrics, options }) {
                                         Images: {scoreModalProduct.bof_image_match_pct ?? 0}% • Trans: {scoreModalProduct.bof_translation ? '✓' : '✗'} • VPN: {scoreModalProduct.bof_vpn_serp ? '✓' : '✗'}
                                     </div>
                                 </div>
-                                <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
-                                    <span>Demand & Trends:</span>
-                                    <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.demand ?? 0} / 20</strong>
+                                <div className="p-2 rounded bg-theme-subtle border border-theme space-y-0.5">
+                                    <div className="flex justify-between">
+                                        <span>Demand & Trends:</span>
+                                        <strong className="font-mono text-theme-accent">{scoreModalProduct.score_breakdown?.demand ?? 0} / 20</strong>
+                                    </div>
+                                    <div className="text-[10px] text-theme-muted">
+                                        Trend: {scoreModalProduct.trends_trend_label || scoreModalProduct.trends_trend || 'Unknown'}{scoreModalProduct.flowspy_traffic_trend === 'rising' ? ' • FlowSpy Rising' : ''}
+                                    </div>
                                 </div>
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between">
                                     <span>Payout Model:</span>
