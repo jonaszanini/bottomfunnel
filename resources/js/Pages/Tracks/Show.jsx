@@ -19,6 +19,7 @@ export default function Show({ track, conversions, visits = [], spend, pages = [
             {
                 track_id: track.id,
                 ip_address: ip,
+                fraud_score: fraudScore,
                 reason: `Manual one-click block from Track #${track.id} (Score: ${fraudScore}${reason ? ', Reason: ' + reason : ''})`,
             },
             {
@@ -62,6 +63,19 @@ export default function Show({ track, conversions, visits = [], spend, pages = [
                         </span>
                     ) : (
                         <span className="text-theme-secondary">{track.account_name || 'Not linked'}</span>
+                    )}
+                </p>
+                <p>
+                    Watched Product:{' '}
+                    {track.watched_product ? (
+                        <Link href={`/watching-products/${track.watched_product.id}`} className="font-semibold text-theme-accent hover:underline inline-flex items-center gap-1.5">
+                            <span>{track.watched_product.name}</span>
+                            <span className="rounded border border-theme bg-theme-subtle px-1.5 py-0.2 text-[10px] text-theme-secondary uppercase font-semibold">
+                                {track.watched_product.status_label}
+                            </span>
+                        </Link>
+                    ) : (
+                        <span className="text-theme-secondary">None</span>
                     )}
                 </p>
                 <p>Conversion action: <span className="text-theme-secondary">{track.conversion_action || 'Not set'}</span></p>

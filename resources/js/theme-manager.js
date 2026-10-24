@@ -204,6 +204,7 @@ class ThemeManager {
 
                 fetch('/theme', {
                     method: 'POST',
+                    credentials: 'same-origin',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',

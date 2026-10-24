@@ -5,11 +5,14 @@ namespace App\Models;
 use App\Services\WatchingProducts\Money;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class AdSpend extends Model
 {
+    use HasFactory;
+
     protected $table = 'ad_spend';
 
     protected $fillable = [

@@ -34,17 +34,17 @@ Schedule::command('fx:refresh')
     ->timezone('America/Toronto')
     ->withoutOverlapping();
 
-// 3. Safety: Listing Down Check & Alert (every 30 minutes)
+// 3. Safety: Listing Down Check & Alert (every 15 minutes, consecutive failure confirmation)
 Schedule::command('campaigns:check-listing-down')
+    ->everyFifteenMinutes()
+    ->timezone('America/Toronto')
+    ->withoutOverlapping(10);
+
+// 4. Safety: Spend-without-conversion Bleeder Check & Alert (every 30 minutes)
+Schedule::command('campaigns:check-bleeders')
     ->everyThirtyMinutes()
     ->timezone('America/Toronto')
-    ->withoutOverlapping();
-
-// 4. Safety: Spend-without-conversion Bleeder Check & Alert (hourly)
-Schedule::command('campaigns:check-bleeders')
-    ->hourly()
-    ->timezone('America/Toronto')
-    ->withoutOverlapping();
+    ->withoutOverlapping(15);
 
 // 5. Shared Hosting Queue Processing (processes pending async jobs whenever cron fires)
 Schedule::command('queue:work', ['--stop-when-empty', '--max-time=50'])

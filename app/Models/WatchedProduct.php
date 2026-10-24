@@ -235,6 +235,14 @@ class WatchedProduct extends Model
     }
 
     /**
+     * @return HasMany<Track, $this>
+     */
+    public function tracks(): HasMany
+    {
+        return $this->hasMany(Track::class);
+    }
+
+    /**
      * Scope a query to apply user filters.
      *
      * @param  Builder<WatchedProduct>  $query

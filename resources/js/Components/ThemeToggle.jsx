@@ -5,8 +5,8 @@ import themeManager, { THEME_LIGHT, THEME_DARK, THEME_SYSTEM } from '../theme-ma
 export default function ThemeToggle({ showLabels = false, className = '' }) {
     let initialPref = null;
     try {
-        const page = usePage();
-        initialPref = page?.props?.theme?.preference;
+        const { theme } = usePage().props || {};
+        initialPref = theme?.preference;
     } catch {
         // Fallback when rendered outside Inertia context
     }
@@ -33,6 +33,13 @@ export default function ThemeToggle({ showLabels = false, className = '' }) {
             indicatorRef.current.style.opacity = '1';
         }
     }, []);
+
+    useEffect(() => {
+        if (initialPref && initialPref !== preference) {
+            setPreference(initialPref);
+            setResolved(themeManager.getResolvedTheme());
+        }
+    }, [initialPref]);
 
     useEffect(() => {
         const handleThemeChange = (event) => {

@@ -77,6 +77,7 @@ class ApplyIpBlockJob implements ShouldQueue
                     'criterion_resource_name' => $resource,
                     'status' => 'applied',
                     'last_error' => null,
+                    'synced_at' => now(),
                 ])->save();
             } catch (GoogleRequestException $exception) {
                 $block->fill([

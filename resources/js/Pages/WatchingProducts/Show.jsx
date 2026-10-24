@@ -111,6 +111,7 @@ export function getComponentScoreColor(score, max = 20) {
 
 export default function Show({
     product,
+    tracks = [],
     score_history = [],
     negative_keywords = [],
     campaign_guidance = {},
@@ -348,6 +349,18 @@ export default function Show({
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <Link
+                        href={`/tracks/create?watched_product_id=${product.id}`}
+                        className="px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-semibold text-emerald-600 dark:text-emerald-400 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        title="Create a new Track for this product"
+                    >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        <span>Create Track</span>
+                    </Link>
+
                     <button
                         type="button"
                         onClick={handleRefreshNow}
@@ -389,6 +402,12 @@ export default function Show({
                             {product.restricted_category && (
                                 <span className="rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-xs font-semibold text-rose-600 dark:text-rose-400">
                                     Restricted Category
+                                </span>
+                            )}
+                            {((product.tracks && product.tracks.length > 0) || (tracks && tracks.length > 0)) && (
+                                <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    Testing in Track ({(product.tracks || tracks).length})
                                 </span>
                             )}
                         </div>
@@ -1108,6 +1127,105 @@ export default function Show({
                             <div className="mt-4 p-3 rounded-xl border border-theme bg-theme-subtle/30 text-xs">
                                 <div className="font-semibold text-theme-secondary mb-1">Internal Notes:</div>
                                 <p className="text-theme-muted whitespace-pre-wrap">{product.notes}</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Linked Tracks Section */}
+                    <div className="rounded-2xl border border-theme bg-theme-surface p-5 sm:p-6 shadow-xs">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                            <div>
+                                <h3 className="font-bold text-base text-theme-primary flex items-center gap-2">
+                                    <span>Linked Tracks</span>
+                                    <span className="rounded-full bg-theme-subtle px-2 py-0.5 text-xs font-mono text-theme-secondary">
+                                        {(product.tracks || tracks || []).length}
+                                    </span>
+                                </h3>
+                                <p className="text-xs text-theme-muted mt-0.5">
+                                    Active campaigns, landing pages, and tracking setups currently testing this product.
+                                </p>
+                            </div>
+                            <Link
+                                href={`/tracks/create?watched_product_id=${product.id}`}
+                                className="px-3 py-1.5 rounded-lg border border-theme bg-theme-subtle hover:bg-theme-subtle/80 text-xs font-semibold text-theme-primary transition-colors flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
+                            >
+                                <svg className="w-3.5 h-3.5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                                <span>Create Track</span>
+                            </Link>
+                        </div>
+
+                        {(!product.tracks || product.tracks.length === 0) && (!tracks || tracks.length === 0) ? (
+                            <div className="rounded-xl border border-dashed border-theme p-6 text-center">
+                                <p className="text-xs text-theme-muted">Not linked to any Track yet.</p>
+                                <p className="text-[11px] text-theme-muted mt-1">
+                                    Launch a live test by connecting this watched product to an offer track with postback and Google Ads attribution.
+                                </p>
+                                <div className="mt-3">
+                                    <Link
+                                        href={`/tracks/create?watched_product_id=${product.id}`}
+                                        className={`${button} text-xs !py-1 !px-2.5`}
+                                    >
+                                        Create Track from this product
+                                    </Link>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="divide-y divide-theme rounded-xl border border-theme overflow-hidden">
+                                {(product.tracks || tracks).map((track) => (
+                                    <div
+                                        key={track.id}
+                                        className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-theme-surface hover:bg-theme-subtle/30 transition-colors text-xs"
+                                    >
+                                        <div className="space-y-1">
+                                            <div className="flex items-center gap-2">
+                                                <Link
+                                                    href={`/tracks/${track.id}`}
+                                                    className="font-bold text-sm text-theme-primary hover:text-theme-accent transition-colors"
+                                                >
+                                                    {track.name}
+                                                </Link>
+                                                <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase">
+                                                    {track.status || 'Active'}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-2 text-theme-muted">
+                                                <span>Platform: <strong className="text-theme-secondary">{track.platform}</strong></span>
+                                                <span>•</span>
+                                                <span>Strategy: <strong className="text-theme-secondary">{track.strategy}</strong></span>
+                                                {track.created_at_formatted && (
+                                                    <>
+                                                        <span>•</span>
+                                                        <span>Created: <strong className="text-theme-secondary">{track.created_at_formatted}</strong></span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 self-end sm:self-auto">
+                                            {track.account_name ? (
+                                                <div className="text-right">
+                                                    <span className="inline-flex items-center gap-1.5 rounded-md border border-theme bg-theme-subtle/70 px-2 py-0.5 text-xs text-theme-secondary">
+                                                        <span className="font-medium text-theme-primary">{track.account_name}</span>
+                                                        {track.account_customer_id && (
+                                                            <span className="font-mono text-theme-muted text-[11px]">({track.account_customer_id})</span>
+                                                        )}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-theme-muted text-xs">No Google Ads account</span>
+                                            )}
+                                            <Link
+                                                href={`/tracks/${track.id}`}
+                                                className="px-2.5 py-1 rounded-md border border-theme bg-theme-surface hover:bg-theme-subtle text-xs font-semibold text-theme-primary transition-colors"
+                                            >
+                                                Open Track →
+                                            </Link>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>

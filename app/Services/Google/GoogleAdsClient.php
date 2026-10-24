@@ -408,6 +408,8 @@ class GoogleAdsClient
                             'reason' => 'Automated /24 CIDR consolidation',
                             'criterion_resource_name' => $cidrResource,
                             'status' => 'applied',
+                            'is_subnet' => true,
+                            'synced_at' => now(),
                             'last_error' => null,
                         ]
                     );

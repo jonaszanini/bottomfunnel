@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,8 +11,11 @@ use Illuminate\Support\Str;
 
 class Track extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'product_name',
+        'watched_product_id',
         'platform',
         'affiliate_url',
         'page_type',
@@ -39,6 +43,11 @@ class Track extends Model
             $track->postback_secret ??= Str::random(48);
             $track->public_script_key ??= Str::lower(Str::random(32));
         });
+    }
+
+    public function watchedProduct(): BelongsTo
+    {
+        return $this->belongsTo(WatchedProduct::class);
     }
 
     public function account(): BelongsTo

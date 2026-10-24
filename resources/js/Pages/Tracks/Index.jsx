@@ -14,6 +14,11 @@ export default function Index({ tracks }) {
                     <Link key={track.id} href={`/tracks/${track.id}`} className="flex items-center justify-between border-b border-theme px-4 py-3 text-sm text-theme-primary hover:bg-theme-subtle/50 transition-colors">
                         <span>
                             <strong className="text-theme-primary">{track.product_name}</strong>
+                            {track.watched_product && (
+                                <span className="ml-2 inline-flex items-center gap-1 rounded border border-theme bg-theme-subtle px-1.5 py-0.2 text-[11px] text-theme-secondary font-medium">
+                                    Watched: {track.watched_product.name}
+                                </span>
+                            )}
                             <span className="ml-2 text-theme-muted">{track.platform} · {track.page_type} · {track.strategy}</span>
                         </span>
                         <span className="text-right">

@@ -12,6 +12,7 @@ use App\Models\IpBlock;
 use App\Models\Page;
 use App\Models\Track;
 use App\Models\Visit;
+use App\Models\WatchedProduct;
 use App\Services\Google\GoogleAdsClient;
 use App\Services\Google\GoogleRequestException;
 use App\Services\Tracking\PostbackRecorder;
@@ -28,9 +29,16 @@ class TrackController extends Controller
     public function index(): Response
     {
         return Inertia::render('Tracks/Index', [
-            'tracks' => Track::query()->with('account:id,name,customer_id')->latest()->get()->map(fn (Track $track): array => [
+            'tracks' => Track::query()->with(['account:id,name,customer_id', 'watchedProduct:id,name,status'])->latest()->get()->map(fn (Track $track): array => [
                 'id' => $track->id,
                 'product_name' => $track->product_name,
+                'watched_product_id' => $track->watched_product_id,
+                'watched_product' => $track->watchedProduct ? [
+                    'id' => $track->watchedProduct->id,
+                    'name' => $track->watchedProduct->name,
+                    'status' => $track->watchedProduct->status->value,
+                    'status_label' => $track->watchedProduct->status->label(),
+                ] : null,
                 'platform' => config('flowhub.platforms.'.$track->platform, $track->platform),
                 'page_type' => config('flowhub.page_types.'.$track->page_type, $track->page_type),
                 'strategy' => config('flowhub.strategies.'.$track->strategy, $track->strategy),
@@ -48,11 +56,14 @@ class TrackController extends Controller
     public function create(): Response
     {
         $defaultAccount = GoogleAdsAccount::getDefault(request()->user());
+        $watchedProductId = request()->query('watched_product_id');
 
         return Inertia::render('Tracks/Form', [
             'track' => null,
             'accounts' => $this->accounts(),
             'default_account_id' => $defaultAccount?->id,
+            'watched_products' => $this->watchedProductsList(),
+            'selected_watched_product_id' => $watchedProductId ? (int) $watchedProductId : null,
             ...Options::forForms(),
         ]);
     }
@@ -72,7 +83,7 @@ class TrackController extends Controller
 
     public function show(Track $track): Response
     {
-        $track->load('account:id,name,customer_id', 'conversionAction:id,name');
+        $track->load('account:id,name,customer_id', 'conversionAction:id,name', 'watchedProduct:id,name,status');
 
         $activeBlocks = IpBlock::query()
             ->where('track_id', $track->id)
@@ -88,6 +99,13 @@ class TrackController extends Controller
             'track' => [
                 'id' => $track->id,
                 'product_name' => $track->product_name,
+                'watched_product_id' => $track->watched_product_id,
+                'watched_product' => $track->watchedProduct ? [
+                    'id' => $track->watchedProduct->id,
+                    'name' => $track->watchedProduct->name,
+                    'status' => $track->watchedProduct->status->value,
+                    'status_label' => $track->watchedProduct->status->label(),
+                ] : null,
                 'platform' => $track->platform,
                 'platform_label' => config('flowhub.platforms.'.$track->platform, $track->platform),
                 'page_type' => config('flowhub.page_types.'.$track->page_type, $track->page_type),
@@ -231,6 +249,7 @@ class TrackController extends Controller
             'track' => [
                 'id' => $track->id,
                 'product_name' => $track->product_name,
+                'watched_product_id' => $track->watched_product_id,
                 'platform' => $track->platform,
                 'affiliate_url' => $track->affiliate_url,
                 'page_type' => $track->page_type,
@@ -243,6 +262,8 @@ class TrackController extends Controller
             ],
             'accounts' => $this->accounts(),
             'default_account_id' => GoogleAdsAccount::getDefault(request()->user())?->id,
+            'watched_products' => $this->watchedProductsList(),
+            'selected_watched_product_id' => $track->watched_product_id,
             ...Options::forForms(),
         ]);
     }
@@ -315,6 +336,7 @@ class TrackController extends Controller
     {
         return $request->validate([
             'product_name' => ['required', 'string', 'max:160'],
+            'watched_product_id' => ['nullable', 'integer', 'exists:watched_products,id'],
             'platform' => ['required', Rule::in(array_keys(config('flowhub.platforms')))],
             'affiliate_url' => ['required', 'url', 'max:2000'],
             'page_type' => ['required', Rule::in(array_keys(config('flowhub.page_types')))],
@@ -380,6 +402,25 @@ class TrackController extends Controller
                 'login_customer_id' => $account->login_customer_id,
                 'status' => $account->status,
                 'is_default' => $account->id === $defaultId || (bool) $account->is_default,
+            ])->all();
+    }
+
+    /**
+     * @return list<array{id: int, name: string, status: string, status_label: string, platform: ?string, payout_cad: ?float, affiliate_link: ?string}>
+     */
+    private function watchedProductsList(): array
+    {
+        return WatchedProduct::query()
+            ->orderBy('name')
+            ->get(['id', 'name', 'status', 'platform', 'payout_cad', 'affiliate_link'])
+            ->map(fn (WatchedProduct $p): array => [
+                'id' => $p->id,
+                'name' => $p->name,
+                'status' => $p->status?->value ?? 'watch',
+                'status_label' => $p->status?->label() ?? 'Watch',
+                'platform' => $p->platform,
+                'payout_cad' => $p->payout_cad !== null ? (float) $p->payout_cad : null,
+                'affiliate_link' => $p->affiliate_link,
             ])->all();
     }
 }

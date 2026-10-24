@@ -4,7 +4,7 @@ import Sidebar, { FlowHubLogo } from './Sidebar';
 import ThemeToggle from './ThemeToggle';
 
 export default function Layout({ title, children }) {
-    const { auth, flash } = usePage().props;
+    const { auth, flash, theme } = usePage().props;
     const url = usePage().url;
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 

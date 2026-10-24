@@ -7,7 +7,15 @@
     (function () {
         try {
             var cookieMatch = document.cookie.match(/(?:^|; )theme=([^;]*)/);
-            var preference = cookieMatch ? decodeURIComponent(cookieMatch[1]) : 'system';
+            var preference = cookieMatch ? decodeURIComponent(cookieMatch[1]) : null;
+            if (!preference) {
+                try {
+                    preference = window.localStorage ? window.localStorage.getItem('theme') : null;
+                } catch (e) {}
+            }
+            if (preference !== 'light' && preference !== 'dark' && preference !== 'system') {
+                preference = 'system';
+            }
             var mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
             var isDark = preference === 'dark' || (preference === 'system' && mediaQuery.matches);
             var root = document.documentElement;

@@ -2,11 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GoogleAdsAccount extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'customer_id',
         'login_customer_id',
@@ -41,6 +44,11 @@ class GoogleAdsAccount extends Model
     public function campaigns(): HasMany
     {
         return $this->hasMany(GoogleAdsCampaign::class);
+    }
+
+    public function ipBlocks(): HasMany
+    {
+        return $this->hasMany(IpBlock::class);
     }
 
     /**

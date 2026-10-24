@@ -20,6 +20,7 @@ class IpBlockController extends Controller
             'track_id' => ['required', 'integer', 'exists:tracks,id'],
             'ip_address' => ['required', 'string', 'max:45'],
             'reason' => ['nullable', 'string', 'max:500'],
+            'fraud_score' => ['nullable', 'integer', 'min:0', 'max:100'],
         ]);
 
         $track = Track::query()->findOrFail($validated['track_id']);
@@ -45,6 +46,7 @@ class IpBlockController extends Controller
             [
                 'google_ads_account_id' => $track->google_ads_account_id,
                 'reason' => $reason,
+                'fraud_score' => isset($validated['fraud_score']) ? (int) $validated['fraud_score'] : null,
                 'status' => 'pending',
             ],
         );
@@ -52,6 +54,7 @@ class IpBlockController extends Controller
         if (! in_array($block->status, ['applied', 'whitelisted'], true)) {
             $block->update([
                 'reason' => $reason,
+                'fraud_score' => isset($validated['fraud_score']) ? (int) $validated['fraud_score'] : $block->fraud_score,
                 'status' => 'pending',
             ]);
         }
@@ -67,10 +70,13 @@ class IpBlockController extends Controller
             'blocks' => IpBlock::query()->with('track:id,product_name')->latest()->limit(200)->get()->map(fn (IpBlock $block): array => [
                 'id' => $block->id,
                 'ip_address' => $block->ip_address,
+                'is_subnet' => $block->isSubnet(),
+                'fraud_score' => $block->fraud_score,
                 'reason' => $block->reason,
                 'status' => $block->status,
                 'campaign_id' => $block->campaign_id,
                 'last_error' => $block->last_error,
+                'synced_at' => $block->synced_at?->toDateTimeString(),
                 'product_name' => $block->track?->product_name,
                 'created_at' => $block->created_at?->toDateTimeString(),
             ]),

@@ -3,11 +3,22 @@ import { useEffect, useState } from 'react';
 import Layout, { Field, button, control } from '../../Components/Layout';
 import GoogleAdsAccountSelect from '../../Components/GoogleAdsAccountSelect';
 
-export default function Form({ track, accounts, default_account_id, pageTypes, strategies, platforms, languages }) {
+export default function Form({
+    track,
+    accounts,
+    default_account_id,
+    watched_products = [],
+    selected_watched_product_id = null,
+    pageTypes,
+    strategies,
+    platforms,
+    languages,
+}) {
     const defaultAccId = track?.google_ads_account_id || default_account_id || accounts.find((a) => a.is_default)?.id || (accounts.length === 1 ? accounts[0].id : '');
 
     const form = useForm({
         product_name: track?.product_name || '',
+        watched_product_id: track?.watched_product_id ?? selected_watched_product_id ?? '',
         platform: track?.platform || 'clickbank',
         affiliate_url: track?.affiliate_url || '',
         page_type: track?.page_type || 'review_robust',
@@ -23,6 +34,39 @@ export default function Form({ track, accounts, default_account_id, pageTypes, s
     const [actions, setActions] = useState([]);
     const [campaigns, setCampaigns] = useState([]);
     const [loadError, setLoadError] = useState('');
+
+    useEffect(() => {
+        if (!track && selected_watched_product_id) {
+            const matched = watched_products.find((p) => Number(p.id) === Number(selected_watched_product_id));
+            if (matched) {
+                form.setData((prev) => ({
+                    ...prev,
+                    watched_product_id: matched.id,
+                    product_name: prev.product_name || matched.name,
+                    affiliate_url: prev.affiliate_url || matched.affiliate_link || '',
+                    platform: (matched.platform && platforms && platforms[matched.platform]) ? matched.platform : prev.platform,
+                    typical_commission_cad: prev.typical_commission_cad || (matched.payout_cad ? String(matched.payout_cad) : ''),
+                }));
+            }
+        }
+    }, [selected_watched_product_id]);
+
+    const handleWatchedProductChange = (e) => {
+        const val = e.target.value ? Number(e.target.value) : '';
+        form.setData((prev) => {
+            const next = { ...prev, watched_product_id: val };
+            if (val && !track) {
+                const matched = watched_products.find((p) => Number(p.id) === val);
+                if (matched) {
+                    if (!prev.product_name) next.product_name = matched.name;
+                    if (!prev.affiliate_url && matched.affiliate_link) next.affiliate_url = matched.affiliate_link;
+                    if (matched.platform && platforms && platforms[matched.platform]) next.platform = matched.platform;
+                    if (!prev.typical_commission_cad && matched.payout_cad) next.typical_commission_cad = String(matched.payout_cad);
+                }
+            }
+            return next;
+        });
+    };
 
     useEffect(() => {
         if (!form.data.google_ads_account_id) {
@@ -71,6 +115,23 @@ export default function Form({ track, accounts, default_account_id, pageTypes, s
                         Link a Google Ads account before creating a Track. <Link className="underline font-medium" href="/google-ads">Open Google Ads</Link>
                     </p>
                 )}
+                <Field label="Linked Watching Product (optional)" error={form.errors.watched_product_id}>
+                    <select
+                        className={control}
+                        value={form.data.watched_product_id || ''}
+                        onChange={handleWatchedProductChange}
+                    >
+                        <option value="">None (Independent track)</option>
+                        {watched_products.map((p) => (
+                            <option key={p.id} value={p.id}>
+                                {p.name} [{p.status_label}] {p.platform ? `· ${p.platform}` : ''} {p.payout_cad ? `· CA$${Number(p.payout_cad).toFixed(2)}` : ''}
+                            </option>
+                        ))}
+                    </select>
+                    <p className="mt-1 text-xs text-theme-muted">
+                        Connecting to a researched product displays testing badges in Watching Products and pre-fills offer details.
+                    </p>
+                </Field>
                 <Field label="Product name" error={form.errors.product_name}>
                     <input className={control} value={form.data.product_name} onChange={(event) => form.setData('product_name', event.target.value)} />
                 </Field>

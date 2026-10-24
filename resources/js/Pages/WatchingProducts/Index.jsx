@@ -844,13 +844,22 @@ export default function Index({ products, filters, metrics, options }) {
                                                 {/* Product Name & Typographic Subtitle (Replaces bulky strategy/kind/esteira/approval badges) */}
                                                 <td className="px-3 py-3 font-medium text-theme-primary">
                                                     <div className="flex flex-col">
-                                                        <div className="flex items-center gap-1.5">
+                                                        <div className="flex items-center gap-1.5 flex-wrap">
                                                             <Link
                                                                 href={`/watching-products/${product.id}`}
                                                                 className="font-bold text-sm text-theme-primary hover:text-theme-accent transition-colors"
                                                             >
                                                                 {product.name}
                                                             </Link>
+                                                            {product.tracks_count > 0 && (
+                                                                <span
+                                                                    className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
+                                                                    title={`Testing in ${product.tracks_count} Track(s)`}
+                                                                >
+                                                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                                    Testing{product.tracks_count > 1 ? ` (${product.tracks_count})` : ''}
+                                                                </span>
+                                                            )}
                                                             {product.sales_page_url && (
                                                                 <a
                                                                     href={product.sales_page_url}
@@ -991,7 +1000,7 @@ export default function Index({ products, filters, metrics, options }) {
                                     <div key={product.id} className="p-4 space-y-3 hover:bg-theme-subtle/20 transition-colors">
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-1.5">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
                                                     {product.rank && (
                                                         <span className="text-xs font-black text-theme-accent">#{product.rank}</span>
                                                     )}
@@ -1001,6 +1010,15 @@ export default function Index({ products, filters, metrics, options }) {
                                                     >
                                                         {product.name}
                                                     </Link>
+                                                    {product.tracks_count > 0 && (
+                                                        <span
+                                                            className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
+                                                            title={`Testing in ${product.tracks_count} Track(s)`}
+                                                        >
+                                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                                            Testing{product.tracks_count > 1 ? ` (${product.tracks_count})` : ''}
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-theme-muted">
                                                     <span>{product.page_type || 'General'}</span>

@@ -37,12 +37,17 @@ export default function Index({ blocks }) {
                     <tbody className="divide-y divide-theme">
                         {blocks.map((block) => (
                             <tr key={block.id} className="hover:bg-theme-subtle/50 transition-colors">
-                                <td className="px-3 py-2.5 text-xs text-theme-secondary whitespace-nowrap">{block.created_at}</td>
+                                <td className="px-3 py-2.5 text-xs text-theme-secondary whitespace-nowrap">
+                                    <div>{block.created_at}</div>
+                                    {block.synced_at && (
+                                        <div className="text-[10px] text-theme-muted mt-0.5">Synced {block.synced_at}</div>
+                                    )}
+                                </td>
                                 <td className="px-3 py-2.5 font-medium text-theme-primary">{block.product_name || '—'}</td>
                                 <td className="px-3 py-2.5">
                                     <div className="flex items-center gap-1.5 font-mono text-xs text-theme-primary">
                                         <span>{block.ip_address}</span>
-                                        {block.ip_address && block.ip_address.includes('/') && (
+                                        {(block.is_subnet || (block.ip_address && block.ip_address.includes('/'))) && (
                                             <span className="rounded px-1.5 py-0.2 bg-purple-500/10 text-purple-600 dark:text-purple-400 font-sans text-[10px] font-semibold">
                                                 /24 CIDR
                                             </span>
@@ -51,6 +56,11 @@ export default function Index({ blocks }) {
                                 </td>
                                 <td className="px-3 py-2.5 text-xs text-theme-secondary max-w-xs">
                                     <div>{block.reason}</div>
+                                    {block.fraud_score !== undefined && block.fraud_score !== null && (
+                                        <div className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold mt-0.5">
+                                            Fraud Score: {block.fraud_score}/100
+                                        </div>
+                                    )}
                                     {block.last_error && <div className="text-[11px] text-rose-500 mt-0.5">{block.last_error}</div>}
                                 </td>
                                 <td className="px-3 py-2.5 whitespace-nowrap">{statusBadge(block.status)}</td>

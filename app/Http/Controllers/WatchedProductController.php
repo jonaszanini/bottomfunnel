@@ -17,6 +17,7 @@ use App\Enums\WatchedProductStatus;
 use App\Jobs\RefreshSingleWatchedProductJob;
 use App\Models\ProductNegativeKeyword;
 use App\Models\ProductScoreHistory;
+use App\Models\Track;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\CampaignGuidance;
@@ -63,7 +64,12 @@ class WatchedProductController extends Controller
             'platform' => $request->input('platform', 'all'),
         ];
 
-        $query = WatchedProduct::query()->filter($filters);
+        $query = WatchedProduct::query()
+            ->filter($filters)
+            ->with([
+                'tracks' => fn ($q) => $q->select(['id', 'watched_product_id', 'product_name', 'platform', 'page_type', 'strategy', 'google_ads_account_id', 'campaign_ids'])
+                    ->with('account:id,name,customer_id,status'),
+            ]);
         $productsCollection = $query->get();
         $productIds = $productsCollection->pluck('id');
 
@@ -135,6 +141,17 @@ class WatchedProductController extends Controller
                 'sales_page_url' => $product->sales_page_url,
                 'affiliate_link' => $product->affiliate_link,
                 'notes' => $product->notes,
+                'tracks_count' => $product->tracks->count(),
+                'tracks' => $product->tracks->map(fn (Track $track): array => [
+                    'id' => $track->id,
+                    'name' => $track->product_name,
+                    'status' => $track->account?->status ?? 'active',
+                    'platform' => $track->platform,
+                    'strategy' => $track->strategy,
+                    'account_name' => $track->account?->name,
+                    'account_customer_id' => $track->account?->customer_id,
+                    'campaign_count' => count((array) ($track->campaign_ids ?? [])),
+                ])->all(),
                 'last_reviewed_at' => $product->last_reviewed_at?->toIso8601String(),
                 'last_reviewed_formatted' => $product->last_reviewed_at?->format('M d, Y'),
                 'last_refreshed_at' => $product->last_refreshed_at?->toIso8601String(),
@@ -222,6 +239,11 @@ class WatchedProductController extends Controller
     {
         $recommendation = $this->strategyRecommender->recommend($watchedProduct);
         $guidance = $this->guidance->forProduct($watchedProduct);
+        $watchedProduct->load([
+            'tracks' => fn ($q) => $q->select(['id', 'watched_product_id', 'product_name', 'platform', 'page_type', 'strategy', 'google_ads_account_id', 'campaign_ids', 'created_at'])
+                ->with('account:id,name,customer_id,status'),
+        ]);
+
         $payoutMoney = Money::make($watchedProduct->payout_amount ?? $watchedProduct->payout_cad, $watchedProduct->payout_currency ?? 'USD');
         $spendMoney = Money::make($watchedProduct->spend_amount, $watchedProduct->spend_currency ?? 'USD');
         $commissionMoney = Money::make($watchedProduct->commission_earned, $watchedProduct->payout_currency ?? 'USD');
@@ -350,10 +372,33 @@ class WatchedProductController extends Controller
             'sales_page_url' => $watchedProduct->sales_page_url,
             'affiliate_link' => $watchedProduct->affiliate_link,
             'notes' => $watchedProduct->notes,
+            'tracks_count' => $watchedProduct->tracks->count(),
+            'tracks' => $watchedProduct->tracks->map(fn (Track $track): array => [
+                'id' => $track->id,
+                'name' => $track->product_name,
+                'status' => $track->account?->status ?? 'active',
+                'platform' => $track->platform,
+                'strategy' => $track->strategy,
+                'page_type' => $track->page_type,
+                'google_ads_account_id' => $track->google_ads_account_id,
+                'account' => $track->account ? [
+                    'id' => $track->account->id,
+                    'name' => $track->account->name,
+                    'customer_id' => $track->account->customer_id,
+                    'status' => $track->account->status,
+                ] : null,
+                'account_name' => $track->account?->name,
+                'account_customer_id' => $track->account?->customer_id,
+                'campaign_ids' => $track->campaign_ids ?? [],
+                'campaign_count' => count((array) ($track->campaign_ids ?? [])),
+                'created_at' => $track->created_at?->toIso8601String(),
+                'created_at_formatted' => $track->created_at?->format('M d, Y'),
+            ])->all(),
         ];
 
         return Inertia::render('WatchingProducts/Show', [
             'product' => $productData,
+            'tracks' => $productData['tracks'],
             'score_history' => $history,
             'negative_keywords' => $negatives,
             'campaign_guidance' => $guidance,

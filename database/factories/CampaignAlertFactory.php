@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
  */
 class CampaignAlertFactory extends Factory
 {
+    protected $model = CampaignAlert::class;
+
     /**
      * Define the model's default state.
      *
@@ -24,6 +26,35 @@ class CampaignAlertFactory extends Factory
             'reason' => 'Listing unavailable',
             'message' => 'Listing unavailable for product.',
             'action_taken' => 'alert_raised',
+            'spend_cad' => null,
+            'payout_cad' => null,
+            'threshold_cad' => null,
+            'window_days' => null,
+            'conversions_count' => 0,
+            'details' => null,
+            'dismissed_at' => null,
         ];
+    }
+
+    public function bleeder(): static
+    {
+        return $this->state(fn () => [
+            'type' => 'bleeder',
+            'severity' => 'danger',
+            'reason' => 'Spend exceeded payout threshold with 0 conversions',
+            'message' => 'Bleeder campaign detected.',
+            'spend_cad' => 150.00,
+            'payout_cad' => 60.00,
+            'threshold_cad' => 90.00,
+            'window_days' => 7,
+            'conversions_count' => 0,
+        ]);
+    }
+
+    public function dismissed(): static
+    {
+        return $this->state(fn () => [
+            'dismissed_at' => now(),
+        ]);
     }
 }

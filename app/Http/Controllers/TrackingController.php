@@ -133,6 +133,7 @@ class TrackingController extends Controller
                     [
                         'google_ads_account_id' => $track->google_ads_account_id,
                         'reason' => (string) ($score['reason'] ?: 'Automated fraud score threshold exceeded'),
+                        'fraud_score' => (int) $score['score'],
                         'campaign_id' => (string) ($track->campaign_ids[0] ?? ''),
                         'status' => 'pending',
                     ],
@@ -141,6 +142,7 @@ class TrackingController extends Controller
                 if (! in_array($block->status, ['applied', 'whitelisted'], true)) {
                     $block->update([
                         'reason' => (string) ($score['reason'] ?: $block->reason),
+                        'fraud_score' => (int) $score['score'],
                         'status' => 'pending',
                     ]);
                 }
