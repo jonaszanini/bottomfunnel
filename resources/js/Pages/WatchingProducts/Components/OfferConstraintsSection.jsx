@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { getPlatformBadgeClass } from '../../../utils/platform';
 
 const COUNTRY_FLAGS = {
@@ -30,54 +30,114 @@ const COUNTRY_FLAGS = {
 export default function OfferConstraintsSection({ product }) {
     if (!product) return null;
 
+    const [showPromotionInfo, setShowPromotionInfo] = useState(false);
+    const [showApprovalInfo, setShowApprovalInfo] = useState(false);
+
     const allowedGeos = Array.isArray(product.allowed_geos)
         ? product.allowed_geos
         : (product.allowed_geos ? String(product.allowed_geos).split(',').map((g) => g.trim().toUpperCase()).filter(Boolean) : []);
 
-    const complianceRisk = (product.compliance_risk || 'low').toLowerCase();
+    const complianceRisk = (product.compliance_risk || 'not_assessed').toLowerCase();
     const isRestricted = complianceRisk === 'restricted';
     const complianceNotes = product.compliance_notes || '';
-    const networkApprovalRequired = Boolean(product.network_approval_required);
+
+    // Tri-state approval statuses
+    const approvalStatus = product.approval_status || (product.approval_required ? 'yes' : 'unknown');
+    const networkApprovalStatus = product.network_approval_status || (product.network_approval_required ? 'yes' : 'unknown');
 
     const payoutsByPlatform = Array.isArray(product.payouts_by_platform)
-        ? product.payouts_by_platform.filter((row) => row && (row.platform || row.payout))
+        ? product.payouts_by_platform.filter((row) => row && (row.platform || row.amount || row.payout))
         : [];
+
+    // CAD conversion helper: Use product's known fx ratio or 1.38 default fallback
+    const cadPerUsd = (product.payout_amount && product.payout_cad && Number(product.payout_amount) > 0)
+        ? (Number(product.payout_cad) / Number(product.payout_amount))
+        : 1.38;
+
+    const convertToCad = (amount, currency) => {
+        const num = Number(amount || 0);
+        if (num <= 0) return 0;
+        const cur = String(currency || 'USD').toUpperCase();
+        if (cur === 'CAD') return num;
+        if (cur === 'USD') return num * cadPerUsd;
+        return num * 1.38;
+    };
 
     const getRiskBadge = (risk) => {
         switch (risk) {
+            case 'not_assessed':
+                return {
+                    label: 'Not Assessed',
+                    badgeClass: 'bg-slate-500/15 text-slate-500 dark:text-slate-400 border-slate-500/30',
+                    dotClass: 'bg-slate-400',
+                    desc: 'Offer has not been screened for Google Ads policy restrictions yet.',
+                };
             case 'restricted':
                 return {
                     label: 'Restricted / Sensitive',
                     badgeClass: 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/40',
                     dotClass: 'bg-rose-500',
-                    desc: 'Restricted or limited category in Google Ads (e.g., ED, testosterone, prescription parallels). Extra compliance screening required.',
+                    desc: 'Restricted category in Google Ads (e.g., ED, testosterone). Strict policy compliance required.',
                 };
             case 'high':
                 return {
                     label: 'High Risk',
-                    badgeClass: 'bg-orange-500/20 text-orange-600 dark:text-orange-400 border-orange-500/40',
-                    dotClass: 'bg-orange-500',
-                    desc: 'Sensitive health or financial claims. Needs presell bridge pages and careful keyword targeting.',
+                    badgeClass: 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/40',
+                    dotClass: 'bg-rose-500',
+                    desc: 'Aggressive health/financial claims. Needs presell bridge pages and strict claim scrubbing.',
                 };
             case 'medium':
                 return {
                     label: 'Medium Risk',
                     badgeClass: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/40',
                     dotClass: 'bg-amber-500',
-                    desc: 'Moderate regulatory scrutiny. Standard dietary supplement or health compliance rules apply.',
+                    desc: 'Moderate regulatory scrutiny. Standard dietary supplement compliance rules apply.',
                 };
             case 'low':
-            default:
                 return {
                     label: 'Low Risk',
                     badgeClass: 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-500/40',
                     dotClass: 'bg-emerald-500',
                     desc: 'Unrestricted offer. Low risk of Google Ads policy flags or editorial rejections.',
                 };
+            default:
+                return {
+                    label: 'Not Assessed',
+                    badgeClass: 'bg-slate-500/15 text-slate-500 dark:text-slate-400 border-slate-500/30',
+                    dotClass: 'bg-slate-400',
+                    desc: 'Not assessed for Google Ads compliance.',
+                };
         }
     };
 
     const riskInfo = getRiskBadge(complianceRisk);
+
+    const getApprovalStatusBadge = (status, label) => {
+        switch (status) {
+            case 'yes':
+                return (
+                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        <span>{label}: Approval Required</span>
+                    </span>
+                );
+            case 'no':
+                return (
+                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                        <span>{label}: Open / Instant</span>
+                    </span>
+                );
+            case 'unknown':
+            default:
+                return (
+                    <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border border-slate-500/30 bg-slate-500/10 text-slate-500 dark:text-slate-400">
+                        <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                        <span>{label}: Unknown</span>
+                    </span>
+                );
+        }
+    };
 
     return (
         <section
@@ -96,14 +156,14 @@ export default function OfferConstraintsSection({ product }) {
                     <div>
                         <div className="flex items-center gap-2">
                             <h3 className="font-bold text-base text-theme-primary">
-                                Offer Constraints & Go / No-Go
+                                Offer Constraints &amp; Launch Viability
                             </h3>
                             <span className="rounded-full bg-theme-subtle px-2 py-0.5 text-[11px] font-medium text-theme-secondary border border-theme">
-                                Launch Viability
+                                Go / No-Go
                             </span>
                         </div>
                         <p className="text-xs text-theme-muted">
-                            Country permissions, network approval gates, Google Ads compliance risk, and cross-platform payouts.
+                            Country permissions, policy screening, phase strategy transitions, and multi-tier payouts.
                         </p>
                     </div>
                 </div>
@@ -115,35 +175,29 @@ export default function OfferConstraintsSection({ product }) {
                         <span>{riskInfo.label}</span>
                     </span>
 
-                    {networkApprovalRequired ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                            <svg className="h-3.5 w-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                                <line x1="12" y1="9" x2="12" y2="13" />
-                                <line x1="12" y1="17" x2="12.01" y2="17" />
-                            </svg>
-                            <span>Approval Required</span>
-                        </span>
-                    ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                            <svg className="h-3.5 w-3.5 text-emerald-500" viewBox="0 0 20 20" fill="currentColor">
-                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                            </svg>
-                            <span>Instant Network Approval</span>
+                    {getApprovalStatusBadge(approvalStatus, 'Vendor')}
+                    {getApprovalStatusBadge(networkApprovalStatus, 'Network')}
+
+                    {product.recheck_at && (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border ${
+                            product.is_recheck_overdue
+                                ? 'border-rose-500/40 bg-rose-500/15 text-rose-600 dark:text-rose-400 animate-pulse font-bold'
+                                : 'border-theme bg-theme-subtle text-theme-secondary'
+                        }`}>
+                            <span>📅 Recheck: {product.recheck_at_formatted || product.recheck_at}</span>
+                            {product.is_recheck_overdue && <span>(Overdue)</span>}
                         </span>
                     )}
                 </div>
             </div>
 
-            {/* 4 Cards Grid */}
+            {/* Constraints & Strategy Grid */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 {/* 1. Allowed Geos */}
                 <div className="rounded-xl border border-theme bg-theme-subtle/25 p-4 flex flex-col justify-between">
                     <div>
                         <div className="flex items-center justify-between text-xs font-semibold text-theme-secondary mb-1.5">
-                            <span className="flex items-center gap-1.5">
-                                <span>Allowed Target Geos</span>
-                            </span>
+                            <span>Allowed Target Geos</span>
                             <span className="font-mono text-[11px] text-theme-muted">
                                 {allowedGeos.length > 0 ? `${allowedGeos.length} Allowed` : 'All / Default'}
                             </span>
@@ -183,7 +237,7 @@ export default function OfferConstraintsSection({ product }) {
                         <div className="flex items-center justify-between text-xs font-semibold text-theme-secondary mb-1.5">
                             <span>Google Ads Policy Risk</span>
                             <span className={`text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${riskInfo.badgeClass}`}>
-                                {complianceRisk}
+                                {complianceRisk.replace(/_/g, ' ')}
                             </span>
                         </div>
 
@@ -200,86 +254,222 @@ export default function OfferConstraintsSection({ product }) {
                     </div>
 
                     <div className="mt-3 pt-2.5 border-t border-theme/60 text-[11px] text-theme-muted">
-                        Sensitive categories need pre-landers and strict claim reviews.
+                        {complianceRisk === 'not_assessed'
+                            ? 'Screen this offer before committing ad spend.'
+                            : 'Sensitive categories need pre-landers and strict claim reviews.'}
                     </div>
                 </div>
 
-                {/* 3. Network Approval Required */}
+                {/* 3. Approvals Tri-State */}
                 <div className="rounded-xl border border-theme bg-theme-subtle/25 p-4 flex flex-col justify-between">
                     <div>
                         <div className="flex items-center justify-between text-xs font-semibold text-theme-secondary mb-1.5">
-                            <span>Affiliate Network Gate</span>
-                            <span className={`text-[11px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                                networkApprovalRequired
-                                    ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30'
-                                    : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
-                            }`}>
-                                {networkApprovalRequired ? 'Gated' : 'Open'}
-                            </span>
+                            <span>Approval Status</span>
+                            <button
+                                type="button"
+                                onClick={() => setShowApprovalInfo(!showApprovalInfo)}
+                                className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-theme text-[10px] text-theme-muted hover:text-theme-accent cursor-pointer"
+                                title="Click for info on tri-state approval"
+                            >
+                                ⓘ
+                            </button>
                         </div>
 
-                        <div className="mt-2 space-y-1">
-                            <div className="flex items-center gap-2">
-                                <span className={`h-2.5 w-2.5 rounded-full ${networkApprovalRequired ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                                <span className="text-xs font-semibold text-theme-primary">
-                                    {networkApprovalRequired ? 'Affiliate Manager Approval Required' : 'Instant Network Activation'}
+                        <div className="mt-2 space-y-2 text-xs">
+                            <div className="flex items-center justify-between">
+                                <span className="text-theme-secondary">Vendor Approval:</span>
+                                <span className="font-semibold text-theme-primary capitalize">
+                                    {product.approval_status_label || approvalStatus}
                                 </span>
                             </div>
-                            <p className="text-xs text-theme-muted mt-1">
-                                {networkApprovalRequired
-                                    ? 'Requires applying or contacting the affiliate manager before generating active tracking links.'
-                                    : 'Direct approval. Hoplinks or affiliate tracking links can be generated immediately.'}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="mt-3 pt-2.5 border-t border-theme/60 text-[11px] text-theme-muted">
-                        Check account status before creating Google Ads campaigns.
-                    </div>
-                </div>
-
-                {/* 4. Payouts by Platform */}
-                <div className="rounded-xl border border-theme bg-theme-subtle/25 p-4 flex flex-col justify-between">
-                    <div>
-                        <div className="flex items-center justify-between text-xs font-semibold text-theme-secondary mb-1.5">
-                            <span>Payouts by Platform</span>
-                            <span className="font-mono text-[11px] text-theme-muted">
-                                {payoutsByPlatform.length > 0 ? `${payoutsByPlatform.length} Listed` : 'Single Platform'}
-                            </span>
-                        </div>
-
-                        {payoutsByPlatform.length > 0 ? (
-                            <div className="mt-2 space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                                {payoutsByPlatform.map((item, idx) => (
-                                    <div
-                                        key={idx}
-                                        className="flex items-center justify-between gap-2 rounded-lg border border-theme bg-theme-surface px-2.5 py-1 text-xs"
-                                    >
-                                        <span className={`capitalize font-semibold text-[11px] px-1.5 py-0.5 rounded border ${getPlatformBadgeClass(item.platform)}`}>
-                                            {item.platform}
-                                        </span>
-                                        <span className="font-mono font-bold text-theme-primary">
-                                            {item.currency || 'USD'} ${Number(item.payout || 0).toFixed(2)}
-                                        </span>
-                                    </div>
-                                ))}
+                            <div className="flex items-center justify-between">
+                                <span className="text-theme-secondary">Network Gate:</span>
+                                <span className="font-semibold text-theme-primary capitalize">
+                                    {product.network_approval_status_label || networkApprovalStatus}
+                                </span>
                             </div>
-                        ) : (
-                            <div className="mt-2 space-y-1">
-                                <div className="text-xs text-theme-primary font-bold">
-                                    {product.payout_formatted}
-                                </div>
-                                <div className="text-[11px] text-theme-muted">
-                                    Primary network: <span className="capitalize font-medium text-theme-secondary">{product.platform || 'General'}</span>
-                                </div>
+                        </div>
+
+                        {showApprovalInfo && (
+                            <div className="mt-3 rounded-lg border border-theme bg-theme-surface p-2.5 text-[11px] text-theme-muted space-y-1">
+                                <p><strong>Unknown:</strong> Neutral in scoring (not yet confirmed).</p>
+                                <p><strong>Yes:</strong> Gated. Penalty applied until approval confirmed.</p>
+                                <p><strong>No:</strong> Explicitly confirmed open link.</p>
                             </div>
                         )}
                     </div>
 
                     <div className="mt-3 pt-2.5 border-t border-theme/60 text-[11px] text-theme-muted">
-                        Compare affiliate network margins and split test payout offers.
+                        Unknown counts as neither approved nor blocked.
                     </div>
                 </div>
+
+                {/* 4. Phase-2 Strategy Transition */}
+                <div className="rounded-xl border border-theme bg-theme-subtle/25 p-4 flex flex-col justify-between">
+                    <div>
+                        <div className="flex items-center justify-between text-xs font-semibold text-theme-secondary mb-1.5">
+                            <span>Phase Strategy</span>
+                            {product.strategy_phase2 ? (
+                                <span className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-1.5 py-0.5 text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                                    P1 → P2
+                                </span>
+                            ) : (
+                                <span className="text-[11px] font-mono text-theme-muted">Single Phase</span>
+                            )}
+                        </div>
+
+                        <div className="mt-2 space-y-1.5 text-xs">
+                            <div className="flex items-center justify-between">
+                                <span className="text-theme-secondary">P1 Strategy:</span>
+                                <span className="font-bold text-theme-primary uppercase">
+                                    {product.strategy_label || product.strategy || 'Default'}
+                                </span>
+                            </div>
+                            {product.strategy_phase2 && (
+                                <div className="flex items-center justify-between">
+                                    <span className="text-theme-secondary">P2 Strategy:</span>
+                                    <span className="font-bold text-indigo-600 dark:text-indigo-400 uppercase">
+                                        {product.strategy_phase2_label || product.strategy_phase2}
+                                    </span>
+                                </div>
+                            )}
+                            {product.strategy_switch_trigger && (
+                                <div className="mt-1.5 rounded-lg border border-theme bg-theme-surface/80 p-2 text-[11px] text-theme-primary">
+                                    <strong className="text-theme-secondary block text-[10px] uppercase font-bold mb-0.5">Switch Trigger:</strong>
+                                    {product.strategy_switch_trigger}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="mt-3 pt-2.5 border-t border-theme/60 text-[11px] text-theme-muted">
+                        Automates the transition from testing to scaling strategy.
+                    </div>
+                </div>
+            </div>
+
+            {/* Promote / Demote Criteria Card */}
+            {product.promotion_criteria && (
+                <div className="rounded-xl border border-theme bg-theme-subtle/20 p-4">
+                    <div className="flex items-center justify-between text-xs font-semibold text-theme-secondary mb-1">
+                        <span className="flex items-center gap-1.5">
+                            <svg className="w-4 h-4 text-theme-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M16 16l3-8 3 8c-.87.06-1.7.21-2.5.42L18 20l-1.5-3.58c-.8-.21-1.63-.36-2.5-.42zM2 16l3-8 3 8c-.87.06-1.7.21-2.5.42L4 20l-1.5-3.58c-.8-.21-1.63-.36-2.5-.42z" />
+                                <path d="M7 21h10M12 3v18" />
+                            </svg>
+                            <span className="font-bold text-theme-primary text-sm">Promotion &amp; Demote / Kill Criteria</span>
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setShowPromotionInfo(!showPromotionInfo)}
+                            className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-theme text-[10px] text-theme-muted hover:text-theme-accent cursor-pointer"
+                            title="Click for promotion criteria explanation"
+                        >
+                            ⓘ
+                        </button>
+                    </div>
+
+                    <p className="text-xs text-theme-primary whitespace-pre-wrap mt-2">
+                        {product.promotion_criteria}
+                    </p>
+
+                    {showPromotionInfo && (
+                        <div className="mt-3 rounded-lg border border-theme bg-theme-surface p-3 text-xs text-theme-secondary space-y-1">
+                            <div className="font-semibold text-theme-primary flex items-center justify-between">
+                                <span>Lifecycle Stage Transition Rules</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPromotionInfo(false)}
+                                    className="text-theme-muted hover:text-theme-primary cursor-pointer text-xs"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                            <ul className="text-[11px] text-theme-muted list-disc list-inside space-y-0.5">
+                                <li><strong>WATCH → TEST:</strong> Potential Score &gt; 70, verified offer page, and targeting set.</li>
+                                <li><strong>TEST → SCALE:</strong> Consistent profit across 2+ conversions with positive headroom.</li>
+                                <li><strong>KILL / PAUSE:</strong> 0 sales at 100% commission spend, sudden listing expiration, or policy violation.</li>
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Payouts by Platform & Geo Tier Table */}
+            <div className="rounded-xl border border-theme bg-theme-subtle/15 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h4 className="font-bold text-sm text-theme-primary">Payout Tiers by Platform &amp; GEO</h4>
+                        <p className="text-xs text-theme-muted">
+                            CAD conversion calculated via FX engine. Geo-matched tiers are prioritized during scoring.
+                        </p>
+                    </div>
+                    <span className="text-xs font-mono text-theme-secondary">
+                        {payoutsByPlatform.length > 0 ? `${payoutsByPlatform.length} Tier(s)` : 'Primary Only'}
+                    </span>
+                </div>
+
+                {payoutsByPlatform.length > 0 ? (
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full text-left text-xs divide-y divide-theme">
+                            <thead className="bg-theme-canvas/60 text-theme-secondary uppercase font-semibold">
+                                <tr>
+                                    <th className="px-3 py-2">Platform</th>
+                                    <th className="px-3 py-2">GEO / Tier</th>
+                                    <th className="px-3 py-2">Payout</th>
+                                    <th className="px-3 py-2">Model</th>
+                                    <th className="px-3 py-2">CAD Equivalent</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-theme bg-theme-surface">
+                                {payoutsByPlatform.map((item, idx) => {
+                                    const amount = Number(item.amount ?? item.payout ?? 0);
+                                    const cur = item.currency || 'USD';
+                                    const cadVal = convertToCad(amount, cur);
+                                    return (
+                                        <tr key={idx} className="hover:bg-theme-subtle/30">
+                                            <td className="px-3 py-2 font-medium">
+                                                <span className={`capitalize font-semibold text-[11px] px-2 py-0.5 rounded border ${getPlatformBadgeClass(item.platform)}`}>
+                                                    {item.platform}
+                                                </span>
+                                            </td>
+                                            <td className="px-3 py-2 font-mono font-medium text-theme-primary">
+                                                {item.geo_tier ? (
+                                                    <span className="inline-flex items-center gap-1 rounded bg-theme-subtle px-1.5 py-0.5 border border-theme">
+                                                        <span>{COUNTRY_FLAGS[item.geo_tier.toUpperCase()] || '🌐'}</span>
+                                                        <span>{item.geo_tier}</span>
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-theme-muted italic">Global / Default</span>
+                                                )}
+                                            </td>
+                                            <td className="px-3 py-2 font-mono font-bold text-theme-primary">
+                                                {cur} ${amount.toFixed(2)}
+                                            </td>
+                                            <td className="px-3 py-2 font-mono uppercase text-theme-secondary">
+                                                {item.model || 'CPA'}
+                                            </td>
+                                            <td className="px-3 py-2 font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                                                CA$ {cadVal.toFixed(2)}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-between rounded-lg border border-theme bg-theme-surface p-3 text-xs">
+                        <div>
+                            <span className="text-theme-secondary">Primary Offer Payout: </span>
+                            <strong className="text-theme-primary font-mono text-sm">{product.payout_formatted}</strong>
+                            <span className="text-theme-muted ml-2">({product.platform || 'General'})</span>
+                        </div>
+                        <div className="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            CA$ {Number(product.payout_cad || 0).toFixed(2)}
+                        </div>
+                    </div>
+                )}
             </div>
         </section>
     );

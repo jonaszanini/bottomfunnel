@@ -38,6 +38,8 @@ export default function OfferConstraintsEditor({
     options = {},
 }) {
     const [customGeoInput, setCustomGeoInput] = useState('');
+    const [showApprovalInfo, setShowApprovalInfo] = useState(false);
+    const [showPromotionInfo, setShowPromotionInfo] = useState(false);
 
     // Normalize allowed_geos to array
     const allowedGeos = React.useMemo(() => {
@@ -82,7 +84,7 @@ export default function OfferConstraintsEditor({
     const handleAddPayoutRow = () => {
         const next = [
             ...payouts,
-            { platform: 'ClickBank', payout: '', currency: 'USD' },
+            { platform: 'ClickBank', geo_tier: '', amount: '', currency: 'USD', model: 'cpa' },
         ];
         setData('payouts_by_platform', next);
     };
@@ -90,7 +92,14 @@ export default function OfferConstraintsEditor({
     const handleUpdatePayoutRow = (index, field, value) => {
         const next = payouts.map((row, idx) => {
             if (idx === index) {
-                return { ...row, [field]: value };
+                const updated = { ...row, [field]: value };
+                if (field === 'amount') {
+                    updated.payout = value;
+                }
+                if (field === 'payout') {
+                    updated.amount = value;
+                }
+                return updated;
             }
             return row;
         });
@@ -108,7 +117,7 @@ export default function OfferConstraintsEditor({
                 <svg className="w-3.5 h-3.5 text-theme-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
-                <span>Offer Constraints & Go / No-Go Decision</span>
+                <span>Offer Constraints, Strategy & Go / No-Go Decision</span>
             </legend>
 
             {/* 1. Allowed Geos (Country Codes Multi-Select) */}
@@ -192,14 +201,15 @@ export default function OfferConstraintsEditor({
                 )}
             </div>
 
-            {/* 2. Compliance Risk & Notes */}
-            <div className="grid gap-3 sm:grid-cols-2">
+            {/* 2. Compliance Risk & Tri-state Approvals */}
+            <div className="grid gap-4 sm:grid-cols-3">
                 <Field label="2. Google Ads Compliance Risk" error={errors.compliance_risk}>
                     <select
                         className={control}
-                        value={data.compliance_risk || 'low'}
+                        value={data.compliance_risk || 'not_assessed'}
                         onChange={(e) => setData('compliance_risk', e.target.value)}
                     >
+                        <option value="not_assessed">Not Assessed (Default)</option>
                         <option value="low">Low Risk (Standard policies)</option>
                         <option value="medium">Medium Risk (Moderate health claims)</option>
                         <option value="high">High Risk (Aggressive claims / needs pre-landers)</option>
@@ -207,26 +217,68 @@ export default function OfferConstraintsEditor({
                     </select>
                 </Field>
 
-                <div className="flex items-center pt-5">
-                    {/* 3. Network Approval Required */}
-                    <label className="flex items-start gap-2.5 cursor-pointer p-2.5 rounded-lg border border-theme bg-theme-surface hover:bg-theme-subtle/50 transition-colors w-full">
-                        <input
-                            type="checkbox"
-                            className="mt-0.5 rounded border-theme text-theme-accent focus:ring-theme-accent"
-                            checked={Boolean(data.network_approval_required)}
-                            onChange={(e) => setData('network_approval_required', e.target.checked)}
-                        />
-                        <div>
-                            <span className="font-semibold text-xs text-theme-primary block">
-                                3. Requires approval on affiliate network
-                            </span>
-                            <span className="text-[11px] text-theme-muted block">
-                                Gated offer requiring affiliate manager approval before live traffic routing.
-                            </span>
-                        </div>
-                    </label>
-                </div>
+                <Field
+                    label={
+                        <span className="flex items-center justify-between">
+                            <span>Product Approval Required</span>
+                            <button
+                                type="button"
+                                onClick={() => setShowApprovalInfo(!showApprovalInfo)}
+                                className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-theme text-[10px] text-theme-muted hover:text-theme-accent cursor-pointer"
+                                title="Click for info on tri-state approval"
+                            >
+                                ⓘ
+                            </button>
+                        </span>
+                    }
+                    error={errors.approval_status}
+                >
+                    <select
+                        className={control}
+                        value={data.approval_status || 'unknown'}
+                        onChange={(e) => setData('approval_status', e.target.value)}
+                    >
+                        <option value="unknown">Unknown (Not Assessed / Neutral)</option>
+                        <option value="yes">Yes (Requires Vendor Approval)</option>
+                        <option value="no">No (Direct / Open)</option>
+                    </select>
+                </Field>
+
+                <Field
+                    label="Network Approval Status"
+                    error={errors.network_approval_status}
+                >
+                    <select
+                        className={control}
+                        value={data.network_approval_status || 'unknown'}
+                        onChange={(e) => setData('network_approval_status', e.target.value)}
+                    >
+                        <option value="unknown">Unknown (Unconfirmed)</option>
+                        <option value="yes">Yes (Network Approval Required)</option>
+                        <option value="no">No (Open / Instant Link)</option>
+                    </select>
+                </Field>
             </div>
+
+            {/* Click-to-open ⓘ Popover for Tri-state approval */}
+            {showApprovalInfo && (
+                <div className="rounded-lg border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-sm space-y-1">
+                    <div className="font-semibold text-theme-primary flex items-center justify-between">
+                        <span>Why Tri-State Approval?</span>
+                        <button
+                            type="button"
+                            onClick={() => setShowApprovalInfo(false)}
+                            className="text-theme-muted hover:text-theme-primary cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <p className="text-[11px] text-theme-muted">
+                        The previous checkbox could only be true or false, so unconfirmed products were stored as false even when approval wasn't explicitly checked.
+                        With tri-state, <strong>Unknown</strong> is neutral in scoring, <strong>Yes</strong> applies a freshness penalty, and <strong>No</strong> confirms instantaneous routing.
+                    </p>
+                </div>
+            )}
 
             {/* Compliance Notes */}
             <Field label="Compliance & Policy Notes (Optional)" error={errors.compliance_notes}>
@@ -239,15 +291,97 @@ export default function OfferConstraintsEditor({
                 />
             </Field>
 
-            {/* 4. Payouts by Platform (Repeatable Rows) */}
+            {/* Phase 2 Strategy & Recheck Date Grid */}
+            <div className="grid gap-4 sm:grid-cols-3 pt-1 border-t border-theme/60">
+                <Field label="Phase-2 Strategy (Nullable)" error={errors.strategy_phase2}>
+                    <select
+                        className={control}
+                        value={data.strategy_phase2 || ''}
+                        onChange={(e) => setData('strategy_phase2', e.target.value || null)}
+                    >
+                        <option value="">None / Not Set</option>
+                        {options.strategies?.map((st) => (
+                            <option key={st.value} value={st.value}>{st.label}</option>
+                        ))}
+                    </select>
+                </Field>
+
+                <Field label="Strategy Switch Trigger" error={errors.strategy_switch_trigger}>
+                    <input
+                        type="text"
+                        className={control}
+                        placeholder="e.g. Switch to review after 3 sales or when brand CPC < $1.50"
+                        value={data.strategy_switch_trigger || ''}
+                        onChange={(e) => setData('strategy_switch_trigger', e.target.value)}
+                    />
+                </Field>
+
+                <Field label="Recheck Date" error={errors.recheck_at}>
+                    <input
+                        type="date"
+                        className={control}
+                        value={data.recheck_at || ''}
+                        onChange={(e) => setData('recheck_at', e.target.value || null)}
+                    />
+                </Field>
+            </div>
+
+            {/* Promote / Demote Criteria */}
+            <Field
+                label={
+                    <span className="flex items-center justify-between">
+                        <span>Promote / Demote Criteria</span>
+                        <button
+                            type="button"
+                            onClick={() => setShowPromotionInfo(!showPromotionInfo)}
+                            className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-theme text-[10px] text-theme-muted hover:text-theme-accent cursor-pointer"
+                            title="Click for promotion criteria explanation"
+                        >
+                            ⓘ
+                        </button>
+                    </span>
+                }
+                error={errors.promotion_criteria}
+            >
+                <textarea
+                    rows="2"
+                    className={control}
+                    placeholder="Criteria to move WATCH → TEST → SCALE (e.g., test 30 days, promote if ROI > 60%, kill if 0 sales at 100% payout spend)..."
+                    value={data.promotion_criteria || ''}
+                    onChange={(e) => setData('promotion_criteria', e.target.value)}
+                />
+            </Field>
+
+            {/* Click-to-open ⓘ Popover for Promotion Criteria */}
+            {showPromotionInfo && (
+                <div className="rounded-lg border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-sm space-y-1">
+                    <div className="font-semibold text-theme-primary flex items-center justify-between">
+                        <span>WATCH → TEST → SCALE Guidelines</span>
+                        <button
+                            type="button"
+                            onClick={() => setShowPromotionInfo(false)}
+                            className="text-theme-muted hover:text-theme-primary cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <ul className="text-[11px] text-theme-muted list-disc list-inside space-y-0.5">
+                        <li><strong>WATCH → TEST:</strong> Potential Score &gt; 70, no hard gates, affiliate link active, and approved geos defined.</li>
+                        <li><strong>TEST → SCALE:</strong> At least 2 verified sales with ROI &ge; 50% and stable CPA.</li>
+                        <li><strong>DEMOTE / KILL:</strong> 0 sales at 100% commission spend (or 50% spend if 0 checkouts), listing down, or policy warning.</li>
+                    </ul>
+                </div>
+            )}
+
+            {/* 4. Payouts by GEO / Platform / Tier (Repeatable Rows) */}
             <div className="space-y-2 pt-1 border-t border-theme/60">
                 <div className="flex items-center justify-between">
                     <div>
                         <span className="block text-xs font-semibold text-theme-secondary">
-                            4. Payouts by Platform (Multi-Platform Payouts)
+                            Payouts by Platform &amp; GEO Tier
                         </span>
                         <span className="text-[11px] text-theme-muted">
-                            Record specific offer payout and currency for each network (ClickBank, BuyGoods, Digistore24, MaxWeb, etc.)
+                            Rows without a GEO tier are treated as global/default tier.
                         </span>
                     </div>
 
@@ -256,19 +390,19 @@ export default function OfferConstraintsEditor({
                         onClick={handleAddPayoutRow}
                         className="px-2.5 py-1 rounded text-xs font-semibold border border-theme bg-theme-surface hover:bg-theme-subtle text-theme-accent transition-colors flex items-center gap-1 cursor-pointer"
                     >
-                        <span>+ Add Network Payout</span>
+                        <span>+ Add Payout Tier</span>
                     </button>
                 </div>
 
                 {payouts.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-theme p-3 text-center text-xs text-theme-muted">
-                        No platform-specific payouts added yet. (Uses primary offer payout above by default).
+                        No multi-tier payouts added yet. (Uses primary offer payout above by default).
                         <button
                             type="button"
                             onClick={handleAddPayoutRow}
                             className="ml-2 font-semibold text-theme-accent hover:underline cursor-pointer"
                         >
-                            + Add first network row
+                            + Add first payout tier
                         </button>
                     </div>
                 ) : (
@@ -276,10 +410,10 @@ export default function OfferConstraintsEditor({
                         {payouts.map((row, idx) => (
                             <div
                                 key={idx}
-                                className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-2 rounded-lg border border-theme bg-theme-surface"
+                                className="grid grid-cols-1 sm:grid-cols-12 gap-2 p-2 rounded-lg border border-theme bg-theme-surface items-center text-xs"
                             >
-                                {/* Platform selection */}
-                                <div className="w-full sm:w-1/3">
+                                {/* Platform */}
+                                <div className="sm:col-span-3">
                                     <input
                                         type="text"
                                         list={`platform-list-${idx}`}
@@ -295,21 +429,33 @@ export default function OfferConstraintsEditor({
                                     </datalist>
                                 </div>
 
+                                {/* GEO Tier */}
+                                <div className="sm:col-span-3">
+                                    <input
+                                        type="text"
+                                        className={control}
+                                        placeholder="GEO / Tier (e.g. US, INTL, Tier1)"
+                                        value={row.geo_tier || ''}
+                                        onChange={(e) => handleUpdatePayoutRow(idx, 'geo_tier', e.target.value)}
+                                        title="Free label (e.g. US, INTL, Tier1). Leave blank for default/global."
+                                    />
+                                </div>
+
                                 {/* Payout amount */}
-                                <div className="w-1/2 sm:w-1/3">
+                                <div className="sm:col-span-2">
                                     <input
                                         type="number"
                                         step="0.01"
                                         min="0"
                                         className={control}
-                                        placeholder="Payout amount"
-                                        value={row.payout ?? ''}
-                                        onChange={(e) => handleUpdatePayoutRow(idx, 'payout', e.target.value)}
+                                        placeholder="Amount"
+                                        value={row.amount ?? row.payout ?? ''}
+                                        onChange={(e) => handleUpdatePayoutRow(idx, 'amount', e.target.value)}
                                     />
                                 </div>
 
                                 {/* Currency */}
-                                <div className="w-1/3 sm:w-1/4">
+                                <div className="sm:col-span-2">
                                     <select
                                         className={control}
                                         value={row.currency || 'USD'}
@@ -321,18 +467,33 @@ export default function OfferConstraintsEditor({
                                     </select>
                                 </div>
 
+                                {/* Model */}
+                                <div className="sm:col-span-1">
+                                    <select
+                                        className={control}
+                                        value={row.model || 'cpa'}
+                                        onChange={(e) => handleUpdatePayoutRow(idx, 'model', e.target.value)}
+                                        title="Payout Model"
+                                    >
+                                        <option value="cpa">CPA</option>
+                                        <option value="revshare">Rev</option>
+                                    </select>
+                                </div>
+
                                 {/* Remove Button */}
-                                <button
-                                    type="button"
-                                    onClick={() => handleRemovePayoutRow(idx)}
-                                    className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 rounded transition-colors cursor-pointer shrink-0"
-                                    title="Remove this platform payout row"
-                                >
-                                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <line x1="18" y1="6" x2="6" y2="18" />
-                                        <line x1="6" y1="6" x2="18" y2="18" />
-                                    </svg>
-                                </button>
+                                <div className="sm:col-span-1 flex justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemovePayoutRow(idx)}
+                                        className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-500/10 rounded transition-colors cursor-pointer"
+                                        title="Remove this tier"
+                                    >
+                                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <line x1="18" y1="6" x2="6" y2="18" />
+                                            <line x1="6" y1="6" x2="18" y2="18" />
+                                        </svg>
+                                    </button>
+                                </div>
                             </div>
                         ))}
                     </div>

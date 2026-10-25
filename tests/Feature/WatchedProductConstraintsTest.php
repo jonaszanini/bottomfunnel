@@ -164,8 +164,8 @@ class WatchedProductConstraintsTest extends TestCase
                 ->where('product.compliance_notes', 'Testosterone / ED category strictly monitored by Google.')
                 ->where('product.network_approval_required', true)
                 ->where('product.payouts_by_platform', [
-                    ['platform' => 'clickbank', 'payout' => 90, 'currency' => 'USD'],
-                    ['platform' => 'buygoods', 'payout' => 95.50, 'currency' => 'USD'],
+                    ['platform' => 'clickbank', 'geo_tier' => '', 'amount' => 90, 'payout' => 90, 'currency' => 'USD', 'model' => 'cpa'],
+                    ['platform' => 'buygoods', 'geo_tier' => '', 'amount' => 95.5, 'payout' => 95.5, 'currency' => 'USD', 'model' => 'cpa'],
                 ])
                 ->has('options.compliance_risks')
             );
@@ -197,7 +197,7 @@ class WatchedProductConstraintsTest extends TestCase
                 ->where('products.0.compliance_risk_label', 'Restricted')
                 ->where('products.0.network_approval_required', true)
                 ->where('products.0.payouts_by_platform', [
-                    ['platform' => 'clickbank', 'payout' => 48.50, 'currency' => 'USD'],
+                    ['platform' => 'clickbank', 'geo_tier' => '', 'amount' => 48.5, 'payout' => 48.5, 'currency' => 'USD', 'model' => 'cpa'],
                 ])
                 ->has('options.compliance_risks')
             );

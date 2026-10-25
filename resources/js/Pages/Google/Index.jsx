@@ -6,6 +6,20 @@ import CampaignCreationModal from '../../Components/CampaignCreationModal';
 
 export default function Index({ accounts = [], campaigns = [], default_account_id, pending = [] }) {
     const [showCampaignModal, setShowCampaignModal] = useState(false);
+    const [showOAuthInfo, setShowOAuthInfo] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+
+    const showToast = (msg) => {
+        setToastMessage(msg);
+        setTimeout(() => setToastMessage(''), 2500);
+    };
+
+    const handleConnectGoogleAds = () => {
+        showToast('Connecting to Google Ads OAuth...');
+        setTimeout(() => {
+            window.location.href = '/google-ads/connect';
+        }, 350);
+    };
 
     const defaultAccId = default_account_id || accounts.find((a) => a.is_default)?.id || (accounts.length > 0 ? accounts[0].id : '');
 
@@ -36,7 +50,7 @@ export default function Index({ accounts = [], campaigns = [], default_account_i
                     <button
                         className={button}
                         type="button"
-                        onClick={() => { window.location.href = '/google-ads/connect'; }}
+                        onClick={handleConnectGoogleAds}
                     >
                         Link Google Ads
                     </button>
@@ -95,9 +109,71 @@ export default function Index({ accounts = [], campaigns = [], default_account_i
 
                 <div className="overflow-hidden rounded-xl border border-theme bg-theme-surface shadow-sm text-theme-primary divide-y divide-theme">
                     {accounts.length === 0 && (
-                        <p className="p-4 text-sm text-theme-muted">
-                            No linked accounts yet. Click "Link Google Ads" above to connect your first account.
-                        </p>
+                        <div className="p-8 text-center space-y-4">
+                            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-theme-subtle text-theme-muted">
+                                <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                </svg>
+                            </div>
+                            <div className="max-w-md mx-auto space-y-1">
+                                <div className="flex items-center justify-center gap-2">
+                                    <h3 className="text-base font-semibold text-theme-primary">
+                                        No Google Ads Accounts Linked
+                                    </h3>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowOAuthInfo(!showOAuthInfo)}
+                                        className="text-theme-muted hover:text-theme-accent p-0.5 rounded cursor-pointer transition-colors"
+                                        title="Click for details about linking Google Ads"
+                                        aria-label="Google Ads linking info"
+                                    >
+                                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <circle cx="12" cy="12" r="10" />
+                                            <line x1="12" y1="16" x2="12" y2="12" />
+                                            <line x1="12" y1="8" x2="12.01" y2="8" />
+                                        </svg>
+                                    </button>
+                                </div>
+                                <p className="text-xs text-theme-secondary">
+                                    Connect your Google Ads account to manage conversion tags, assign Search campaigns to presell pages, and automate tracking.
+                                </p>
+                            </div>
+
+                            {showOAuthInfo && (
+                                <div className="max-w-md mx-auto rounded-xl border border-theme bg-theme-subtle/70 p-3.5 text-left text-xs text-theme-secondary space-y-1.5 shadow-sm animate-fadeIn">
+                                    <div className="flex items-center justify-between font-semibold text-theme-primary">
+                                        <span>How Google Ads Linking Works</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowOAuthInfo(false)}
+                                            className="text-theme-muted hover:text-theme-primary text-xs"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                    <p>
+                                        Flow Hub connects securely via Google's official OAuth2 consent screen. No API tokens or manual developer credentials need to be configured in the terminal.
+                                    </p>
+                                    <p className="text-[11px] text-theme-muted">
+                                        Once authenticated, select which customer ID or MCC to associate with your Flow Hub Tracks.
+                                    </p>
+                                </div>
+                            )}
+
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={handleConnectGoogleAds}
+                                    className={`${button} py-2 px-5 text-sm font-semibold inline-flex items-center gap-2`}
+                                >
+                                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                                    </svg>
+                                    <span>Link Google Ads</span>
+                                </button>
+                            </div>
+                        </div>
                     )}
 
                     {accounts.map((account) => (
@@ -288,6 +364,19 @@ export default function Index({ accounts = [], campaigns = [], default_account_i
                     )}
                 </div>
             </div>
+
+            {/* Toast Notification */}
+            {toastMessage && (
+                <div
+                    role="status"
+                    className="fixed bottom-5 right-5 z-50 rounded-xl bg-theme-surface border border-emerald-500/40 text-theme-primary px-4 py-3 shadow-2xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-bottom-2 duration-200"
+                >
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] font-bold">
+                        ✓
+                    </span>
+                    <span>{toastMessage}</span>
+                </div>
+            )}
         </Layout>
     );
 }

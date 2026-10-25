@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ApprovalStatus;
 use App\Enums\BrandBiddingStatus;
 use App\Enums\ComplianceRisk;
 use App\Enums\FlowspyTrafficTrend;
@@ -13,6 +14,8 @@ use App\Enums\StrategySource;
 use App\Enums\TrendsTrend;
 use App\Enums\TrueBofStatus;
 use App\Enums\WatchedProductStatus;
+use App\Services\WatchingProducts\Fx\FrankfurterFx;
+use App\Services\WatchingProducts\Money;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -54,6 +57,7 @@ class WatchedProduct extends Model
         'bof_homonym',
         'geos',
         'negatives',
+        /** @deprecated Use approval_status instead */
         'approval_required',
         'demand_notes',
         'trends_7d',
@@ -90,8 +94,15 @@ class WatchedProduct extends Model
         'allowed_geos',
         'compliance_risk',
         'compliance_notes',
+        /** @deprecated Use network_approval_status instead */
         'network_approval_required',
         'payouts_by_platform',
+        'strategy_phase2',
+        'strategy_switch_trigger',
+        'recheck_at',
+        'promotion_criteria',
+        'approval_status',
+        'network_approval_status',
     ];
 
     /**
@@ -115,7 +126,11 @@ class WatchedProduct extends Model
             'flowspy_traffic_trend' => FlowspyTrafficTrend::class,
             'payout_model' => PayoutModel::class,
             'strategy' => Strategy::class,
+            'strategy_phase2' => Strategy::class,
             'strategy_source' => StrategySource::class,
+            'recheck_at' => 'date',
+            'approval_status' => ApprovalStatus::class,
+            'network_approval_status' => ApprovalStatus::class,
             'payout_amount' => 'decimal:2',
             'payout_cad' => 'decimal:2',
             'gravity' => 'decimal:2',
@@ -152,6 +167,18 @@ class WatchedProduct extends Model
             'refresh_priority' => 'integer',
             'last_reviewed_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (self $product) {
+            if ($product->isDirty('approval_status') && $product->approval_status !== null) {
+                $product->approval_required = ($product->approval_status === ApprovalStatus::Yes);
+            }
+            if ($product->isDirty('network_approval_status') && $product->network_approval_status !== null) {
+                $product->network_approval_required = ($product->network_approval_status === ApprovalStatus::Yes);
+            }
+        });
     }
 
     /**
@@ -271,6 +298,8 @@ class WatchedProduct extends Model
 
     /**
      * Payouts by platform attribute: normalized list of platform payout entries.
+     * Backwards-compatible: rows can have {platform, geo_tier, amount, currency, model}.
+     * Old rows {platform, payout, currency} are automatically normalized on read.
      */
     protected function payoutsByPlatform(): Attribute
     {
@@ -280,13 +309,30 @@ class WatchedProduct extends Model
                     return [];
                 }
 
-                if (is_array($value)) {
-                    return $value;
+                $data = is_array($value) ? $value : json_decode((string) $value, true);
+                if (! is_array($data)) {
+                    return [];
                 }
 
-                $decoded = json_decode((string) $value, true);
+                $normalized = [];
+                foreach ($data as $row) {
+                    if (is_array($row) && ! empty($row['platform'])) {
+                        $amount = isset($row['amount']) && is_numeric($row['amount'])
+                            ? (float) $row['amount']
+                            : (isset($row['payout']) && is_numeric($row['payout']) ? (float) $row['payout'] : 0.0);
 
-                return is_array($decoded) ? $decoded : [];
+                        $normalized[] = [
+                            'platform' => trim((string) $row['platform']),
+                            'geo_tier' => trim((string) ($row['geo_tier'] ?? '')),
+                            'amount' => $amount,
+                            'payout' => $amount,
+                            'currency' => strtoupper(trim((string) ($row['currency'] ?? 'USD'))),
+                            'model' => trim((string) ($row['model'] ?? 'cpa')),
+                        ];
+                    }
+                }
+
+                return array_values($normalized);
             },
             set: function (mixed $value): string {
                 if (empty($value)) {
@@ -302,10 +348,17 @@ class WatchedProduct extends Model
                     $sanitized = [];
                     foreach ($value as $row) {
                         if (is_array($row) && ! empty($row['platform'])) {
+                            $amount = isset($row['amount']) && is_numeric($row['amount'])
+                                ? (float) $row['amount']
+                                : (isset($row['payout']) && is_numeric($row['payout']) ? (float) $row['payout'] : 0.0);
+
                             $sanitized[] = [
                                 'platform' => trim((string) $row['platform']),
-                                'payout' => isset($row['payout']) && is_numeric($row['payout']) ? (float) $row['payout'] : 0.0,
+                                'geo_tier' => trim((string) ($row['geo_tier'] ?? '')),
+                                'amount' => $amount,
+                                'payout' => $amount,
                                 'currency' => strtoupper(trim((string) ($row['currency'] ?? 'USD'))),
+                                'model' => trim((string) ($row['model'] ?? 'cpa')),
                             ];
                         }
                     }
@@ -316,6 +369,81 @@ class WatchedProduct extends Model
                 return json_encode([]);
             }
         );
+    }
+
+    /**
+     * Determine effective payout for scoring, matching allowed_geos when set,
+     * otherwise highest payout across tiers.
+     *
+     * @return array{amount: float, currency: string, usd: float, geo_tier: string}
+     */
+    public function scoringPayout(?FrankfurterFx $fx = null): array
+    {
+        $fx ??= app(FrankfurterFx::class);
+        $candidates = [];
+
+        $topAmount = (float) ($this->payout_amount ?? $this->payout_cad ?? 0.0);
+        $topCurrency = $this->payout_currency ?? 'USD';
+        if ($topAmount > 0) {
+            $candidates[] = [
+                'amount' => $topAmount,
+                'currency' => $topCurrency,
+                'geo_tier' => '',
+                'usd' => Money::make($topAmount, $topCurrency)->toUsd($fx),
+            ];
+        }
+
+        $tiers = (array) ($this->payouts_by_platform ?? []);
+        foreach ($tiers as $tier) {
+            $tierAmount = (float) ($tier['amount'] ?? $tier['payout'] ?? 0.0);
+            $tierCurrency = (string) ($tier['currency'] ?? 'USD');
+            $geoTier = trim((string) ($tier['geo_tier'] ?? ''));
+            if ($tierAmount > 0) {
+                $candidates[] = [
+                    'amount' => $tierAmount,
+                    'currency' => $tierCurrency,
+                    'geo_tier' => $geoTier,
+                    'usd' => Money::make($tierAmount, $tierCurrency)->toUsd($fx),
+                ];
+            }
+        }
+
+        if (empty($candidates)) {
+            return [
+                'amount' => 0.0,
+                'currency' => 'USD',
+                'usd' => 0.0,
+                'geo_tier' => '',
+            ];
+        }
+
+        $allowedGeos = array_values(array_filter(array_map('strtoupper', (array) ($this->allowed_geos ?? []))));
+
+        if (! empty($allowedGeos)) {
+            $geoMatches = [];
+            foreach ($candidates as $candidate) {
+                $candidateTier = strtoupper($candidate['geo_tier']);
+                if ($candidateTier === '') {
+                    continue;
+                }
+                foreach ($allowedGeos as $geo) {
+                    if ($candidateTier === $geo || str_contains($candidateTier, $geo)) {
+                        $geoMatches[] = $candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (! empty($geoMatches)) {
+                usort($geoMatches, fn ($a, $b) => $b['usd'] <=> $a['usd']);
+
+                return $geoMatches[0];
+            }
+        }
+
+        usort($candidates, fn ($a, $b) => $b['usd'] <=> $a['usd']);
+
+        return $candidates[0];
     }
 
     /**
@@ -394,6 +522,11 @@ class WatchedProduct extends Model
                 });
             }
         });
+
+        $query->when(! empty($filters['recheck_overdue']), function (Builder $query) {
+            $query->whereNotNull('recheck_at')
+                ->where('recheck_at', '<=', now()->toDateString());
+        });
     }
 
     /**
@@ -421,24 +554,23 @@ class WatchedProduct extends Model
         return $this->score_flags['refresh_error'] ?? null;
     }
 
-    /**
-     * Display label for the demand trend.
-     * When trends_7d, trends_30d, and trends_90d are all null or zero, displays "Unknown"
-     * instead of "Stable". "Stable" is kept only when actual low-but-present volume exists.
-     */
     public function trendsTrendLabel(): string
     {
-        $hasVolume = ((float) ($this->trends_7d ?? 0) > 0)
-            || ((float) ($this->trends_30d ?? 0) > 0)
-            || ((float) ($this->trends_90d ?? 0) > 0);
+        $hasMetrics = $this->trends_7d !== null || $this->trends_30d !== null || $this->trends_90d !== null;
+        $isZeroDemand = $hasMetrics
+            && ((float) ($this->trends_7d ?? 0) <= 0)
+            && ((float) ($this->trends_30d ?? 0) <= 0)
+            && ((float) ($this->trends_90d ?? 0) <= 0);
 
-        if (! $hasVolume) {
-            if ($this->trends_trend === null || $this->trends_trend === TrendsTrend::Stable || $this->trends_trend === TrendsTrend::Unknown) {
-                return 'Unknown';
-            }
+        if ($isZeroDemand) {
+            return 'Unknown';
         }
 
-        return $this->trends_trend?->label() ?? 'Unknown';
+        if ($this->trends_trend === null) {
+            return 'Unknown';
+        }
+
+        return $this->trends_trend->label();
     }
 
     /**
@@ -446,11 +578,13 @@ class WatchedProduct extends Model
      */
     public function effectiveTrendsTrend(): TrendsTrend
     {
-        $hasVolume = ((float) ($this->trends_7d ?? 0) > 0)
-            || ((float) ($this->trends_30d ?? 0) > 0)
-            || ((float) ($this->trends_90d ?? 0) > 0);
+        $hasMetrics = $this->trends_7d !== null || $this->trends_30d !== null || $this->trends_90d !== null;
+        $isZeroDemand = $hasMetrics
+            && ((float) ($this->trends_7d ?? 0) <= 0)
+            && ((float) ($this->trends_30d ?? 0) <= 0)
+            && ((float) ($this->trends_90d ?? 0) <= 0);
 
-        if (! $hasVolume && ($this->trends_trend === null || $this->trends_trend === TrendsTrend::Stable)) {
+        if ($isZeroDemand) {
             return TrendsTrend::Unknown;
         }
 

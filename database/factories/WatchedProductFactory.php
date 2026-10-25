@@ -40,9 +40,7 @@ class WatchedProductFactory extends Factory
             'compliance_risk' => ComplianceRisk::Low,
             'compliance_notes' => null,
             'network_approval_required' => false,
-            'payouts_by_platform' => [
-                ['platform' => 'ClickBank', 'payout' => 48.50, 'currency' => 'USD'],
-            ],
+            'payouts_by_platform' => [],
             'negatives' => 'login, scam, review, amazon, ingredients, coupon',
             'approval_required' => fake()->boolean(30),
             'demand_notes' => 'Steady search volume on brand keywords with commercial purchase intent.',

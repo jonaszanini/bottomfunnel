@@ -2,6 +2,7 @@
 
 namespace App\Services\WatchingProducts;
 
+use App\Enums\ApprovalStatus;
 use App\Enums\BrandBiddingStatus;
 use App\Enums\FlowspyTrafficTrend;
 use App\Enums\ListingStatus;
@@ -214,9 +215,7 @@ class PotentialScoreService
         $flags = [];
 
         try {
-            $trend = $product->trends_trend instanceof TrendsTrend
-                ? $product->trends_trend
-                : TrendsTrend::tryFrom((string) $product->trends_trend);
+            $trend = $product->effectiveTrendsTrend();
         } catch (\Throwable) {
             $trend = null;
         }
@@ -292,9 +291,8 @@ class PotentialScoreService
     {
         $flags = [];
 
-        $amount = (float) ($product->payout_amount ?? $product->payout_cad ?? 0.0);
-        $currency = $product->payout_currency ?? 'USD';
-        $payoutUsd = Money::make($amount, $currency)->toUsd($this->fx);
+        $payoutData = $product->scoringPayout($this->fx);
+        $payoutUsd = (float) $payoutData['usd'];
 
         // Hard gate floor: US$20 / R$100
         if ($payoutUsd < 20.0) {
@@ -335,9 +333,8 @@ class PotentialScoreService
     {
         $flags = [];
 
-        $amount = (float) ($product->payout_amount ?? $product->payout_cad ?? 0.0);
-        $currency = $product->payout_currency ?? 'USD';
-        $payoutUsd = Money::make($amount, $currency)->toUsd($this->fx);
+        $payoutData = $product->scoringPayout($this->fx);
+        $payoutUsd = (float) $payoutData['usd'];
 
         $cvr = $product->est_cvr !== null && (float) $product->est_cvr > 0
             ? (float) $product->est_cvr
@@ -489,7 +486,11 @@ class PotentialScoreService
     {
         $score = 5;
 
-        if ((bool) $product->approval_required) {
+        $status = $product->approval_status instanceof ApprovalStatus
+            ? $product->approval_status
+            : ApprovalStatus::tryFrom((string) $product->approval_status);
+
+        if ($status === ApprovalStatus::Yes || ($status === null && (bool) $product->approval_required)) {
             $score -= 2;
         }
 

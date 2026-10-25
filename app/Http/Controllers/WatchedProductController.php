@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ApprovalStatus;
 use App\Enums\BrandBiddingStatus;
 use App\Enums\ComplianceRisk;
 use App\Enums\FlowspyTrafficTrend;
@@ -64,6 +65,7 @@ class WatchedProductController extends Controller
             'brand_bidding' => $request->input('brand_bidding', 'all'),
             'true_bof' => $request->input('true_bof', 'all'),
             'platform' => $request->input('platform', 'all'),
+            'recheck_overdue' => $request->boolean('recheck_overdue'),
         ];
 
         $query = WatchedProduct::query()
@@ -137,10 +139,21 @@ class WatchedProductController extends Controller
                 'bof_homonym' => (bool) $product->bof_homonym,
                 'geos' => $product->geos ?? [],
                 'allowed_geos' => $product->allowed_geos ?? [],
-                'compliance_risk' => $product->compliance_risk?->value ?? 'low',
-                'compliance_risk_label' => $product->compliance_risk?->label() ?? 'Low Risk',
+                'compliance_risk' => $product->compliance_risk?->value ?? 'not_assessed',
+                'compliance_risk_label' => $product->compliance_risk?->label() ?? 'Not Assessed',
                 'compliance_notes' => $product->compliance_notes,
                 'network_approval_required' => (bool) $product->network_approval_required,
+                'network_approval_status' => $product->network_approval_status?->value ?? ($product->network_approval_required ? 'yes' : 'unknown'),
+                'network_approval_status_label' => $product->network_approval_status?->label() ?? ($product->network_approval_required ? 'Requires Approval' : 'Approval Unknown'),
+                'approval_status' => $product->approval_status?->value ?? ($product->approval_required ? 'yes' : 'unknown'),
+                'approval_status_label' => $product->approval_status?->label() ?? ($product->approval_required ? 'Requires Approval' : 'Approval Unknown'),
+                'strategy_phase2' => $product->strategy_phase2?->value,
+                'strategy_phase2_label' => $product->strategy_phase2?->label(),
+                'strategy_switch_trigger' => $product->strategy_switch_trigger,
+                'recheck_at' => $product->recheck_at?->format('Y-m-d'),
+                'recheck_at_formatted' => $product->recheck_at?->format('M d, Y'),
+                'is_recheck_overdue' => $product->recheck_at !== null && $product->recheck_at->lte(today()),
+                'promotion_criteria' => $product->promotion_criteria,
                 'payouts_by_platform' => $product->payouts_by_platform ?? [],
                 'platforms' => $product->platforms ?? [],
                 'platform' => $product->platform,
@@ -189,6 +202,7 @@ class WatchedProductController extends Controller
             'ecom_count' => $ecomCount,
             'nutra_pct' => $totalCount > 0 ? (int) round(($nutraCount / $totalCount) * 100) : 60,
             'ecom_pct' => $totalCount > 0 ? (int) round(($ecomCount / $totalCount) * 100) : 40,
+            'overdue_recheck_count' => WatchedProduct::query()->whereNotNull('recheck_at')->where('recheck_at', '<=', now()->toDateString())->count(),
             'serpapi_used' => $this->budget->callsUsedThisMonth(),
             'serpapi_cap' => (int) config('watching.serpapi_monthly_cap', 230),
             'serpapi_limit' => (int) config('watching.serpapi_total_limit', 250),
@@ -233,6 +247,11 @@ class WatchedProductController extends Controller
                     'value' => $c->value,
                     'label' => $c->label(),
                 ], ComplianceRisk::cases()),
+                'approval_statuses' => array_map(fn (ApprovalStatus $a) => [
+                    'value' => $a->value,
+                    'label' => $a->label(),
+                    'short_label' => $a->shortLabel(),
+                ], ApprovalStatus::cases()),
             ],
         ]);
     }
@@ -373,10 +392,21 @@ class WatchedProductController extends Controller
             // Metadata
             'geos' => $watchedProduct->geos ?? [],
             'allowed_geos' => $watchedProduct->allowed_geos ?? [],
-            'compliance_risk' => $watchedProduct->compliance_risk?->value ?? 'low',
-            'compliance_risk_label' => $watchedProduct->compliance_risk?->label() ?? 'Low Risk',
+            'compliance_risk' => $watchedProduct->compliance_risk?->value ?? 'not_assessed',
+            'compliance_risk_label' => $watchedProduct->compliance_risk?->label() ?? 'Not Assessed',
             'compliance_notes' => $watchedProduct->compliance_notes,
             'network_approval_required' => (bool) $watchedProduct->network_approval_required,
+            'network_approval_status' => $watchedProduct->network_approval_status?->value ?? ($watchedProduct->network_approval_required ? 'yes' : 'unknown'),
+            'network_approval_status_label' => $watchedProduct->network_approval_status?->label() ?? ($watchedProduct->network_approval_required ? 'Requires Approval' : 'Approval Unknown'),
+            'approval_status' => $watchedProduct->approval_status?->value ?? ($watchedProduct->approval_required ? 'yes' : 'unknown'),
+            'approval_status_label' => $watchedProduct->approval_status?->label() ?? ($watchedProduct->approval_required ? 'Requires Approval' : 'Approval Unknown'),
+            'strategy_phase2' => $watchedProduct->strategy_phase2?->value,
+            'strategy_phase2_label' => $watchedProduct->strategy_phase2?->label(),
+            'strategy_switch_trigger' => $watchedProduct->strategy_switch_trigger,
+            'recheck_at' => $watchedProduct->recheck_at?->format('Y-m-d'),
+            'recheck_at_formatted' => $watchedProduct->recheck_at?->format('M d, Y'),
+            'is_recheck_overdue' => $watchedProduct->recheck_at !== null && $watchedProduct->recheck_at->lte(today()),
+            'promotion_criteria' => $watchedProduct->promotion_criteria,
             'payouts_by_platform' => $watchedProduct->payouts_by_platform ?? [],
             'approval_required' => (bool) $watchedProduct->approval_required,
             'demand_notes' => $watchedProduct->demand_notes,
@@ -442,6 +472,7 @@ class WatchedProductController extends Controller
                 'payout_models' => array_map(fn (PayoutModel $m) => ['value' => $m->value, 'label' => $m->label()], PayoutModel::cases()),
                 'trends_trends' => array_map(fn (TrendsTrend $t) => ['value' => $t->value, 'label' => $t->label()], TrendsTrend::cases()),
                 'compliance_risks' => array_map(fn (ComplianceRisk $c) => ['value' => $c->value, 'label' => $c->label()], ComplianceRisk::cases()),
+                'approval_statuses' => array_map(fn (ApprovalStatus $a) => ['value' => $a->value, 'label' => $a->label(), 'short_label' => $a->shortLabel()], ApprovalStatus::cases()),
                 'platforms' => $this->getAvailablePlatforms(),
             ],
         ]);
@@ -454,6 +485,18 @@ class WatchedProductController extends Controller
     {
         $validated = $this->validateProduct($request);
         $validated = $this->syncPlatforms($validated);
+
+        if (isset($validated['approval_status'])) {
+            $validated['approval_required'] = ($validated['approval_status'] === 'yes');
+        } elseif (isset($validated['approval_required'])) {
+            $validated['approval_status'] = $validated['approval_required'] ? 'yes' : 'unknown';
+        }
+
+        if (isset($validated['network_approval_status'])) {
+            $validated['network_approval_required'] = ($validated['network_approval_status'] === 'yes');
+        } elseif (isset($validated['network_approval_required'])) {
+            $validated['network_approval_status'] = $validated['network_approval_required'] ? 'yes' : 'unknown';
+        }
 
         // Compute CAD cache
         if (isset($validated['payout_amount']) && $validated['payout_amount'] !== null) {
@@ -474,6 +517,18 @@ class WatchedProductController extends Controller
     {
         $validated = $this->validateProduct($request, $watchedProduct);
         $validated = $this->syncPlatforms($validated, $watchedProduct);
+
+        if (isset($validated['approval_status'])) {
+            $validated['approval_required'] = ($validated['approval_status'] === 'yes');
+        } elseif (isset($validated['approval_required'])) {
+            $validated['approval_status'] = $validated['approval_required'] ? 'yes' : 'unknown';
+        }
+
+        if (isset($validated['network_approval_status'])) {
+            $validated['network_approval_required'] = ($validated['network_approval_status'] === 'yes');
+        } elseif (isset($validated['network_approval_required'])) {
+            $validated['network_approval_status'] = $validated['network_approval_required'] ? 'yes' : 'unknown';
+        }
 
         // Update CAD computed cache if payout changed
         if (isset($validated['payout_amount']) && $validated['payout_amount'] !== null) {
@@ -749,10 +804,16 @@ class WatchedProductController extends Controller
             'allowed_geos' => ['nullable'],
             'compliance_risk' => ['nullable', Rule::enum(ComplianceRisk::class)],
             'compliance_notes' => ['nullable', 'string', 'max:5000'],
-            'network_approval_required' => ['boolean'],
-            'payouts_by_platform' => ['nullable'],
+            'network_approval_required' => ['nullable', 'boolean'],
+            'approval_required' => ['nullable', 'boolean'],
+            'approval_status' => ['nullable', Rule::enum(ApprovalStatus::class)],
+            'network_approval_status' => ['nullable', Rule::enum(ApprovalStatus::class)],
+            'strategy_phase2' => ['nullable', Rule::enum(Strategy::class)],
+            'strategy_switch_trigger' => ['nullable', 'string', 'max:5000'],
+            'recheck_at' => ['nullable', 'date'],
+            'promotion_criteria' => ['nullable', 'string', 'max:5000'],
+            'payouts_by_platform' => ['nullable', 'array'],
             'negatives' => ['nullable', 'string', 'max:5000'],
-            'approval_required' => ['boolean'],
             'demand_notes' => ['nullable', 'string', 'max:5000'],
             'trends_7d' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'trends_30d' => ['nullable', 'numeric', 'min:0', 'max:100'],

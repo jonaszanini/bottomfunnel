@@ -125,14 +125,51 @@ export default function Show({
     options = {},
 }) {
     const [toastMessage, setToastMessage] = useState('');
-    const [activeTab, setActiveTab] = useState('overview'); // overview, negatives, guidance, history
+
+    const resolveTab = (tab) => {
+        if (tab === 'campaign') return 'guidance';
+        if (['overview', 'negatives', 'guidance', 'history'].includes(tab)) return tab;
+        return 'overview';
+    };
+
+    const [activeTab, setActiveTabState] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            const tabParam = params.get('tab');
+            if (tabParam) return resolveTab(tabParam);
+        }
+        return 'overview';
+    });
+
+    const setActiveTab = (tab) => {
+        const resolved = resolveTab(tab);
+        setActiveTabState(resolved);
+        if (typeof window !== 'undefined') {
+            const url = new URL(window.location.href);
+            url.searchParams.set('tab', resolved);
+            window.history.replaceState({}, '', url.toString());
+        }
+    };
+
+    React.useEffect(() => {
+        const handlePopState = () => {
+            if (typeof window !== 'undefined') {
+                const params = new URLSearchParams(window.location.search);
+                const tabParam = params.get('tab');
+                if (tabParam) setActiveTabState(resolveTab(tabParam));
+            }
+        };
+        window.addEventListener('popstate', handlePopState);
+        return () => window.removeEventListener('popstate', handlePopState);
+    }, []);
+
     const [selectedSourceFilter, setSelectedSourceFilter] = useState('all');
     const [isAddingNegative, setIsAddingNegative] = useState(false);
     const [isGeneratingCampaign, setIsGeneratingCampaign] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
     const [showPlatformInfo, setShowPlatformInfo] = useState(false);
 
-    // Campaign creation modal state
+    // Campaign creation modal state (direct Google Ads API modal)
     const [showCampaignModal, setShowCampaignModal] = useState(false);
 
     const generatedNegatives = useMemo(() => {
@@ -140,6 +177,32 @@ export default function Show({
             .filter((kw) => kw.enabled !== false)
             .map((kw) => kw.term);
     }, [negative_keywords]);
+
+    const createCampaignUrl = useMemo(() => {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const geoStr = (Array.isArray(product.allowed_geos) && product.allowed_geos.length > 0)
+            ? product.allowed_geos.join('-')
+            : (Array.isArray(product.geos) && product.geos.length > 0 ? product.geos.join('-') : 'US');
+        const strategyStr = product.strategy || 'bof_direct';
+        const campaignName = `${product.name} - ${geoStr} - ${strategyStr} - ${todayStr}`;
+        const enabledNegatives = (negative_keywords || [])
+            .filter((kw) => kw.enabled !== false)
+            .map((kw) => kw.term)
+            .join('\n');
+        const geosParam = (Array.isArray(product.allowed_geos) && product.allowed_geos.length > 0)
+            ? product.allowed_geos.join(',')
+            : (Array.isArray(product.geos) && product.geos.length > 0 ? product.geos.join(',') : '');
+
+        const params = new URLSearchParams({
+            name: campaignName,
+            watched_product_id: String(product.id),
+            strategy: strategyStr,
+            geos: geosParam,
+            negatives: enabledNegatives,
+        });
+
+        return `/tracks/create?${params.toString()}`;
+    }, [product, negative_keywords]);
 
     const handleOpenCreateCampaign = () => {
         setShowCampaignModal(true);
@@ -182,8 +245,14 @@ export default function Show({
         affiliate_link: product.affiliate_link || '',
         notes: product.notes || '',
         approval_required: Boolean(product.approval_required),
+        approval_status: product.approval_status || (product.approval_required ? 'yes' : 'unknown'),
+        network_approval_status: product.network_approval_status || (product.network_approval_required ? 'yes' : 'unknown'),
+        strategy_phase2: product.strategy_phase2 || '',
+        strategy_switch_trigger: product.strategy_switch_trigger || '',
+        recheck_at: product.recheck_at || '',
+        promotion_criteria: product.promotion_criteria || '',
         allowed_geos: Array.isArray(product.allowed_geos) ? product.allowed_geos : [],
-        compliance_risk: product.compliance_risk || 'low',
+        compliance_risk: product.compliance_risk || 'not_assessed',
         compliance_notes: product.compliance_notes || '',
         network_approval_required: Boolean(product.network_approval_required),
         payouts_by_platform: Array.isArray(product.payouts_by_platform) ? product.payouts_by_platform : [],
@@ -402,16 +471,24 @@ export default function Show({
                 </div>
 
                 <div className="flex items-center gap-2">
-                    <button
-                        type="button"
-                        onClick={handleOpenCreateCampaign}
+                    <Link
+                        href={createCampaignUrl}
                         className="px-3 py-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-xs font-semibold text-sky-600 dark:text-sky-400 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                        title="Create a Google Ads Search campaign for this product"
+                        title="Create Campaign in Track form pre-filled with name, targeting, and negatives"
                     >
                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <path d="M12 5v14M5 12h14" />
                         </svg>
                         <span>Create Campaign</span>
+                    </Link>
+
+                    <button
+                        type="button"
+                        onClick={handleOpenCreateCampaign}
+                        className="px-2.5 py-1.5 rounded-lg border border-theme bg-theme-surface hover:bg-theme-subtle text-xs font-medium text-theme-secondary hover:text-theme-primary transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                        title="Direct Google Ads API Campaign modal"
+                    >
+                        <span>API Modal</span>
                     </button>
 
                     <Link

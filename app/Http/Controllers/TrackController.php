@@ -66,8 +66,13 @@ class TrackController extends Controller
             'default_account_id' => $defaultAccount?->id,
             'watched_products' => $this->watchedProductsList(),
             'selected_watched_product_id' => $watchedProductId ? (int) $watchedProductId : null,
+            'watched_product_id' => $watchedProductId ? (string) $watchedProductId : null,
             'pregenerated_secret' => $pregeneratedSecret,
             'postback_base_url' => url('/hooks'),
+            'initial_name' => (string) (request()->query('initial_name') ?? request()->query('name') ?? ''),
+            'initial_strategy' => (string) (request()->query('initial_strategy') ?? request()->query('strategy') ?? ''),
+            'initial_geos' => (string) (request()->query('initial_geos') ?? request()->query('geos') ?? ''),
+            'initial_negatives' => (string) (request()->query('initial_negatives') ?? request()->query('negatives') ?? ''),
             ...Options::forForms(),
         ]);
     }

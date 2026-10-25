@@ -38,6 +38,27 @@ export function getScoreHsl(score) {
     };
 }
 
+export function getComplianceRiskBadge(risk, label) {
+    const r = (risk || 'not_assessed').toLowerCase();
+    let style = 'bg-slate-500/15 text-slate-500 dark:text-slate-400 border-slate-500/30';
+    if (r === 'low') {
+        style = 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30';
+    } else if (r === 'medium') {
+        style = 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30';
+    } else if (r === 'high' || r === 'restricted') {
+        style = 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30';
+    }
+    const displayLabel = label || (r === 'not_assessed' ? 'Not Assessed' : (r.charAt(0).toUpperCase() + r.slice(1)));
+    return (
+        <span
+            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${style}`}
+            title={`Google Ads Compliance: ${displayLabel}`}
+        >
+            {displayLabel}
+        </span>
+    );
+}
+
 export default function Index({ products, filters, metrics, options }) {
     const [search, setSearch] = useState(filters.search || '');
     const [selectedStatus, setSelectedStatus] = useState(filters.status || 'all');
@@ -45,6 +66,9 @@ export default function Index({ products, filters, metrics, options }) {
     const [selectedBrandBidding, setSelectedBrandBidding] = useState(filters.brand_bidding || 'all');
     const [selectedTrueBof, setSelectedTrueBof] = useState(filters.true_bof || 'all');
     const [selectedPlatform, setSelectedPlatform] = useState(filters.platform || 'all');
+    const [selectedRecheckOverdue, setSelectedRecheckOverdue] = useState(
+        filters.recheck_overdue === 'true' || filters.recheck_overdue === true || filters.recheck_overdue === '1'
+    );
 
     // Slide-over drawer / modal state
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -118,6 +142,10 @@ export default function Index({ products, filters, metrics, options }) {
             } else if (sortConfig.key === 'last_refreshed_at') {
                 const aTime = a.last_refreshed_at ? new Date(a.last_refreshed_at).getTime() : 0;
                 const bTime = b.last_refreshed_at ? new Date(b.last_refreshed_at).getTime() : 0;
+                return sortConfig.direction === 'asc' ? aTime - bTime : bTime - aTime;
+            } else if (sortConfig.key === 'recheck_at') {
+                const aTime = a.recheck_at ? new Date(a.recheck_at).getTime() : 0;
+                const bTime = b.recheck_at ? new Date(b.recheck_at).getTime() : 0;
                 return sortConfig.direction === 'asc' ? aTime - bTime : bTime - aTime;
             } else if (sortConfig.key === 'status') {
                 const priority = { test: 1, watch: 2, rejected: 3 };
@@ -207,6 +235,10 @@ export default function Index({ products, filters, metrics, options }) {
         esteira: false,
         restricted_category: false,
         strategy: 'bof_direct',
+        strategy_phase2: '',
+        strategy_switch_trigger: '',
+        recheck_at: '',
+        promotion_criteria: '',
         platforms: '',
         payout_amount: '',
         payout_currency: 'USD',
@@ -222,8 +254,10 @@ export default function Index({ products, filters, metrics, options }) {
         bof_homonym: false,
         geos: 'US, CA',
         allowed_geos: [],
-        compliance_risk: 'low',
+        compliance_risk: 'not_assessed',
         compliance_notes: '',
+        approval_status: 'unknown',
+        network_approval_status: 'unknown',
         network_approval_required: false,
         payouts_by_platform: [],
         negatives: '',
@@ -272,6 +306,10 @@ export default function Index({ products, filters, metrics, options }) {
             esteira: false,
             restricted_category: false,
             strategy: 'bof_direct',
+            strategy_phase2: '',
+            strategy_switch_trigger: '',
+            recheck_at: '',
+            promotion_criteria: '',
             platforms: '',
             payout_amount: '',
             payout_currency: 'USD',
@@ -287,8 +325,10 @@ export default function Index({ products, filters, metrics, options }) {
             bof_homonym: false,
             geos: 'US, CA',
             allowed_geos: [],
-            compliance_risk: 'low',
+            compliance_risk: 'not_assessed',
             compliance_notes: '',
+            approval_status: 'unknown',
+            network_approval_status: 'unknown',
             network_approval_required: false,
             payouts_by_platform: [],
             negatives: '',
@@ -312,6 +352,10 @@ export default function Index({ products, filters, metrics, options }) {
             esteira: Boolean(product.esteira),
             restricted_category: Boolean(product.restricted_category),
             strategy: product.strategy || 'bof_direct',
+            strategy_phase2: product.strategy_phase2 || '',
+            strategy_switch_trigger: product.strategy_switch_trigger || '',
+            recheck_at: product.recheck_at || '',
+            promotion_criteria: product.promotion_criteria || '',
             platforms: Array.isArray(product.platforms) ? product.platforms.join(', ') : (product.platforms || ''),
             payout_amount: product.payout_amount !== null && product.payout_amount !== undefined ? product.payout_amount : (product.payout_cad || ''),
             payout_currency: product.payout_currency || 'USD',
@@ -327,8 +371,10 @@ export default function Index({ products, filters, metrics, options }) {
             bof_homonym: Boolean(product.bof_homonym),
             geos: Array.isArray(product.geos) ? product.geos.join(', ') : (product.geos || ''),
             allowed_geos: Array.isArray(product.allowed_geos) ? product.allowed_geos : [],
-            compliance_risk: product.compliance_risk || 'low',
+            compliance_risk: product.compliance_risk || 'not_assessed',
             compliance_notes: product.compliance_notes || '',
+            approval_status: product.approval_status || (product.approval_required ? 'yes' : 'unknown'),
+            network_approval_status: product.network_approval_status || (product.network_approval_required ? 'yes' : 'unknown'),
             network_approval_required: Boolean(product.network_approval_required),
             payouts_by_platform: Array.isArray(product.payouts_by_platform) ? product.payouts_by_platform : [],
             negatives: product.negatives || '',
@@ -403,6 +449,9 @@ export default function Index({ products, filters, metrics, options }) {
             brand_bidding: newFilters.brand_bidding !== undefined ? newFilters.brand_bidding : selectedBrandBidding,
             true_bof: newFilters.true_bof !== undefined ? newFilters.true_bof : selectedTrueBof,
             platform: newFilters.platform !== undefined ? newFilters.platform : selectedPlatform,
+            recheck_overdue: newFilters.recheck_overdue !== undefined
+                ? (newFilters.recheck_overdue ? 'true' : undefined)
+                : (selectedRecheckOverdue ? 'true' : undefined),
         };
 
         const cleaned = {};
@@ -431,6 +480,7 @@ export default function Index({ products, filters, metrics, options }) {
         setSelectedBrandBidding('all');
         setSelectedTrueBof('all');
         setSelectedPlatform('all');
+        setSelectedRecheckOverdue(false);
 
         router.get('/watching-products', {}, {
             preserveState: true,
@@ -445,7 +495,8 @@ export default function Index({ products, filters, metrics, options }) {
         selectedStrategy !== 'all' ||
         selectedBrandBidding !== 'all' ||
         selectedTrueBof !== 'all' ||
-        selectedPlatform !== 'all'
+        selectedPlatform !== 'all' ||
+        selectedRecheckOverdue
     );
 
     const formatCad = (amount) => {
@@ -626,7 +677,7 @@ export default function Index({ products, filters, metrics, options }) {
             </div>
 
             {/* Portfolio Split & SerpApi Header Cards */}
-            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                 {/* Nutra / E-com Portfolio Split against 60/40 Target */}
                 <div className="rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs">
                     <div className="flex justify-between items-center text-xs font-semibold">
@@ -692,6 +743,31 @@ export default function Index({ products, filters, metrics, options }) {
                 >
                     <div className="text-xs font-medium text-amber-600 dark:text-amber-400">Under Watch</div>
                     <div className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{metrics.watch}</div>
+                </div>
+
+                {/* Overdue Recheck metric */}
+                <div
+                    onClick={() => {
+                        const next = !selectedRecheckOverdue;
+                        setSelectedRecheckOverdue(next);
+                        applyFilters({ recheck_overdue: next });
+                    }}
+                    className={`cursor-pointer rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs transition-all hover:border-theme-hover ${
+                        selectedRecheckOverdue ? 'ring-2 ring-rose-500 border-rose-500' : ''
+                    } ${metrics.overdue_recheck_count > 0 ? 'bg-rose-500/5' : ''}`}
+                >
+                    <div className="flex justify-between items-center text-xs font-semibold">
+                        <span className="text-theme-secondary">Recheck Overdue</span>
+                        {metrics.overdue_recheck_count > 0 && (
+                            <span className="flex h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                        )}
+                    </div>
+                    <div className={`mt-1 text-2xl font-bold ${metrics.overdue_recheck_count > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-theme-primary'}`}>
+                        {metrics.overdue_recheck_count ?? 0}
+                    </div>
+                    <div className="text-[11px] text-theme-muted mt-1">
+                        {metrics.overdue_recheck_count > 0 ? 'Cadence review due' : 'All reviews current'}
+                    </div>
                 </div>
             </div>
 
@@ -801,18 +877,37 @@ export default function Index({ products, filters, metrics, options }) {
                     </div>
                 </div>
 
-                {hasActiveFilters && (
-                    <div className="mt-3 flex items-center justify-between border-t border-theme pt-3 text-xs text-theme-muted">
-                        <span>Active filters applied</span>
-                        <button
-                            type="button"
-                            onClick={handleResetFilters}
-                            className="font-medium text-theme-accent hover:underline cursor-pointer"
-                        >
-                            Reset filters
-                        </button>
-                    </div>
-                )}
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-theme pt-3">
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold text-theme-secondary hover:text-theme-primary select-none px-2.5 py-1 rounded-md border border-theme bg-theme-subtle/40 hover:bg-theme-subtle">
+                        <input
+                            type="checkbox"
+                            checked={selectedRecheckOverdue}
+                            onChange={(e) => {
+                                const val = e.target.checked;
+                                setSelectedRecheckOverdue(val);
+                                applyFilters({ recheck_overdue: val });
+                            }}
+                            className="rounded border-theme text-rose-600 focus:ring-rose-500"
+                        />
+                        <span className={selectedRecheckOverdue ? 'text-rose-600 dark:text-rose-400 font-bold' : ''}>
+                            Recheck Overdue Only ({metrics.overdue_recheck_count ?? 0})
+                        </span>
+                    </label>
+
+                    {hasActiveFilters && (
+                        <div className="flex items-center gap-2 text-xs text-theme-muted">
+                            <span>Active filters applied</span>
+                            <span>•</span>
+                            <button
+                                type="button"
+                                onClick={handleResetFilters}
+                                className="font-medium text-theme-accent hover:underline cursor-pointer"
+                            >
+                                Reset filters
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
 
             {/* Products Table */}
@@ -854,6 +949,7 @@ export default function Index({ products, filters, metrics, options }) {
                                         {renderSortTh('Net Payout (CAD)', 'payout_cad', 'w-36 text-right')}
                                         {renderSortTh('Momentum', 'momentum', 'w-36')}
                                         {renderSortTh('Compliance', 'compliance', 'w-44 text-center')}
+                                        {renderSortTh('Recheck', 'recheck_at', 'w-28 text-center')}
                                         {renderSortTh('Status', 'status', 'w-24 text-center')}
                                         <th scope="col" className="px-3 py-3 text-right select-none w-28">Actions</th>
                                     </tr>
@@ -865,7 +961,11 @@ export default function Index({ products, filters, metrics, options }) {
                                         return (
                                             <tr
                                                 key={product.id}
-                                                className="hover:bg-theme-subtle/30 transition-colors"
+                                                className={`transition-colors ${
+                                                    product.is_recheck_overdue
+                                                        ? 'border-l-4 border-l-rose-500 bg-rose-500/5 hover:bg-rose-500/10'
+                                                        : 'hover:bg-theme-subtle/30'
+                                                }`}
                                             >
                                                 {/* Rank */}
                                                 <td className="px-3 py-3 text-center whitespace-nowrap font-bold text-xs text-theme-secondary">
@@ -900,7 +1000,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                     </div>
                                                 </td>
 
-                                                {/* Product Name & Typographic Subtitle (Replaces bulky strategy/kind/esteira/approval badges) */}
+                                                {/* Product Name & Typographic Subtitle */}
                                                 <td className="px-3 py-3 font-medium text-theme-primary">
                                                     <div className="flex flex-col">
                                                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -917,14 +1017,6 @@ export default function Index({ products, filters, metrics, options }) {
                                                                 >
                                                                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                                                     Testing{product.tracks_count > 1 ? ` (${product.tracks_count})` : ''}
-                                                                </span>
-                                                            )}
-                                                            {product.compliance_risk === 'restricted' && (
-                                                                <span
-                                                                    className="inline-flex items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400"
-                                                                    title="Restricted by advertising policies"
-                                                                >
-                                                                    Restricted
                                                                 </span>
                                                             )}
                                                             {product.sales_page_url && (
@@ -946,7 +1038,17 @@ export default function Index({ products, filters, metrics, options }) {
                                                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-theme-muted">
                                                             <span>{product.page_type || 'General'}</span>
                                                             <span>•</span>
-                                                            <span>{product.strategy_label || 'BoF Direct'}</span>
+                                                            <span className="inline-flex items-center gap-1">
+                                                                <span>{product.strategy_label || 'BoF Direct'}</span>
+                                                                {product.strategy_phase2 && (
+                                                                    <span
+                                                                        className="inline-flex items-center rounded bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 text-[10px] font-bold cursor-help"
+                                                                        title={`Phase 1: ${product.strategy_label || 'BoF Direct'} → Phase 2: ${product.strategy_phase2_label || product.strategy_phase2}${product.strategy_switch_trigger ? `\nSwitch Trigger: ${product.strategy_switch_trigger}` : ''}`}
+                                                                    >
+                                                                        P1 &rarr; P2
+                                                                    </span>
+                                                                )}
+                                                            </span>
                                                             <span>•</span>
                                                             <span>{product.product_kind_label || 'Nutra'}</span>
                                                             {product.esteira && (
@@ -955,12 +1057,17 @@ export default function Index({ products, filters, metrics, options }) {
                                                                     <span className="text-indigo-600 dark:text-indigo-400 font-medium">Esteira</span>
                                                                 </>
                                                             )}
-                                                            {product.approval_required && (
+                                                            {product.approval_status === 'yes' ? (
                                                                 <>
                                                                     <span>•</span>
                                                                     <span className="text-amber-600 dark:text-amber-400 font-medium">Approval req</span>
                                                                 </>
-                                                            )}
+                                                            ) : product.approval_status === 'unknown' ? (
+                                                                <>
+                                                                    <span>•</span>
+                                                                    <span className="text-theme-muted font-medium">Approval unknown</span>
+                                                                </>
+                                                            ) : null}
                                                         </div>
                                                         {Array.isArray(product.allowed_geos) && product.allowed_geos.length > 0 && (
                                                             <div className="mt-1 flex items-center gap-1 flex-wrap">
@@ -1008,8 +1115,18 @@ export default function Index({ products, filters, metrics, options }) {
 
                                                 {/* Net Payout (CAD) */}
                                                 <td className="px-3 py-3 whitespace-nowrap text-right text-xs">
-                                                    <div className="font-bold text-sm text-theme-primary">
-                                                        {formatCad(product.payout_cad)}
+                                                    <div className="flex items-center justify-end gap-1.5">
+                                                        <div className="font-bold text-sm text-theme-primary">
+                                                            {formatCad(product.payout_cad)}
+                                                        </div>
+                                                        {Array.isArray(product.payouts_by_platform) && product.payouts_by_platform.length > 1 && (
+                                                            <span
+                                                                className="inline-flex items-center rounded bg-theme-subtle border border-theme px-1.5 py-0.2 text-[10px] font-medium text-theme-muted cursor-help"
+                                                                title={`Payout Tiers:\n${product.payouts_by_platform.map((tier) => `• ${tier.geo_tier || 'Global'}: ${tier.amount ?? tier.payout ?? 0} ${tier.currency || 'USD'}${tier.platform ? ` (${tier.platform})` : ''}`).join('\n')}`}
+                                                            >
+                                                                +{product.payouts_by_platform.length - 1} tiers
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     {product.payout_currency && product.payout_currency !== 'CAD' && product.payout_formatted && (
                                                         <div className="text-[11px] text-theme-muted">
@@ -1018,14 +1135,45 @@ export default function Index({ products, filters, metrics, options }) {
                                                     )}
                                                 </td>
 
-                                                {/* Momentum Indicator (TrendsTrend + Recent Score Delta) */}
+                                                {/* Momentum Indicator */}
                                                 <td className="px-3 py-3 whitespace-nowrap text-xs">
                                                     {getMomentumIndicator(product)}
                                                 </td>
 
-                                                {/* Grouped Compliance Pill (TrueBoF + Brand Bidding) */}
+                                                {/* Grouped Compliance Pill (TrueBoF + Brand Bidding + Google Ads Risk) */}
                                                 <td className="px-3 py-3 whitespace-nowrap text-center text-xs">
-                                                    {getCompliancePill(product)}
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        {getCompliancePill(product)}
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="text-[10px] text-theme-muted">Ads:</span>
+                                                            {getComplianceRiskBadge(product.compliance_risk, product.compliance_risk_label)}
+                                                        </div>
+                                                    </div>
+                                                </td>
+
+                                                {/* Recheck Date */}
+                                                <td className="px-3 py-3 whitespace-nowrap text-center text-xs">
+                                                    {product.recheck_at ? (
+                                                        <div className="flex flex-col items-center">
+                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                                                                product.is_recheck_overdue
+                                                                    ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold animate-pulse'
+                                                                    : 'bg-theme-subtle text-theme-secondary border-theme'
+                                                            }`}>
+                                                                {product.is_recheck_overdue && (
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                                                )}
+                                                                {product.recheck_at_formatted || product.recheck_at}
+                                                            </span>
+                                                            {product.is_recheck_overdue && (
+                                                                <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold mt-0.5">
+                                                                    Overdue
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-theme-muted text-xs">—</span>
+                                                    )}
                                                 </td>
 
                                                 {/* Quick Status Select */}
@@ -1054,18 +1202,35 @@ export default function Index({ products, filters, metrics, options }) {
                                                         </Link>
 
                                                         {product.sales_page_url ? (
-                                                            <Link
-                                                                href={`/pages?tab=cloner&clone_url=${encodeURIComponent(product.sales_page_url)}&affiliate_link=${encodeURIComponent(product.affiliate_link || '')}&product_name=${encodeURIComponent(product.name)}`}
-                                                                className="p-1 rounded text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                                                                title="Clone Sales Page"
-                                                            >
-                                                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                                                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                                                    <path d="M3 3v5h5" />
-                                                                    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                                                                    <path d="M16 21h5v-5" />
-                                                                </svg>
-                                                            </Link>
+                                                            product.affiliate_link ? (
+                                                                <Link
+                                                                    href={`/pages?tab=cloner&clone_url=${encodeURIComponent(product.sales_page_url)}&affiliate_link=${encodeURIComponent(product.affiliate_link)}&product_name=${encodeURIComponent(product.name)}`}
+                                                                    className="p-1 rounded text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                                                                    title="Clone Sales Page"
+                                                                >
+                                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                                        <path d="M3 3v5h5" />
+                                                                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                                                        <path d="M16 21h5v-5" />
+                                                                    </svg>
+                                                                </Link>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    disabled
+                                                                    className="p-1 rounded text-theme-muted/40 cursor-not-allowed opacity-50"
+                                                                    title="Add an affiliate link first"
+                                                                    aria-label="Add an affiliate link first"
+                                                                >
+                                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                                        <path d="M3 3v5h5" />
+                                                                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                                                        <path d="M16 21h5v-5" />
+                                                                    </svg>
+                                                                </button>
+                                                            )
                                                         ) : null}
 
                                                         <button
@@ -1105,7 +1270,14 @@ export default function Index({ products, filters, metrics, options }) {
                             {sortedProducts.map((product) => {
                                 const scoreHsl = getScoreHsl(product.score);
                                 return (
-                                    <div key={product.id} className="p-4 space-y-3 hover:bg-theme-subtle/20 transition-colors">
+                                    <div
+                                        key={product.id}
+                                        className={`p-4 space-y-3 transition-colors ${
+                                            product.is_recheck_overdue
+                                                ? 'border-l-4 border-l-rose-500 bg-rose-500/5'
+                                                : 'hover:bg-theme-subtle/20'
+                                        }`}
+                                    >
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -1151,7 +1323,17 @@ export default function Index({ products, filters, metrics, options }) {
                                                     <span>•</span>
                                                     <span>{product.page_type || 'General'}</span>
                                                     <span>•</span>
-                                                    <span>{product.strategy_label || 'BoF Direct'}</span>
+                                                    <span className="inline-flex items-center gap-1">
+                                                        <span>{product.strategy_label || 'BoF Direct'}</span>
+                                                        {product.strategy_phase2 && (
+                                                            <span
+                                                                className="inline-flex items-center rounded bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border border-indigo-500/30 px-1.5 py-0.2 text-[10px] font-bold"
+                                                                title={`Phase 2: ${product.strategy_phase2_label || product.strategy_phase2}`}
+                                                            >
+                                                                P1 &rarr; P2
+                                                            </span>
+                                                        )}
+                                                    </span>
                                                     <span>•</span>
                                                     <span>{product.product_kind_label || 'Nutra'}</span>
                                                     {product.esteira && (
@@ -1178,7 +1360,14 @@ export default function Index({ products, filters, metrics, options }) {
                                         <div className="grid grid-cols-2 gap-2 text-xs bg-theme-subtle/30 p-2.5 rounded-lg border border-theme items-center">
                                             <div>
                                                 <span className="text-[10px] text-theme-muted uppercase tracking-wider block font-semibold">Net Payout (CAD)</span>
-                                                <span className="font-bold text-sm text-theme-primary">{formatCad(product.payout_cad)}</span>
+                                                <div className="flex items-center gap-1">
+                                                    <span className="font-bold text-sm text-theme-primary">{formatCad(product.payout_cad)}</span>
+                                                    {Array.isArray(product.payouts_by_platform) && product.payouts_by_platform.length > 1 && (
+                                                        <span className="text-[10px] font-semibold text-theme-muted">
+                                                            +{product.payouts_by_platform.length - 1} tiers
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 {product.payout_currency && product.payout_currency !== 'CAD' && product.payout_formatted && (
                                                     <span className="text-[10px] text-theme-muted block">{product.payout_formatted}</span>
                                                 )}
@@ -1189,10 +1378,20 @@ export default function Index({ products, filters, metrics, options }) {
                                             </div>
                                         </div>
 
-                                        {/* Footer: Compliance Pill, Status Selector, and Actions */}
-                                        <div className="flex items-center justify-between gap-2 pt-1">
-                                            <div className="flex items-center gap-2">
+                                        {/* Footer: Compliance Pill, Recheck, Status Selector, and Actions */}
+                                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                            <div className="flex flex-wrap items-center gap-1.5">
                                                 {getCompliancePill(product)}
+                                                {getComplianceRiskBadge(product.compliance_risk, product.compliance_risk_label)}
+                                                {product.recheck_at && (
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                                                        product.is_recheck_overdue
+                                                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold'
+                                                            : 'bg-theme-subtle text-theme-secondary border-theme'
+                                                    }`}>
+                                                        {product.is_recheck_overdue ? 'Recheck Overdue' : `Recheck: ${product.recheck_at_formatted || product.recheck_at}`}
+                                                    </span>
+                                                )}
                                             </div>
 
                                             <div className="flex items-center gap-2">
@@ -1605,15 +1804,6 @@ export default function Index({ products, filters, metrics, options }) {
                                             onChange={(e) => form.setData('restricted_category', e.target.checked)}
                                         />
                                         <span>Restricted Category</span>
-                                    </label>
-
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={form.data.approval_required}
-                                            onChange={(e) => form.setData('approval_required', e.target.checked)}
-                                        />
-                                        <span>Approval Required</span>
                                     </label>
                                 </div>
 

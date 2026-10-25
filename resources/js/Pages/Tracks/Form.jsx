@@ -12,6 +12,10 @@ export default function Form({
     selected_watched_product_id = null,
     pregenerated_secret = '',
     postback_base_url = '',
+    initial_name = '',
+    initial_strategy = '',
+    initial_geos = '',
+    initial_negatives = '',
     pageTypes,
     strategies,
     platforms,
@@ -21,12 +25,12 @@ export default function Form({
     const postbackSecret = track?.postback_secret || pregenerated_secret || '';
 
     const form = useForm({
-        product_name: track?.product_name || '',
+        product_name: track?.product_name || initial_name || '',
         watched_product_id: track?.watched_product_id ?? selected_watched_product_id ?? '',
         platform: track?.platform || 'clickbank',
         affiliate_url: track?.affiliate_url || '',
         page_type: track?.page_type || 'review_robust',
-        strategy: track?.strategy || 'target_cpa',
+        strategy: track?.strategy || initial_strategy || 'target_cpa',
         language: track?.language || '',
         typical_commission_cad: track?.typical_commission_cad || '',
         google_ads_account_id: defaultAccId,
@@ -39,6 +43,7 @@ export default function Form({
     const [actions, setActions] = useState([]);
     const [campaigns, setCampaigns] = useState([]);
     const [loadError, setLoadError] = useState('');
+    const [showPrefillInfo, setShowPrefillInfo] = useState(false);
 
     useEffect(() => {
         if (!track && selected_watched_product_id) {
@@ -133,6 +138,28 @@ export default function Form({
             >
                 <h1 className="text-2xl font-semibold text-theme-primary">{track ? 'Edit Track' : 'New Track'}</h1>
                 <p className="text-sm text-theme-secondary">Strategy is a label for filtering. Flow Hub does not change bids. Every amount is CAD$.</p>
+                {(initial_name || initial_geos || initial_negatives) && (
+                    <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-600 dark:text-sky-400 flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between">
+                            <span className="font-semibold">Pre-filled from Watched Product campaign flow</span>
+                            <button
+                                type="button"
+                                onClick={() => setShowPrefillInfo(!showPrefillInfo)}
+                                className="inline-flex items-center justify-center w-5 h-5 rounded-full border border-sky-500/40 hover:bg-sky-500/20 text-sky-500 font-bold text-xs cursor-pointer transition-colors"
+                                title="Click for details"
+                            >
+                                ⓘ
+                            </button>
+                        </div>
+                        {showPrefillInfo && (
+                            <div className="mt-1 pt-1.5 border-t border-sky-500/20 text-[11px] space-y-1 font-mono text-slate-700 dark:text-slate-300">
+                                {initial_geos && <div>Target GEOs: {initial_geos}</div>}
+                                {initial_strategy && <div>Strategy: {initial_strategy}</div>}
+                                {initial_negatives && <div>Negatives: {initial_negatives.split('\n').filter(Boolean).length} enabled keyword(s) ready</div>}
+                            </div>
+                        )}
+                    </div>
+                )}
                 {accounts.length === 0 && (
                     <p className="rounded-md border border-[var(--warningBorderColor)] bg-[var(--warningBackgroundColor)] px-3 py-2 text-sm text-[var(--warningColor)]">
                         Link a Google Ads account before creating a Track. <Link className="underline font-medium" href="/google-ads">Open Google Ads</Link>
