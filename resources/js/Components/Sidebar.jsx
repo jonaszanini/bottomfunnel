@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, router } from '@inertiajs/react';
 import ThemeToggle from './ThemeToggle';
 import themeManager from '../theme-manager';
@@ -102,14 +102,40 @@ const navItems = [
         ),
     },
     {
-        name: 'Google Accounts',
-        href: '/google-login-accounts',
+        name: 'Credentials Vault',
         icon: (className) => (
             <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
             </svg>
         ),
+        children: [
+            {
+                name: 'Google Accounts',
+                href: '/google-login-accounts',
+                icon: (className) => (
+                    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <circle cx="12" cy="12" r="10" />
+                        <circle cx="12" cy="12" r="4" />
+                        <line x1="21.17" y1="8" x2="12" y2="8" />
+                        <line x1="3.95" y1="6.06" x2="8.54" y2="14" />
+                        <line x1="10.88" y1="21.94" x2="15.46" y2="14" />
+                    </svg>
+                ),
+            },
+            {
+                name: 'Affiliate Accounts',
+                href: '/affiliate-network-accounts',
+                icon: (className) => (
+                    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
+                        <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                    </svg>
+                ),
+            },
+        ],
     },
     {
         name: 'IP blocks',
@@ -128,6 +154,19 @@ function SidebarNavContent({ currentUrl, username, isMobile, onClose }) {
     const handleLogout = () => {
         router.post('/logout');
     };
+
+    const [openGroups, setOpenGroups] = useState({
+        'Credentials Vault': true,
+    });
+
+    useEffect(() => {
+        if (
+            currentUrl.startsWith('/google-login-accounts') ||
+            currentUrl.startsWith('/affiliate-network-accounts')
+        ) {
+            setOpenGroups((prev) => ({ ...prev, 'Credentials Vault': true }));
+        }
+    }, [currentUrl]);
 
     return (
         <div className="flex h-full flex-col justify-between overflow-y-auto">
@@ -174,7 +213,95 @@ function SidebarNavContent({ currentUrl, username, isMobile, onClose }) {
                         Menu
                     </div>
                     {navItems.map((item) => {
-                        const isActive = currentUrl === item.href || (item.href !== '/' && currentUrl.startsWith(item.href));
+                        if (item.children) {
+                            const isAnyChildActive = item.children.some(
+                                (c) => currentUrl === c.href || (c.href !== '/' && currentUrl.startsWith(c.href))
+                            );
+                            const isOpen = openGroups[item.name] ?? false;
+
+                            return (
+                                <div key={item.name} className="space-y-0.5">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            setOpenGroups((prev) => ({
+                                                ...prev,
+                                                [item.name]: !isOpen,
+                                            }))
+                                        }
+                                        className={`w-full group relative flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accentFocusRing)] ${
+                                            isAnyChildActive
+                                                ? 'bg-[var(--accentSubtleColor)]/40 text-[var(--accentColor)] font-semibold shadow-2xs'
+                                                : 'text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle'
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-3 truncate">
+                                            {item.icon(
+                                                `w-5 h-5 shrink-0 transition-colors ${
+                                                    isAnyChildActive
+                                                        ? 'text-[var(--accentColor)]'
+                                                        : 'text-theme-muted group-hover:text-theme-primary'
+                                                }`
+                                            )}
+                                            <span className="truncate">{item.name}</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <svg
+                                                className={`w-4 h-4 text-theme-muted transition-transform duration-200 ${
+                                                    isOpen ? 'rotate-180' : ''
+                                                }`}
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                aria-hidden="true"
+                                            >
+                                                <polyline points="6 9 12 15 18 9" />
+                                            </svg>
+                                        </div>
+                                    </button>
+
+                                    {isOpen && (
+                                        <div className="pl-4 ml-4 border-l border-theme space-y-1 py-1">
+                                            {item.children.map((child) => {
+                                                const isChildActive =
+                                                    currentUrl === child.href ||
+                                                    (child.href !== '/' && currentUrl.startsWith(child.href));
+                                                return (
+                                                    <Link
+                                                        key={child.href}
+                                                        href={child.href}
+                                                        aria-current={isChildActive ? 'page' : undefined}
+                                                        onClick={() => {
+                                                            if (isMobile && onClose) onClose();
+                                                        }}
+                                                        className={`group relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accentFocusRing)] ${
+                                                            isChildActive
+                                                                ? 'bg-[var(--accentSubtleColor)] text-[var(--accentColor)] font-semibold shadow-2xs'
+                                                                : 'text-theme-secondary hover:text-theme-primary hover:bg-theme-subtle'
+                                                        }`}
+                                                    >
+                                                        {child.icon ? child.icon(
+                                                            `w-3.5 h-3.5 shrink-0 transition-colors ${
+                                                                isChildActive
+                                                                    ? 'text-[var(--accentColor)]'
+                                                                    : 'text-theme-muted group-hover:text-theme-primary'
+                                                            }`
+                                                        ) : null}
+                                                        <span className="truncate">{child.name}</span>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        }
+
+                        const isActive =
+                            currentUrl === item.href || (item.href !== '/' && currentUrl.startsWith(item.href));
                         return (
                             <Link
                                 key={item.href}

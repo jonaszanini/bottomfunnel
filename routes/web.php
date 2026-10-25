@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AffiliateNetworkAccountController;
 use App\Http\Controllers\CopyStudioController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GoogleAdsController;
@@ -96,11 +97,16 @@ Route::middleware('auth')->group(function () {
     Route::get('/google-ads/accounts/{account}/options', [GoogleAdsController::class, 'options'])->name('google.options');
     Route::get('/google-ads/accounts/{account}/conversion-actions/{action}/tag', [GoogleAdsController::class, 'conversionTag'])->name('google.conversion-actions.tag');
 
-    // Google Accounts inventory (manual credentials + encrypted storage)
+    // Credentials Vault: Google Accounts & Affiliate Accounts
     Route::resource('google-login-accounts', GoogleLoginAccountController::class)->except(['create', 'show', 'edit']);
     Route::post('/google-login-accounts/{googleLoginAccount}/reveal-password', [GoogleLoginAccountController::class, 'revealPassword'])
         ->middleware('throttle:30,1')
         ->name('google-login-accounts.reveal-password');
+
+    Route::resource('affiliate-network-accounts', AffiliateNetworkAccountController::class)->except(['create', 'show', 'edit']);
+    Route::post('/affiliate-network-accounts/{affiliateNetworkAccount}/reveal-password', [AffiliateNetworkAccountController::class, 'revealPassword'])
+        ->middleware('throttle:30,1')
+        ->name('affiliate-network-accounts.reveal-password');
 
     // Internal & Bot API for Google Ads management
     Route::get('/internal/google-ads/campaigns', [InternalGoogleAdsController::class, 'listCampaigns'])->name('internal.google.campaigns.index');

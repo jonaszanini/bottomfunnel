@@ -265,7 +265,12 @@ export default function Index({ accounts = [], filters = {}, googleAdsAccounts =
             {/* Header Section */}
             <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight text-theme-primary">Google Accounts</h1>
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[var(--accentColor)]">
+                        <span>Credentials Vault</span>
+                        <span>/</span>
+                        <span>Google Accounts</span>
+                    </div>
+                    <h1 className="mt-1 text-2xl font-bold tracking-tight text-theme-primary">Google Accounts</h1>
                     <p className="mt-1 text-sm text-theme-secondary">
                         Manually managed Google Ads login credentials with encrypted password storage and linked campaigns.
                     </p>
