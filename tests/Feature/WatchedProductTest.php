@@ -83,6 +83,26 @@ class WatchedProductTest extends TestCase
             );
     }
 
+    public function test_search_is_partial_case_insensitive_and_combines_with_platform(): void
+    {
+        WatchedProduct::factory()->create(['name' => 'DentaVive', 'platform' => 'ClickBank', 'platforms' => ['ClickBank']]);
+        WatchedProduct::factory()->create(['name' => 'Denta Other', 'platform' => 'BuyGoods', 'platforms' => ['BuyGoods']]);
+        WatchedProduct::factory()->create(['name' => 'SootheSmart', 'platform' => 'ClickBank', 'platforms' => ['ClickBank']]);
+
+        $this->actingAs($this->user)
+            ->get('/watching-products?search=denta')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->has('products', 2));
+
+        $this->actingAs($this->user)
+            ->get('/watching-products?search=denta&platform=ClickBank')
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('products', 1)
+                ->where('products.0.name', 'DentaVive')
+            );
+    }
+
     public function test_search_by_product_name(): void
     {
         WatchedProduct::factory()->create([

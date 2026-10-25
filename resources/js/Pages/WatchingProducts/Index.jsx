@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import Layout, { Field, button, control, quiet } from '../../Components/Layout';
 import { getComponentScoreColor } from './Show';
@@ -467,6 +467,20 @@ export default function Index({ products, filters, metrics, options }) {
             replace: true,
         });
     };
+
+    // Live search: filter as the user types (debounced), not only on Enter.
+    const searchMounted = useRef(false);
+    useEffect(() => {
+        if (!searchMounted.current) {
+            searchMounted.current = true;
+            return undefined;
+        }
+        if ((filters.search || '') === search) {
+            return undefined;
+        }
+        const t = setTimeout(() => applyFilters({ search }), 350);
+        return () => clearTimeout(t);
+    }, [search]);
 
     const handleSearchSubmit = (e) => {
         e.preventDefault();
