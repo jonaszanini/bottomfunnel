@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Models\GoogleAdsAccount;
 use App\Models\User;
+use App\Services\Google\GoogleAdsClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -82,6 +84,70 @@ class GoogleAdsAccountEmailTest extends TestCase
         $this->assertEquals('Primary Brand Account', $account->name);
         $this->assertEquals('advertiser@example.com', $account->email);
         $this->assertEquals('linked', $account->status);
+
+        Http::assertSent(function (Request $request) {
+            return $request->url() === 'https://www.googleapis.com/oauth2/v2/userinfo'
+                && $request->hasHeader('Authorization', 'Bearer mock-oauth-access-token');
+        });
+    }
+
+    public function test_fetch_user_email_sends_authorization_bearer_header_and_returns_email(): void
+    {
+        Http::fake([
+            'https://www.googleapis.com/oauth2/v2/userinfo' => Http::response([
+                'email' => 'direct-test@example.com',
+            ], 200),
+        ]);
+
+        $client = app(GoogleAdsClient::class);
+        $email = $client->fetchUserEmail('fresh-token-abc');
+
+        $this->assertEquals('direct-test@example.com', $email);
+
+        Http::assertSent(function (Request $request) {
+            return $request->url() === 'https://www.googleapis.com/oauth2/v2/userinfo'
+                && $request->hasHeader('Authorization', 'Bearer fresh-token-abc');
+        });
+    }
+
+    public function test_fetch_user_email_logs_warning_and_returns_null_on_401(): void
+    {
+        Http::fake([
+            'https://www.googleapis.com/oauth2/v2/userinfo' => Http::response([
+                'error' => [
+                    'code' => 401,
+                    'message' => 'Request is missing required authentication credential.',
+                    'status' => 'UNAUTHENTICATED',
+                ],
+            ], 401),
+        ]);
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->withArgs(fn (string $message, array $context = []) => str_contains($message, 'Google userinfo call failed')
+                && ($context['status'] ?? null) === 401
+            );
+
+        $client = app(GoogleAdsClient::class);
+        $email = $client->fetchUserEmail('bad-or-missing-token');
+
+        $this->assertNull($email);
+
+        Http::assertSent(function (Request $request) {
+            return $request->url() === 'https://www.googleapis.com/oauth2/v2/userinfo'
+                && $request->hasHeader('Authorization', 'Bearer bad-or-missing-token');
+        });
+    }
+
+    public function test_fetch_user_email_returns_null_without_request_when_token_is_empty(): void
+    {
+        Http::fake();
+
+        $client = app(GoogleAdsClient::class);
+        $email = $client->fetchUserEmail('   ');
+
+        $this->assertNull($email);
+        Http::assertNothingSent();
     }
 
     public function test_linking_an_account_handles_userinfo_failure_gracefully_and_saves_null_email(): void

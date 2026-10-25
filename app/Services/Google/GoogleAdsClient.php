@@ -72,8 +72,17 @@ class GoogleAdsClient
      */
     public function fetchUserEmail(string $accessToken): ?string
     {
+        $token = trim($accessToken);
+        if (str_starts_with($token, 'Bearer ')) {
+            $token = trim(substr($token, 7));
+        }
+
+        if ($token === '') {
+            return null;
+        }
+
         try {
-            $response = Http::withToken($accessToken)
+            $response = Http::withToken($token)
                 ->timeout(10)
                 ->acceptJson()
                 ->get('https://www.googleapis.com/oauth2/v2/userinfo');
