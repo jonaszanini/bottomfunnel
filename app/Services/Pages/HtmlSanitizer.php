@@ -219,17 +219,22 @@ class HtmlSanitizer
             return $dom->saveHTML() ?: $clean;
         }
 
+        $output = '';
+        $head = $dom->getElementsByTagName('head')->item(0);
+        if ($head instanceof DOMElement) {
+            foreach ($head->childNodes as $child) {
+                $output .= $dom->saveHTML($child);
+            }
+        }
+
         $body = $dom->getElementsByTagName('body')->item(0);
         if ($body instanceof DOMElement) {
-            $output = '';
             foreach ($body->childNodes as $child) {
                 $output .= $dom->saveHTML($child);
             }
-
-            return trim($output);
         }
 
-        return $dom->saveHTML() ?: $clean;
+        return trim($output);
     }
 
     /**

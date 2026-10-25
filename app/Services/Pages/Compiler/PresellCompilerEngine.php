@@ -38,6 +38,8 @@ class PresellCompilerEngine
             : '';
 
         $flowhubTrackScript = trim((string) ($variation['flowhubTrackScript'] ?? $variation['trackScript'] ?? $variation['track_script'] ?? ''));
+        $googleGlobalTag = trim((string) ($variation['googleGlobalTag'] ?? $variation['google_global_tag'] ?? $variation['accountGlobalTag'] ?? ''));
+        $googleActionTag = trim((string) ($variation['googleActionTag'] ?? $variation['google_action_tag'] ?? $variation['conversionActionTag'] ?? ''));
 
         // Extract theme tokens
         $theme = $variation['themeConfig'] ?? [];
@@ -143,6 +145,14 @@ HTML;
             } else {
                 $headTracking = $trackingCode;
             }
+        }
+
+        if ($googleGlobalTag !== '') {
+            $headTracking = ($headTracking !== '' ? $headTracking."\n" : '').$googleGlobalTag;
+        }
+
+        if ($googleActionTag !== '') {
+            $headTracking = ($headTracking !== '' ? $headTracking."\n" : '').$googleActionTag;
         }
 
         // Flow Hub first-party TrackScript is appended after sanitization so it remains intact

@@ -571,6 +571,31 @@ class GoogleAdsClientTest extends TestCase
         $this->assertEquals('', $result['event_snippet']);
     }
 
+    public function test_build_global_site_tag_generates_standard_gtag(): void
+    {
+        $client = app(GoogleAdsClient::class);
+
+        $tag = $client->buildGlobalSiteTag('123-456-7890');
+        $this->assertStringContainsString('https://www.googletagmanager.com/gtag/js?id=AW-1234567890', $tag);
+        $this->assertStringContainsString("gtag('config', 'AW-1234567890');", $tag);
+        $this->assertStringContainsString('<!-- Google tag (gtag.js) -->', $tag);
+
+        $empty = $client->buildGlobalSiteTag('');
+        $this->assertEquals('', $empty);
+    }
+
+    public function test_google_ads_account_global_site_tag_helper(): void
+    {
+        $account = new GoogleAdsAccount([
+            'customer_id' => '999-888-7777',
+            'name' => 'Helper Account',
+        ]);
+
+        $tag = $account->globalSiteTag();
+        $this->assertStringContainsString('AW-9998887777', $tag);
+        $this->assertStringContainsString('gtag/js?id=AW-9998887777', $tag);
+    }
+
     private function configureOauth(): void
     {
         config([

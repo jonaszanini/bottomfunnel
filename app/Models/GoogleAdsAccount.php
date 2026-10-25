@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Google\GoogleAdsClient;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -119,5 +120,13 @@ class GoogleAdsAccount extends Model
         if (session()) {
             session(['default_google_ads_account_id' => $this->id]);
         }
+    }
+
+    /**
+     * Build the standard Google tag (gtag.js) HTML snippet for this account.
+     */
+    public function globalSiteTag(): string
+    {
+        return app(GoogleAdsClient::class)->buildGlobalSiteTag((string) $this->customer_id);
     }
 }

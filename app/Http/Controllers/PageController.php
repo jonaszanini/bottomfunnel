@@ -121,6 +121,8 @@ class PageController extends Controller
             'language' => ['required', 'string', 'max:10'],
             'affiliateUrl' => ['required', 'url', 'max:2048'],
             'trackingCode' => ['nullable', 'string', 'max:10000'],
+            'googleGlobalTag' => ['nullable', 'string', 'max:10000'],
+            'googleActionTag' => ['nullable', 'string', 'max:10000'],
             'seoEnabled' => ['boolean'],
         ]);
 

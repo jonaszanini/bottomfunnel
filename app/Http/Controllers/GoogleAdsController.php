@@ -226,6 +226,13 @@ class GoogleAdsController extends Controller
 
     public function conversionTag(GoogleAdsAccount $account, string $action, GoogleAdsClient $googleAds): JsonResponse
     {
+        if ($action === 'default' || trim($action) === '') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'A valid conversion action is required.',
+            ], 422);
+        }
+
         $conversionAction = ConversionAction::query()
             ->where('google_ads_account_id', $account->id)
             ->where(function ($query) use ($action) {
@@ -254,7 +261,7 @@ class GoogleAdsController extends Controller
                 'has_tag' => (bool) ($tag['has_tag'] ?? false),
                 'action_name' => $conversionAction?->name,
             ]);
-        } catch (GoogleRequestException $exception) {
+        } catch (\Throwable $exception) {
             return response()->json([
                 'ok' => false,
                 'message' => $exception->getMessage(),

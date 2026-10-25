@@ -25,11 +25,12 @@ export default function OfferConfigForm({
         return initialTrack?.conversion_action_id ? String(initialTrack.conversion_action_id) : '';
     });
 
-    const [isFetchingTag, setIsFetchingTag] = useState(false);
-    const [tagFeedback, setTagFeedback] = useState({ message: '', type: '' });
+    const [isFetchingActionTag, setIsFetchingActionTag] = useState(false);
+    const [globalTagFeedback, setGlobalTagFeedback] = useState({ message: '', type: '' });
+    const [actionTagFeedback, setActionTagFeedback] = useState({ message: '', type: '' });
 
     const activeAccount = googleAdsAccounts.find((a) => String(a.id) === String(selectedAccountId));
-    const availableActions = activeAccount?.conversion_actions || [];
+    const availableActions = activeAccount?.conversion_actions || activeAccount?.conversionActions || [];
 
     const languageOptions = [
         { code: 'en', label: 'English (United States, Global)' },
@@ -60,17 +61,73 @@ export default function OfferConfigForm({
         }
     }
 
-    async function handleInsertGoogleAdsTag() {
+    function handleInsertGlobalTag() {
         if (!selectedAccountId) {
-            alert('Please select a Google Ads account first.');
+            setGlobalTagFeedback({
+                message: 'Please select a Google Ads account first.',
+                type: 'error',
+            });
             return;
         }
-        setIsFetchingTag(true);
-        setTagFeedback({ message: '', type: '' });
+
+        const account = googleAdsAccounts.find((a) => String(a.id) === String(selectedAccountId));
+        if (!account) {
+            setGlobalTagFeedback({
+                message: 'Selected Google Ads account could not be found.',
+                type: 'error',
+            });
+            return;
+        }
+
+        const digits = String(account.customer_id || '').replace(/\D/g, '');
+        if (!digits) {
+            setGlobalTagFeedback({
+                message: 'The selected account does not have a valid customer ID.',
+                type: 'error',
+            });
+            return;
+        }
+
+        const tagSnippet = `<!-- Google tag (gtag.js) -->\n<script async src="https://www.googletagmanager.com/gtag/js?id=AW-${digits}"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n\n  gtag('config', 'AW-${digits}');\n</script>`;
+
+        const current = (config.googleGlobalTag || '').trim();
+        if (current && current.includes(`AW-${digits}`)) {
+            setGlobalTagFeedback({
+                message: 'Account global tag is already present in the field.',
+                type: 'info',
+            });
+            return;
+        }
+
+        onChangeConfig('googleGlobalTag', tagSnippet);
+        setGlobalTagFeedback({
+            message: `Account global tag (AW-${digits}) inserted successfully.`,
+            type: 'success',
+        });
+    }
+
+    async function handleInsertActionTag() {
+        if (!selectedAccountId) {
+            setActionTagFeedback({
+                message: 'Please select a Google Ads account first.',
+                type: 'error',
+            });
+            return;
+        }
+
+        if (!selectedActionId || selectedActionId === 'default') {
+            setActionTagFeedback({
+                message: 'Please select a conversion action first.',
+                type: 'error',
+            });
+            return;
+        }
+
+        setIsFetchingActionTag(true);
+        setActionTagFeedback({ message: '', type: '' });
 
         try {
-            const actionParam = selectedActionId || 'default';
-            const res = await fetch(`/google-ads/accounts/${selectedAccountId}/conversion-actions/${actionParam}/tag`, {
+            const res = await fetch(`/google-ads/accounts/${selectedAccountId}/conversion-actions/${selectedActionId}/tag`, {
                 headers: {
                     Accept: 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
@@ -78,47 +135,37 @@ export default function OfferConfigForm({
             });
             const data = await res.json();
             if (!res.ok || !data.ok) {
-                throw new Error(data.message || 'Failed to fetch Google Ads tag');
+                throw new Error(data.message || 'Failed to fetch conversion action tag snippet.');
             }
 
-            const tagCode = data.global_site_tag;
-            if (!tagCode) {
-                throw new Error('No Google Ads tag could be retrieved for this account.');
+            const snippet = (data.event_snippet || data.global_site_tag || '').trim();
+            if (!snippet) {
+                throw new Error('No conversion action tag snippet returned by Google Ads for this action.');
             }
 
-            const current = (config.trackingCode || '').trim();
-            if (current.length > 0) {
-                if (current.includes(tagCode.trim())) {
-                    setTagFeedback({
-                        message: 'Google Ads tag is already present in the tracking field.',
-                        type: 'info',
-                    });
-                    return;
-                }
-                const confirmed = window.confirm(
-                    'The Tracking Pixels & Scripts field is not empty.\n\nClick OK to append the Google Ads tag to your existing scripts, or Cancel to leave it unchanged.'
-                );
-                if (!confirmed) {
-                    return;
-                }
-                onChangeConfig('trackingCode', `${current}\n\n${tagCode}`);
-            } else {
-                onChangeConfig('trackingCode', tagCode);
+            const current = (config.googleActionTag || '').trim();
+            if (current && current.includes(snippet)) {
+                setActionTagFeedback({
+                    message: 'Conversion action tag is already present in the field.',
+                    type: 'info',
+                });
+                return;
             }
 
-            setTagFeedback({
-                message: data.has_tag
-                    ? 'Google Ads conversion tag inserted successfully!'
-                    : 'Google Ads global site tag (gtag.js) inserted.',
+            onChangeConfig('googleActionTag', snippet);
+            setActionTagFeedback({
+                message: data.action_name
+                    ? `Conversion action tag for "${data.action_name}" inserted successfully.`
+                    : 'Conversion action tag inserted successfully.',
                 type: 'success',
             });
         } catch (err) {
-            setTagFeedback({
-                message: err.message || 'Error inserting Google Ads tag.',
+            setActionTagFeedback({
+                message: err.message || 'Error inserting conversion action tag.',
                 type: 'error',
             });
         } finally {
-            setIsFetchingTag(false);
+            setIsFetchingActionTag(false);
         }
     }
 
@@ -238,107 +285,213 @@ export default function OfferConfigForm({
                     </span>
                 </Field>
 
-                <div className="space-y-1.5">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                        <label className="text-sm font-semibold text-theme-primary">
-                            Tracking Pixels &amp; Scripts (Optional)
+                <div className="space-y-4 pt-1">
+                    <div className="border-b border-theme pb-2">
+                        <label className="text-sm font-semibold text-theme-primary block">
+                            Tracking Pixels &amp; Scripts
                         </label>
+                        <span className="text-xs text-theme-muted">
+                            Configure Google Ads tracking tags and additional third-party scripts. Injected safely into the page &lt;head&gt;.
+                        </span>
+                    </div>
 
-                        {googleAdsAccounts.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                                <select
-                                    className="py-1 px-2 text-xs rounded border border-theme bg-theme-surface text-theme-primary"
-                                    value={selectedAccountId}
-                                    onChange={(e) => {
-                                        setSelectedAccountId(e.target.value);
-                                        setSelectedActionId('');
-                                    }}
-                                    title="Choose Google Ads account"
-                                >
-                                    <option value="">Select Google Ads Account...</option>
-                                    {googleAdsAccounts.map((acc) => (
-                                        <option key={acc.id} value={acc.id}>
-                                            {acc.name} ({acc.customer_id})
-                                        </option>
-                                    ))}
-                                </select>
+                    {/* 1. Account Global Tag */}
+                    <div className="p-4 rounded-xl border border-theme bg-theme-surface space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div>
+                                <label className="text-sm font-semibold text-theme-primary flex items-center gap-1.5">
+                                    <span>1. Account Global Tag</span>
+                                    <span className="text-[11px] font-normal text-theme-muted">(gtag.js)</span>
+                                </label>
+                                <span className="text-xs text-theme-muted block">
+                                    Standard Google tag injected into &lt;head&gt;. Built using the account customer ID (AW-XXXXXXXX).
+                                </span>
+                            </div>
 
-                                <select
-                                    className="py-1 px-2 text-xs rounded border border-theme bg-theme-surface text-theme-primary max-w-[180px]"
-                                    value={selectedActionId}
-                                    onChange={(e) => setSelectedActionId(e.target.value)}
-                                    disabled={!selectedAccountId || availableActions.length === 0}
-                                    title="Choose conversion action (optional)"
-                                >
-                                    <option value="">
-                                        {availableActions.length === 0 ? 'Default gtag' : 'Action (optional)...'}
-                                    </option>
-                                    {availableActions.map((act) => (
-                                        <option key={act.id} value={act.id}>
-                                            {act.name}
-                                        </option>
-                                    ))}
-                                </select>
+                            {googleAdsAccounts.length > 0 ? (
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                    <select
+                                        className="py-1 px-2 text-xs rounded border border-theme bg-theme-surface text-theme-primary"
+                                        value={selectedAccountId}
+                                        onChange={(e) => {
+                                            setSelectedAccountId(e.target.value);
+                                            setSelectedActionId('');
+                                        }}
+                                        title="Choose Google Ads account"
+                                    >
+                                        <option value="">Select Google Ads Account...</option>
+                                        {googleAdsAccounts.map((acc) => (
+                                            <option key={acc.id} value={acc.id}>
+                                                {acc.name} ({acc.customer_id})
+                                            </option>
+                                        ))}
+                                    </select>
 
+                                    <button
+                                        type="button"
+                                        onClick={handleInsertGlobalTag}
+                                        disabled={!selectedAccountId}
+                                        className="px-2.5 py-1 rounded-md text-xs font-semibold bg-[var(--accentColor)] text-white hover:opacity-90 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Insert standard gtag.js using account customer ID (no API call)"
+                                    >
+                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                        </svg>
+                                        <span>Insert account global tag</span>
+                                    </button>
+                                </div>
+                            ) : (
+                                <span className="text-xs text-theme-muted italic">No linked Google Ads accounts found.</span>
+                            )}
+                        </div>
+
+                        {globalTagFeedback.message && (
+                            <div
+                                className={`p-2 rounded text-xs flex items-center justify-between gap-2 ${
+                                    globalTagFeedback.type === 'success'
+                                        ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                                        : globalTagFeedback.type === 'error'
+                                        ? 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300 border border-red-300 dark:border-red-800'
+                                        : 'bg-sky-50 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 border border-sky-300 dark:border-sky-800'
+                                }`}
+                            >
+                                <span>{globalTagFeedback.message}</span>
                                 <button
                                     type="button"
-                                    onClick={handleInsertGoogleAdsTag}
-                                    disabled={!selectedAccountId || isFetchingTag}
-                                    className="px-2.5 py-1 rounded-md text-xs font-semibold bg-[var(--accentColor)] text-white hover:opacity-90 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="Automatically insert Google Ads global site tag (gtag.js)"
+                                    onClick={() => setGlobalTagFeedback({ message: '', type: '' })}
+                                    className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
                                 >
-                                    {isFetchingTag ? (
-                                        <>
-                                            <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-                                            </svg>
-                                            <span>Fetching...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                                            </svg>
-                                            <span>Insert Google Ads tag</span>
-                                        </>
-                                    )}
+                                    &times;
                                 </button>
                             </div>
                         )}
+
+                        <textarea
+                            rows="3"
+                            placeholder="<!-- Google tag (gtag.js) AW-XXXXXXXX -->"
+                            className={`${control} font-mono text-xs`}
+                            value={config.googleGlobalTag || ''}
+                            onChange={(e) => onChangeConfig('googleGlobalTag', e.target.value)}
+                        />
                     </div>
 
-                    {tagFeedback.message && (
-                        <div
-                            className={`p-2 rounded text-xs flex items-center justify-between gap-2 ${
-                                tagFeedback.type === 'success'
-                                    ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
-                                    : tagFeedback.type === 'error'
-                                    ? 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300 border border-red-300 dark:border-red-800'
-                                    : 'bg-sky-50 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 border border-sky-300 dark:border-sky-800'
-                            }`}
-                        >
-                            <span>{tagFeedback.message}</span>
-                            <button
-                                type="button"
-                                onClick={() => setTagFeedback({ message: '', type: '' })}
-                                className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
-                            >
-                                &times;
-                            </button>
-                        </div>
-                    )}
+                    {/* 2. Conversion Action Tag (Optional) */}
+                    <div className="p-4 rounded-xl border border-theme bg-theme-surface space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <div>
+                                <label className="text-sm font-semibold text-theme-primary flex items-center gap-1.5">
+                                    <span>2. Conversion Action Tag</span>
+                                    <span className="text-[11px] font-normal text-theme-muted">(Optional)</span>
+                                </label>
+                                <span className="text-xs text-theme-muted block">
+                                    Specific conversion event snippet fetched via Google Ads API.
+                                </span>
+                            </div>
 
-                    <textarea
-                        rows="3"
-                        placeholder="<!-- Google Ads gtag, Meta Pixel, or UTM scripts -->"
-                        className={`${control} font-mono text-xs`}
-                        value={config.trackingCode}
-                        onChange={(e) => onChangeConfig('trackingCode', e.target.value)}
-                    />
-                    <span className="text-xs text-theme-muted mt-1 block">
-                        Injected safely into &lt;head&gt;. All outgoing clicks dynamically forward gclid, wbraid, gbraid, and utm_* tags.
-                    </span>
+                            {googleAdsAccounts.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                                    <select
+                                        className="py-1 px-2 text-xs rounded border border-theme bg-theme-surface text-theme-primary max-w-[200px]"
+                                        value={selectedActionId}
+                                        onChange={(e) => setSelectedActionId(e.target.value)}
+                                        disabled={!selectedAccountId || availableActions.length === 0}
+                                        title="Choose conversion action"
+                                    >
+                                        <option value="">
+                                            {!selectedAccountId
+                                                ? 'Select account first'
+                                                : availableActions.length === 0
+                                                ? 'No conversion actions'
+                                                : 'Select conversion action...'}
+                                        </option>
+                                        {availableActions.map((act) => (
+                                            <option key={act.id} value={act.id}>
+                                                {act.name}
+                                            </option>
+                                        ))}
+                                    </select>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleInsertActionTag}
+                                        disabled={!selectedAccountId || !selectedActionId || isFetchingActionTag}
+                                        className="px-2.5 py-1 rounded-md text-xs font-semibold bg-[var(--accentColor)] text-white hover:opacity-90 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                        title="Fetch and insert Google Ads conversion event tag snippet"
+                                    >
+                                        {isFetchingActionTag ? (
+                                            <>
+                                                <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                                </svg>
+                                                <span>Fetching...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                                </svg>
+                                                <span>Insert conversion action tag</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+
+                        {actionTagFeedback.message && (
+                            <div
+                                className={`p-2 rounded text-xs flex items-center justify-between gap-2 ${
+                                    actionTagFeedback.type === 'success'
+                                        ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                                        : actionTagFeedback.type === 'error'
+                                        ? 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-300 border border-red-300 dark:border-red-800'
+                                        : 'bg-sky-50 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 border border-sky-300 dark:border-sky-800'
+                                }`}
+                            >
+                                <span>{actionTagFeedback.message}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setActionTagFeedback({ message: '', type: '' })}
+                                    className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
+                                >
+                                    &times;
+                                </button>
+                            </div>
+                        )}
+
+                        <textarea
+                            rows="3"
+                            placeholder="<!-- Event snippet for conversion action -->"
+                            className={`${control} font-mono text-xs`}
+                            value={config.googleActionTag || ''}
+                            onChange={(e) => onChangeConfig('googleActionTag', e.target.value)}
+                        />
+                    </div>
+
+                    {/* 3. Additional Scripts */}
+                    <div className="p-4 rounded-xl border border-theme bg-theme-surface space-y-3">
+                        <div>
+                            <label className="text-sm font-semibold text-theme-primary flex items-center gap-1.5">
+                                <span>3. Additional Scripts</span>
+                                <span className="text-[11px] font-normal text-theme-muted">(Optional)</span>
+                            </label>
+                            <span className="text-xs text-theme-muted block">
+                                Free-text area for any other tracking scripts (Meta Pixel, TikTok Pixel, UTM scripts, etc.).
+                            </span>
+                        </div>
+
+                        <textarea
+                            rows="3"
+                            placeholder="<!-- Meta Pixel, TikTok, or custom head scripts -->"
+                            className={`${control} font-mono text-xs`}
+                            value={config.trackingCode}
+                            onChange={(e) => onChangeConfig('trackingCode', e.target.value)}
+                        />
+                        <span className="text-xs text-theme-muted block">
+                            Injected safely into &lt;head&gt;. All outgoing clicks dynamically forward gclid, wbraid, gbraid, and utm_* tags.
+                        </span>
+                    </div>
                 </div>
 
                 <div className="pt-2 border-t border-theme">

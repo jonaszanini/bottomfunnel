@@ -219,4 +219,101 @@ class PresellPageGeneratorTest extends TestCase
 
         $this->assertStringContainsString('Direct Export', $response->getContent());
     }
+
+    public function test_generate_variations_supports_only_google_global_tag(): void
+    {
+        $payload = [
+            'strategyType' => 'flash_sale',
+            'productName' => 'Global Tag Only Offer',
+            'language' => 'en',
+            'affiliateUrl' => 'https://example.com/hop',
+            'googleGlobalTag' => '<script async src="https://www.googletagmanager.com/gtag/js?id=AW-111111111"></script><script>gtag("config", "AW-111111111");</script>',
+            'googleActionTag' => null,
+            'trackingCode' => null,
+            'seoEnabled' => false,
+        ];
+
+        $response = $this->actingAs($this->user)->postJson('/pages/generate-variations', $payload);
+
+        $response->assertOk();
+        $variation = $response->json('variations.0');
+        $html = $variation['compiledHtml'];
+
+        $this->assertStringContainsString('AW-111111111', $html);
+        $this->assertStringContainsString('<head>', $html);
+        // Ensure it is inside the <head> element before </head>
+        $headSection = explode('</head>', $html)[0];
+        $this->assertStringContainsString('AW-111111111', $headSection);
+    }
+
+    public function test_generate_variations_supports_only_google_action_tag(): void
+    {
+        $payload = [
+            'strategyType' => 'flash_sale',
+            'productName' => 'Action Tag Only Offer',
+            'language' => 'en',
+            'affiliateUrl' => 'https://example.com/hop',
+            'googleGlobalTag' => null,
+            'googleActionTag' => '<script>gtag("event", "conversion", {"send_to": "AW-222222222/abc"});</script>',
+            'trackingCode' => null,
+            'seoEnabled' => false,
+        ];
+
+        $response = $this->actingAs($this->user)->postJson('/pages/generate-variations', $payload);
+
+        $response->assertOk();
+        $variation = $response->json('variations.0');
+        $html = $variation['compiledHtml'];
+
+        $headSection = explode('</head>', $html)[0];
+        $this->assertStringContainsString('AW-222222222/abc', $headSection);
+    }
+
+    public function test_generate_variations_supports_both_google_tags_and_additional_scripts(): void
+    {
+        $payload = [
+            'strategyType' => 'cookie_popup',
+            'productName' => 'Dual Google Tags Offer',
+            'language' => 'en',
+            'affiliateUrl' => 'https://example.com/hop',
+            'googleGlobalTag' => '<script async src="https://www.googletagmanager.com/gtag/js?id=AW-333333333"></script>',
+            'googleActionTag' => '<script>gtag("event", "conversion", {"send_to": "AW-333333333/xyz"});</script>',
+            'trackingCode' => '<script>console.log("additional_meta_script");</script>',
+            'seoEnabled' => false,
+        ];
+
+        $response = $this->actingAs($this->user)->postJson('/pages/generate-variations', $payload);
+
+        $response->assertOk();
+        $variation = $response->json('variations.0');
+        $html = $variation['compiledHtml'];
+
+        $headSection = explode('</head>', $html)[0];
+        $this->assertStringContainsString('AW-333333333', $headSection);
+        $this->assertStringContainsString('AW-333333333/xyz', $headSection);
+        $this->assertStringContainsString('additional_meta_script', $headSection);
+    }
+
+    public function test_generate_variations_supports_neither_tag(): void
+    {
+        $payload = [
+            'strategyType' => 'flash_sale',
+            'productName' => 'No Tags Offer',
+            'language' => 'en',
+            'affiliateUrl' => 'https://example.com/hop',
+            'googleGlobalTag' => null,
+            'googleActionTag' => null,
+            'trackingCode' => null,
+            'seoEnabled' => false,
+        ];
+
+        $response = $this->actingAs($this->user)->postJson('/pages/generate-variations', $payload);
+
+        $response->assertOk();
+        $variation = $response->json('variations.0');
+        $html = $variation['compiledHtml'];
+
+        $headSection = explode('</head>', $html)[0];
+        $this->assertStringNotContainsString('AW-', $headSection);
+    }
 }

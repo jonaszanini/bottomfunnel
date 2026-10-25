@@ -393,4 +393,16 @@ class GoogleAdsMultiAccountTest extends TestCase
                 'action_name' => 'Webpage Purchase',
             ]);
     }
+
+    public function test_conversion_tag_rejects_default_action_name(): void
+    {
+        $response = $this->actingAs($this->user)
+            ->getJson("/google-ads/accounts/{$this->accountA->id}/conversion-actions/default/tag");
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'ok' => false,
+                'message' => 'A valid conversion action is required.',
+            ]);
+    }
 }

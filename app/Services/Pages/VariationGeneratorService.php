@@ -21,6 +21,8 @@ class VariationGeneratorService
         $language = strtolower(trim((string) ($input['language'] ?? 'en')));
         $affiliateUrl = trim((string) ($input['affiliateUrl'] ?? '#'));
         $trackingCode = (string) ($input['trackingCode'] ?? '');
+        $googleGlobalTag = (string) ($input['googleGlobalTag'] ?? $input['google_global_tag'] ?? '');
+        $googleActionTag = (string) ($input['googleActionTag'] ?? $input['google_action_tag'] ?? '');
         $seoEnabled = (bool) ($input['seoEnabled'] ?? false);
 
         $variationBlueprints = $this->getBlueprints($strategyType, $productName, $language);
@@ -36,6 +38,8 @@ class VariationGeneratorService
                 'language' => $language,
                 'affiliateUrl' => $affiliateUrl,
                 'trackingCode' => $trackingCode,
+                'googleGlobalTag' => $googleGlobalTag,
+                'googleActionTag' => $googleActionTag,
                 'seoEnabled' => $seoEnabled,
                 'themeConfig' => $bp['themeConfig'],
                 'editableParams' => $bp['editableParams'],

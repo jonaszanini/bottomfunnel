@@ -80,6 +80,8 @@ export default function Index({ pages = [], tracks = [], google_ads_accounts = [
         productName: tracks[0]?.product_name || '',
         language: tracks[0]?.language || 'en',
         affiliateUrl: tracks[0]?.affiliate_url || '',
+        googleGlobalTag: '',
+        googleActionTag: '',
         trackingCode: '',
         seoEnabled: true,
     });
@@ -116,6 +118,8 @@ export default function Index({ pages = [], tracks = [], google_ads_accounts = [
                     productName: config.productName,
                     language: config.language,
                     affiliateUrl: config.affiliateUrl,
+                    googleGlobalTag: config.googleGlobalTag,
+                    googleActionTag: config.googleActionTag,
                     trackingCode: config.trackingCode,
                     seoEnabled: config.seoEnabled,
                 }),

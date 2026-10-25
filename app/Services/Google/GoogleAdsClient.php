@@ -216,7 +216,7 @@ class GoogleAdsClient
 
         // If no tag snippets exist yet in Google Ads, fallback to standard gtag for this customer ID
         if ($globalSiteTag === '' && $customerId !== '') {
-            $globalSiteTag = "<!-- Google tag (gtag.js) -->\n<script async src=\"https://www.googletagmanager.com/gtag/js?id=AW-{$customerId}\"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n\n  gtag('config', 'AW-{$customerId}');\n</script>";
+            $globalSiteTag = $this->buildGlobalSiteTag($customerId);
         }
 
         return [
@@ -226,6 +226,19 @@ class GoogleAdsClient
             'page_format' => $pageFormat ?? 'HTML',
             'has_tag' => $hasTag,
         ];
+    }
+
+    /**
+     * Build the standard Google tag (gtag.js) HTML snippet for a customer ID.
+     */
+    public function buildGlobalSiteTag(string $customerId): string
+    {
+        $id = $this->digits($customerId);
+        if ($id === '') {
+            return '';
+        }
+
+        return "<!-- Google tag (gtag.js) -->\n<script async src=\"https://www.googletagmanager.com/gtag/js?id=AW-{$id}\"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n\n  gtag('config', 'AW-{$id}');\n</script>";
     }
 
     /**
