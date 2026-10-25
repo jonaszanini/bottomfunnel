@@ -26,6 +26,7 @@ class GoogleAdsClient
             'scope' => implode(' ', [
                 'https://www.googleapis.com/auth/adwords',
                 'https://www.googleapis.com/auth/datamanager',
+                'https://www.googleapis.com/auth/userinfo.email',
             ]),
             'access_type' => 'offline',
             'prompt' => 'consent',
@@ -64,6 +65,35 @@ class GoogleAdsClient
         Cache::put($cacheKey, $token['access_token'], max(60, $token['expires_in'] - 60));
 
         return $token['access_token'];
+    }
+
+    /**
+     * Request userinfo to get the Google account email using the access token.
+     */
+    public function fetchUserEmail(string $accessToken): ?string
+    {
+        try {
+            $response = Http::withToken($accessToken)
+                ->timeout(10)
+                ->acceptJson()
+                ->get('https://www.googleapis.com/oauth2/v2/userinfo');
+
+            if ($response->successful()) {
+                $email = $response->json('email');
+                if (is_string($email) && trim($email) !== '') {
+                    return trim($email);
+                }
+            }
+
+            Log::warning('Google userinfo call failed or did not return email', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Exception fetching Google userinfo email: '.$e->getMessage());
+        }
+
+        return null;
     }
 
     /**

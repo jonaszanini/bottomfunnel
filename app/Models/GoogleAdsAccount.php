@@ -16,6 +16,7 @@ class GoogleAdsAccount extends Model
         'login_customer_id',
         'refresh_token',
         'name',
+        'email',
         'status',
         'is_default',
     ];

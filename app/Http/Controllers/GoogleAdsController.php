@@ -25,10 +25,11 @@ class GoogleAdsController extends Controller
             ->withCount(['tracks', 'campaigns'])
             ->orderByDesc('is_default')
             ->orderBy('name')
-            ->get(['id', 'name', 'customer_id', 'login_customer_id', 'status', 'is_default'])
+            ->get(['id', 'name', 'email', 'customer_id', 'login_customer_id', 'status', 'is_default'])
             ->map(fn (GoogleAdsAccount $account): array => [
                 'id' => $account->id,
                 'name' => $account->name,
+                'email' => $account->email,
                 'customer_id' => $account->customer_id,
                 'login_customer_id' => $account->login_customer_id,
                 'status' => $account->status,
@@ -103,9 +104,12 @@ class GoogleAdsController extends Controller
             return redirect()->route('google.index')->with('error', $exception->getMessage());
         }
 
+        $email = $googleAds->fetchUserEmail($token['access_token']);
+
         $request->session()->put('google_oauth_refresh', $token['refresh_token']);
         $request->session()->put('google_oauth_access', $token['access_token']);
         $request->session()->put('google_oauth_customers', $customers);
+        $request->session()->put('google_oauth_email', $email);
 
         return redirect()->route('google.index')->with('success', 'Choose the Google Ads account this login can use.');
     }
@@ -134,10 +138,16 @@ class GoogleAdsController extends Controller
             return back()->with('error', $exception->getMessage());
         }
 
+        $email = $request->session()->get('google_oauth_email');
+        if (! $request->session()->exists('google_oauth_email') && $access !== '') {
+            $email = $googleAds->fetchUserEmail($access);
+        }
+
         $isFirst = GoogleAdsAccount::query()->count() === 0;
         $account = GoogleAdsAccount::query()->updateOrCreate(
             ['customer_id' => $customerId],
             [
+                'email' => $email,
                 'login_customer_id' => $loginId !== '' ? $loginId : null,
                 'refresh_token' => $refresh,
                 'name' => $name,
@@ -149,7 +159,7 @@ class GoogleAdsController extends Controller
             $account->makeDefault($request->user());
         }
 
-        $request->session()->forget(['google_oauth_refresh', 'google_oauth_access', 'google_oauth_customers']);
+        $request->session()->forget(['google_oauth_refresh', 'google_oauth_access', 'google_oauth_customers', 'google_oauth_email']);
 
         return redirect()->route('google.index')->with('success', 'Google Ads account linked.');
     }

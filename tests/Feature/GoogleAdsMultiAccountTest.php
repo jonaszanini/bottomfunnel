@@ -41,6 +41,7 @@ class GoogleAdsMultiAccountTest extends TestCase
         $this->accountA = GoogleAdsAccount::query()->create([
             'customer_id' => '1111111111',
             'name' => 'Agency Main Account',
+            'email' => 'agency@example.com',
             'refresh_token' => 'refresh-token-a',
             'status' => 'linked',
             'is_default' => true,
@@ -97,11 +98,13 @@ class GoogleAdsMultiAccountTest extends TestCase
             ->has('accounts', 2)
             ->where('accounts.0.id', $this->accountA->id)
             ->where('accounts.0.name', 'Agency Main Account')
+            ->where('accounts.0.email', 'agency@example.com')
             ->where('accounts.0.customer_id', '1111111111')
             ->where('accounts.0.is_default', true)
             ->where('accounts.0.tracks_count', 1)
             ->where('accounts.1.id', $this->accountB->id)
             ->where('accounts.1.name', 'Secondary Brand Account')
+            ->where('accounts.1.email', null)
             ->where('accounts.1.customer_id', '2222222222')
             ->where('accounts.1.login_customer_id', '9999999999')
             ->where('accounts.1.is_default', false)

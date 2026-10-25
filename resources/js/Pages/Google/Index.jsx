@@ -259,6 +259,16 @@ export default function Index({ accounts = [], campaigns = [], default_account_i
                                         {account.tracks_count ?? 0} Tracks · {account.campaigns_count ?? 0} Campaigns
                                     </span>
                                 </div>
+
+                                <div className="text-xs">
+                                    {account.email ? (
+                                        <span className="text-theme-secondary">
+                                            linked as <span className="font-medium text-theme-primary">{account.email}</span>
+                                        </span>
+                                    ) : (
+                                        <span className="text-theme-muted italic">email not captured</span>
+                                    )}
+                                </div>
                             </div>
 
                             <div className="flex items-center gap-2 self-end sm:self-center">
