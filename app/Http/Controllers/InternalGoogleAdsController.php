@@ -8,6 +8,7 @@ use App\Services\Google\GoogleAdsClient;
 use App\Services\Google\GoogleRequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class InternalGoogleAdsController extends Controller
@@ -62,16 +63,43 @@ class InternalGoogleAdsController extends Controller
             'bidding_strategy' => ['nullable', 'string', Rule::in(['MANUAL_CPC', 'MAXIMIZE_CLICKS', 'MAXIMIZE_CONVERSIONS', 'TARGET_CPA', 'TARGET_ROAS'])],
             'account_id' => ['nullable', 'integer', 'exists:google_ads_accounts,id'],
             'customer_id' => ['nullable', 'string'],
+            'target_search_network' => ['nullable', 'boolean'],
+            'target_content_network' => ['nullable', 'boolean'],
+            'start_date' => ['nullable', 'date_format:Y-m-d'],
+            'end_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:start_date'],
+            'language' => ['nullable', 'string', 'max:10'],
+            'geos' => ['nullable', 'array'],
+            'geos.*' => ['string', 'max:10'],
+            'negative_keywords' => ['nullable', 'array'],
+            'negative_keywords.*' => ['string', 'max:100'],
+            'ad_group_name' => ['nullable', 'string', 'max:255'],
+            'cpc_bid_micros' => ['nullable', 'integer', 'min:10000'],
+            'keywords' => ['nullable', 'array'],
+            'keywords.*' => ['string', 'max:100'],
+            'keyword_match_type' => ['nullable', 'string', Rule::in(['BROAD', 'PHRASE', 'EXACT'])],
+            'final_url' => ['nullable', 'url', 'max:2048'],
+            'headlines' => ['nullable', 'array'],
+            'headlines.*' => ['string', 'max:30'],
+            'descriptions' => ['nullable', 'array'],
+            'descriptions.*' => ['string', 'max:90'],
         ]);
 
         $account = $this->resolveAccount($request);
 
         try {
+            $options = [
+                'target_search_network' => (bool) ($validated['target_search_network'] ?? true),
+                'target_content_network' => (bool) ($validated['target_content_network'] ?? false),
+                'start_date' => $validated['start_date'] ?? null,
+                'end_date' => $validated['end_date'] ?? null,
+            ];
+
             $result = $this->googleAds->createSearchCampaign(
                 $account,
                 $validated['name'],
                 (int) $validated['budget_amount_micros'],
-                $validated['bidding_strategy'] ?? 'MANUAL_CPC'
+                $validated['bidding_strategy'] ?? 'MANUAL_CPC',
+                $options
             );
 
             // Store the campaign and its account ownership
@@ -90,6 +118,108 @@ class InternalGoogleAdsController extends Controller
                 ]
             );
 
+            // 1. Add Location Targets (Geos)
+            $geosAdded = 0;
+            if (! empty($validated['geos'])) {
+                try {
+                    $created = $this->googleAds->addLocationTargets(
+                        $account,
+                        (string) $result['campaign_id'],
+                        $validated['geos']
+                    );
+                    $geosAdded = count($created);
+                } catch (\Throwable $e) {
+                    Log::warning('Failed adding location targets: '.$e->getMessage());
+                }
+            }
+
+            // 2. Add Language Target
+            $languageAdded = false;
+            if (! empty($validated['language'])) {
+                try {
+                    $this->googleAds->addLanguageTarget(
+                        $account,
+                        (string) $result['campaign_id'],
+                        $validated['language']
+                    );
+                    $languageAdded = true;
+                } catch (\Throwable $e) {
+                    Log::warning('Failed adding language target: '.$e->getMessage());
+                }
+            }
+
+            // 3. Add Negative Keywords
+            $negativesAdded = 0;
+            if (! empty($validated['negative_keywords'])) {
+                try {
+                    $this->googleAds->addNegativeKeywords(
+                        $account,
+                        (string) $result['campaign_id'],
+                        $validated['negative_keywords']
+                    );
+                    $negativesAdded = count($validated['negative_keywords']);
+                } catch (\Throwable $e) {
+                    Log::warning('Failed adding negative keywords during campaign creation: '.$e->getMessage());
+                }
+            }
+
+            // 4. Create Ad Group (if ad group name, keywords, or headlines are provided)
+            $adGroupId = null;
+            $keywordsAdded = 0;
+            $rsaCreated = false;
+
+            $hasAdGroup = ! empty($validated['ad_group_name']) || ! empty($validated['keywords']) || ! empty($validated['headlines']);
+            if ($hasAdGroup) {
+                $adGroupName = ! empty($validated['ad_group_name'])
+                    ? $validated['ad_group_name']
+                    : ($validated['name'].' - Ad Group 1');
+                $cpcBid = (int) ($validated['cpc_bid_micros'] ?? 1500000);
+
+                try {
+                    $adGroupResult = $this->googleAds->createAdGroup(
+                        $account,
+                        (string) $result['campaign_id'],
+                        $adGroupName,
+                        $cpcBid
+                    );
+                    $adGroupId = $adGroupResult['ad_group_id'];
+
+                    // 5. Add Keywords to Ad Group
+                    if (! empty($validated['keywords']) && $adGroupId) {
+                        try {
+                            $kwResources = $this->googleAds->addKeywords(
+                                $account,
+                                (string) $adGroupId,
+                                $validated['keywords'],
+                                $validated['keyword_match_type'] ?? 'EXACT'
+                            );
+                            $keywordsAdded = count($kwResources);
+                        } catch (\Throwable $e) {
+                            Log::warning('Failed adding keywords: '.$e->getMessage());
+                        }
+                    }
+
+                    // 6. Create Responsive Search Ad (RSA)
+                    $hasRsa = ! empty($validated['headlines']) && ! empty($validated['descriptions']) && ! empty($validated['final_url']);
+                    if ($hasRsa && $adGroupId && count($validated['headlines']) >= 3 && count($validated['descriptions']) >= 2) {
+                        try {
+                            $this->googleAds->createResponsiveSearchAd(
+                                $account,
+                                (string) $adGroupId,
+                                $validated['headlines'],
+                                $validated['descriptions'],
+                                $validated['final_url']
+                            );
+                            $rsaCreated = true;
+                        } catch (\Throwable $e) {
+                            Log::warning('Failed creating RSA: '.$e->getMessage());
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Failed creating ad group during campaign creation: '.$e->getMessage());
+                }
+            }
+
             return response()->json([
                 'ok' => true,
                 'data' => [
@@ -97,6 +227,12 @@ class InternalGoogleAdsController extends Controller
                     'account_id' => $account->id,
                     'customer_id' => $account->customer_id,
                     'account_name' => $account->name,
+                    'ad_group_id' => $adGroupId,
+                    'geos_added' => $geosAdded,
+                    'language_added' => $languageAdded,
+                    'negatives_added' => $negativesAdded,
+                    'keywords_added' => $keywordsAdded,
+                    'rsa_created' => $rsaCreated,
                 ],
             ], 201);
         } catch (GoogleRequestException $e) {
@@ -439,6 +575,10 @@ class InternalGoogleAdsController extends Controller
         $account = GoogleAdsAccount::getDefault($request->user());
 
         if (! $account) {
+            if (GoogleAdsAccount::query()->count() === 0) {
+                abort(422, 'No linked Google Ads account found. Please link an account in Google Ads settings first.');
+            }
+
             abort(422, 'Target Google Ads account must be explicitly selected, or a default account must be configured.');
         }
 

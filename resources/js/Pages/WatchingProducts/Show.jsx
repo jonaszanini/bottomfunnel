@@ -11,6 +11,9 @@ import {
     CartesianGrid,
 } from 'recharts';
 import { getPlatformBadgeClass, inferPlatformFromUrl } from '../../utils/platform';
+import CampaignCreationModal from '../../Components/CampaignCreationModal';
+import OfferConstraintsSection from './Components/OfferConstraintsSection';
+import OfferConstraintsEditor from './Components/OfferConstraintsEditor';
 
 export function getScoreHsl(score) {
     if (score === null || score === undefined) {
@@ -116,6 +119,8 @@ export default function Show({
     score_history = [],
     negative_keywords = [],
     campaign_guidance = {},
+    google_ads_accounts = [],
+    default_account_id = null,
     serpapi_usage = {},
     options = {},
 }) {
@@ -126,6 +131,19 @@ export default function Show({
     const [isGeneratingCampaign, setIsGeneratingCampaign] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
     const [showPlatformInfo, setShowPlatformInfo] = useState(false);
+
+    // Campaign creation modal state
+    const [showCampaignModal, setShowCampaignModal] = useState(false);
+
+    const generatedNegatives = useMemo(() => {
+        return (negative_keywords || [])
+            .filter((kw) => kw.enabled !== false)
+            .map((kw) => kw.term);
+    }, [negative_keywords]);
+
+    const handleOpenCreateCampaign = () => {
+        setShowCampaignModal(true);
+    };
 
     // Negative form
     const negativeForm = useForm({
@@ -153,7 +171,7 @@ export default function Show({
         bof_image_match_pct: product.bof_image_match_pct || 0,
         bof_qualifier: product.bof_qualifier || '',
         bof_homonym: Boolean(product.bof_homonym),
-        trends_trend: product.trends_trend || 'stable',
+        trends_trend: product.trends_trend || 'unknown',
         trends_7d: product.trends_7d !== null ? product.trends_7d : '',
         trends_30d: product.trends_30d !== null ? product.trends_30d : '',
         trends_90d: product.trends_90d !== null ? product.trends_90d : '',
@@ -164,6 +182,11 @@ export default function Show({
         affiliate_link: product.affiliate_link || '',
         notes: product.notes || '',
         approval_required: Boolean(product.approval_required),
+        allowed_geos: Array.isArray(product.allowed_geos) ? product.allowed_geos : [],
+        compliance_risk: product.compliance_risk || 'low',
+        compliance_notes: product.compliance_notes || '',
+        network_approval_required: Boolean(product.network_approval_required),
+        payouts_by_platform: Array.isArray(product.payouts_by_platform) ? product.payouts_by_platform : [],
         spend_amount: product.spend_amount || 0,
         sales: product.sales || 0,
         checkouts: product.checkouts || 0,
@@ -379,6 +402,18 @@ export default function Show({
                 </div>
 
                 <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onClick={handleOpenCreateCampaign}
+                        className="px-3 py-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-xs font-semibold text-sky-600 dark:text-sky-400 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        title="Create a Google Ads Search campaign for this product"
+                    >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        <span>Create Campaign</span>
+                    </button>
+
                     <Link
                         href={`/tracks/create?watched_product_id=${product.id}`}
                         className="px-3 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-semibold text-emerald-600 dark:text-emerald-400 transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
@@ -836,6 +871,14 @@ export default function Show({
                             </label>
                         </div>
 
+                        {/* Offer Constraints & Go / No-Go Fields */}
+                        <OfferConstraintsEditor
+                            data={editForm.data}
+                            setData={editForm.setData}
+                            errors={editForm.errors}
+                            options={options}
+                        />
+
                         <div className="flex justify-end gap-2 pt-3 border-t border-theme">
                             <button
                                 type="button"
@@ -919,6 +962,9 @@ export default function Show({
             {/* TAB 1: OVERVIEW & BREAKDOWN */}
             {activeTab === 'overview' && (
                 <div className="space-y-6">
+                    {/* Offer Constraints & Go / No-Go Decision Card */}
+                    <OfferConstraintsSection product={product} />
+
                     {/* Score Component Bars Card */}
                     <div className="rounded-2xl border border-theme bg-theme-surface p-5 sm:p-6 shadow-xs">
                         <h3 className="font-bold text-base text-theme-primary mb-4 flex items-center justify-between">
@@ -979,7 +1025,15 @@ export default function Show({
                                     <div className="flex items-center gap-1.5">
                                         <span>Trend:</span>
                                         <span className={`font-semibold ${product.score_flags?.dead_post_peak ? 'text-rose-500 font-bold' : 'text-theme-primary'}`}>
-                                            {product.trends_trend_label || (product.trends_trend ? String(product.trends_trend) : 'Unknown')}
+                                            {(() => {
+                                                const hasTrendsVolume = (Number(product.trends_7d || 0) > 0)
+                                                    || (Number(product.trends_30d || 0) > 0)
+                                                    || (Number(product.trends_90d || 0) > 0);
+                                                if (!hasTrendsVolume && (product.trends_trend === 'stable' || !product.trends_trend || product.trends_trend === 'unknown')) {
+                                                    return 'Unknown';
+                                                }
+                                                return product.trends_trend_label || (product.trends_trend ? String(product.trends_trend) : 'Unknown');
+                                            })()}
                                         </span>
                                         {product.flowspy_traffic_trend === 'rising' && (
                                             <span className="text-[10px] text-emerald-500 font-medium">
@@ -1250,16 +1304,29 @@ export default function Show({
                                     Active campaigns, landing pages, and tracking setups currently testing this product.
                                 </p>
                             </div>
-                            <Link
-                                href={`/tracks/create?watched_product_id=${product.id}`}
-                                className="px-3 py-1.5 rounded-lg border border-theme bg-theme-subtle hover:bg-theme-subtle/80 text-xs font-semibold text-theme-primary transition-colors flex items-center gap-1.5 self-start sm:self-auto cursor-pointer"
-                            >
-                                <svg className="w-3.5 h-3.5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <line x1="12" y1="5" x2="12" y2="19" />
-                                    <line x1="5" y1="12" x2="19" y2="12" />
-                                </svg>
-                                <span>Create Track</span>
-                            </Link>
+                            <div className="flex items-center gap-2 self-start sm:self-auto">
+                                <button
+                                    type="button"
+                                    onClick={handleOpenCreateCampaign}
+                                    className="px-3 py-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-xs font-semibold text-sky-600 dark:text-sky-400 transition-colors flex items-center gap-1.5 cursor-pointer"
+                                    title="Create Google Ads campaign for this product"
+                                >
+                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <path d="M12 5v14M5 12h14" />
+                                    </svg>
+                                    <span>Create Campaign</span>
+                                </button>
+                                <Link
+                                    href={`/tracks/create?watched_product_id=${product.id}`}
+                                    className="px-3 py-1.5 rounded-lg border border-theme bg-theme-subtle hover:bg-theme-subtle/80 text-xs font-semibold text-theme-primary transition-colors flex items-center gap-1.5 cursor-pointer"
+                                >
+                                    <svg className="w-3.5 h-3.5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <line x1="12" y1="5" x2="12" y2="19" />
+                                        <line x1="5" y1="12" x2="19" y2="12" />
+                                    </svg>
+                                    <span>Create Track</span>
+                                </Link>
+                            </div>
                         </div>
 
                         {(!product.tracks || product.tracks.length === 0) && (!tracks || tracks.length === 0) ? (
@@ -1268,7 +1335,17 @@ export default function Show({
                                 <p className="text-[11px] text-theme-muted mt-1">
                                     Launch a live test by connecting this watched product to an offer track with postback and Google Ads attribution.
                                 </p>
-                                <div className="mt-3">
+                                <div className="mt-3 flex items-center justify-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={handleOpenCreateCampaign}
+                                        className="px-3 py-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-xs font-semibold text-sky-600 dark:text-sky-400 transition-colors flex items-center gap-1.5 cursor-pointer"
+                                    >
+                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                            <path d="M12 5v14M5 12h14" />
+                                        </svg>
+                                        <span>Create Campaign</span>
+                                    </button>
                                     <Link
                                         href={`/tracks/create?watched_product_id=${product.id}`}
                                         className={`${button} text-xs !py-1 !px-2.5`}
@@ -1703,6 +1780,20 @@ export default function Show({
                     )}
                 </div>
             )}
+
+            {/* Campaign Creation Modal */}
+            <CampaignCreationModal
+                isOpen={showCampaignModal}
+                onClose={() => setShowCampaignModal(false)}
+                product={product}
+                accounts={google_ads_accounts}
+                defaultAccountId={default_account_id}
+                negativeKeywords={generatedNegatives}
+                onSuccess={(data) => {
+                    showToast(`Campaign "${data.name || product.name}" created in Google Ads (PAUSED)!`);
+                    router.reload({ only: ['product'] });
+                }}
+            />
         </Layout>
     );
 }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\BrandBiddingStatus;
+use App\Enums\ComplianceRisk;
 use App\Enums\FlowspyTrafficTrend;
 use App\Enums\ListingStatus;
 use App\Enums\PayoutModel;
@@ -86,6 +87,11 @@ class WatchedProduct extends Model
         'affiliate_link',
         'notes',
         'last_reviewed_at',
+        'allowed_geos',
+        'compliance_risk',
+        'compliance_notes',
+        'network_approval_required',
+        'payouts_by_platform',
     ];
 
     /**
@@ -97,6 +103,10 @@ class WatchedProduct extends Model
     {
         return [
             'status' => WatchedProductStatus::class,
+            'compliance_risk' => ComplianceRisk::class,
+            'network_approval_required' => 'boolean',
+            'allowed_geos' => 'array',
+            'payouts_by_platform' => 'array',
             'brand_bidding' => BrandBiddingStatus::class,
             'true_bof' => TrueBofStatus::class,
             'listing_status' => ListingStatus::class,
@@ -219,6 +229,96 @@ class WatchedProduct extends Model
     }
 
     /**
+     * Allowed Geos attribute: normalized uppercase array in PHP, JSON string in database.
+     */
+    protected function allowedGeos(): Attribute
+    {
+        return Attribute::make(
+            get: function (mixed $value): array {
+                if (empty($value)) {
+                    return [];
+                }
+
+                if (is_array($value)) {
+                    return $value;
+                }
+
+                $decoded = json_decode((string) $value, true);
+
+                return is_array($decoded) ? $decoded : [];
+            },
+            set: function (mixed $value): string {
+                if (empty($value)) {
+                    return json_encode([]);
+                }
+
+                if (is_string($value)) {
+                    $parts = array_values(array_filter(array_map(fn ($item) => strtoupper(trim((string) $item)), explode(',', $value))));
+
+                    return json_encode($parts);
+                }
+
+                if (is_array($value)) {
+                    $parts = array_values(array_filter(array_map(fn ($item) => strtoupper(trim((string) $item)), $value)));
+
+                    return json_encode($parts);
+                }
+
+                return json_encode([]);
+            }
+        );
+    }
+
+    /**
+     * Payouts by platform attribute: normalized list of platform payout entries.
+     */
+    protected function payoutsByPlatform(): Attribute
+    {
+        return Attribute::make(
+            get: function (mixed $value): array {
+                if (empty($value)) {
+                    return [];
+                }
+
+                if (is_array($value)) {
+                    return $value;
+                }
+
+                $decoded = json_decode((string) $value, true);
+
+                return is_array($decoded) ? $decoded : [];
+            },
+            set: function (mixed $value): string {
+                if (empty($value)) {
+                    return json_encode([]);
+                }
+
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    $value = is_array($decoded) ? $decoded : [];
+                }
+
+                if (is_array($value)) {
+                    $sanitized = [];
+                    foreach ($value as $row) {
+                        if (is_array($row) && ! empty($row['platform'])) {
+                            $sanitized[] = [
+                                'platform' => trim((string) $row['platform']),
+                                'payout' => isset($row['payout']) && is_numeric($row['payout']) ? (float) $row['payout'] : 0.0,
+                                'currency' => strtoupper(trim((string) ($row['currency'] ?? 'USD'))),
+                            ];
+                        }
+                    }
+
+                    return json_encode(array_values($sanitized));
+                }
+
+                return json_encode([]);
+            }
+        );
+    }
+
+    /**
      * @return HasMany<ProductScoreHistory, $this>
      */
     public function scoreHistory(): HasMany
@@ -319,5 +419,41 @@ class WatchedProduct extends Model
     public function refreshError(): ?string
     {
         return $this->score_flags['refresh_error'] ?? null;
+    }
+
+    /**
+     * Display label for the demand trend.
+     * When trends_7d, trends_30d, and trends_90d are all null or zero, displays "Unknown"
+     * instead of "Stable". "Stable" is kept only when actual low-but-present volume exists.
+     */
+    public function trendsTrendLabel(): string
+    {
+        $hasVolume = ((float) ($this->trends_7d ?? 0) > 0)
+            || ((float) ($this->trends_30d ?? 0) > 0)
+            || ((float) ($this->trends_90d ?? 0) > 0);
+
+        if (! $hasVolume) {
+            if ($this->trends_trend === null || $this->trends_trend === TrendsTrend::Stable || $this->trends_trend === TrendsTrend::Unknown) {
+                return 'Unknown';
+            }
+        }
+
+        return $this->trends_trend?->label() ?? 'Unknown';
+    }
+
+    /**
+     * Effective trend enum taking null/zero trends volume into account.
+     */
+    public function effectiveTrendsTrend(): TrendsTrend
+    {
+        $hasVolume = ((float) ($this->trends_7d ?? 0) > 0)
+            || ((float) ($this->trends_30d ?? 0) > 0)
+            || ((float) ($this->trends_90d ?? 0) > 0);
+
+        if (! $hasVolume && ($this->trends_trend === null || $this->trends_trend === TrendsTrend::Stable)) {
+            return TrendsTrend::Unknown;
+        }
+
+        return $this->trends_trend ?? TrendsTrend::Unknown;
     }
 }

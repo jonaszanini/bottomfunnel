@@ -2,19 +2,23 @@ import { Link, useForm } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import Layout, { Field, button, control } from '../../Components/Layout';
 import GoogleAdsAccountSelect from '../../Components/GoogleAdsAccountSelect';
+import PreLaunchChecklist from '../../Components/PreLaunchChecklist';
 
 export default function Form({
     track,
-    accounts,
+    accounts = [],
     default_account_id,
     watched_products = [],
     selected_watched_product_id = null,
+    pregenerated_secret = '',
+    postback_base_url = '',
     pageTypes,
     strategies,
     platforms,
     languages,
 }) {
     const defaultAccId = track?.google_ads_account_id || default_account_id || accounts.find((a) => a.is_default)?.id || (accounts.length === 1 ? accounts[0].id : '');
+    const postbackSecret = track?.postback_secret || pregenerated_secret || '';
 
     const form = useForm({
         product_name: track?.product_name || '',
@@ -30,6 +34,7 @@ export default function Form({
         conversion_action_id: track?.conversion_action_id || '',
         conversion_action_name: '',
         campaign_ids: track?.campaign_ids || [],
+        postback_secret: postbackSecret,
     });
     const [actions, setActions] = useState([]);
     const [campaigns, setCampaigns] = useState([]);
@@ -98,6 +103,24 @@ export default function Form({
             ? current.filter((item) => item !== String(id))
             : [...current, String(id)]);
     }
+
+    const baseUrl = postback_base_url || (typeof window !== 'undefined' ? `${window.location.origin}/hooks` : '');
+    const computedPostbackUrl = postbackSecret
+        ? `${baseUrl}/${form.data.platform || 'clickbank'}/${postbackSecret}`
+        : (track?.postback_url || '');
+
+    const selectedAccount = accounts.find((a) => String(a.id) === String(form.data.google_ads_account_id));
+
+    const isConversionActionReady = form.data.conversion_mode === 'new'
+        ? Boolean(form.data.conversion_action_name && form.data.conversion_action_name.trim().length > 0)
+        : Boolean(form.data.conversion_action_id || track?.conversion_action_id);
+
+    const selectedConversionAction = actions.find((a) => String(a.id) === String(form.data.conversion_action_id));
+    const conversionActionDisplayName = form.data.conversion_mode === 'new'
+        ? form.data.conversion_action_name.trim()
+        : (selectedConversionAction?.name || track?.conversion_action_name || (form.data.conversion_action_id ? `Action #${form.data.conversion_action_id}` : ''));
+
+    const pagesCount = track?.pages_count ?? 0;
 
     return (
         <Layout title={track ? 'Edit Track' : 'New Track'}>
@@ -198,7 +221,35 @@ export default function Form({
                         {campaigns.length === 0 && <p className="text-sm text-theme-muted">Campaigns appear after the account loads. IP exclusion needs at least one.</p>}
                     </div>
                 </fieldset>
-                <button className={button} disabled={form.processing || accounts.length === 0}>Save Track</button>
+
+                {/* Pre-Launch Checklist (Informational only, placed visibly above save button) */}
+                <PreLaunchChecklist
+                    accountLinked={accounts.length > 0}
+                    accountSelected={Boolean(form.data.google_ads_account_id)}
+                    accountName={selectedAccount?.name || ''}
+                    accountCustomerId={selectedAccount?.customer_id || ''}
+                    conversionActionReady={isConversionActionReady}
+                    conversionActionName={conversionActionDisplayName}
+                    conversionMode={form.data.conversion_mode}
+                    postbackUrl={computedPostbackUrl}
+                    hasPages={pagesCount > 0}
+                    pagesCount={pagesCount}
+                    isNew={!track}
+                />
+
+                <div className="flex items-center justify-between gap-4 pt-1">
+                    <button className={button} disabled={form.processing || accounts.length === 0}>
+                        {track ? 'Save Track' : 'Create Track'}
+                    </button>
+                    {track && (
+                        <Link
+                            href={`/tracks/${track.id}`}
+                            className="text-xs text-theme-muted hover:text-theme-primary transition-colors"
+                        >
+                            Cancel and return to Track
+                        </Link>
+                    )}
+                </div>
             </form>
         </Layout>
     );

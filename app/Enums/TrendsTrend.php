@@ -8,6 +8,7 @@ enum TrendsTrend: string
     case Stable = 'stable';
     case Falling = 'falling';
     case DeadPostPeak = 'dead_post_peak';
+    case Unknown = 'unknown';
 
     public function label(): string
     {
@@ -16,6 +17,7 @@ enum TrendsTrend: string
             self::Stable => 'Stable',
             self::Falling => 'Falling',
             self::DeadPostPeak => 'Dead Post Peak',
+            self::Unknown => 'Unknown',
         };
     }
 }

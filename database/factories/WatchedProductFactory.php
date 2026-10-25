@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\BrandBiddingStatus;
+use App\Enums\ComplianceRisk;
 use App\Enums\ProductKind;
 use App\Enums\Strategy;
 use App\Enums\StrategySource;
@@ -35,6 +36,13 @@ class WatchedProductFactory extends Factory
             'brand_bidding' => fake()->randomElement(BrandBiddingStatus::cases()),
             'true_bof' => fake()->randomElement(TrueBofStatus::cases()),
             'geos' => ['US', 'CA', 'UK'],
+            'allowed_geos' => ['US', 'CA', 'AU'],
+            'compliance_risk' => ComplianceRisk::Low,
+            'compliance_notes' => null,
+            'network_approval_required' => false,
+            'payouts_by_platform' => [
+                ['platform' => 'ClickBank', 'payout' => 48.50, 'currency' => 'USD'],
+            ],
             'negatives' => 'login, scam, review, amazon, ingredients, coupon',
             'approval_required' => fake()->boolean(30),
             'demand_notes' => 'Steady search volume on brand keywords with commercial purchase intent.',

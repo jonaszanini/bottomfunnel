@@ -19,6 +19,7 @@ use App\Services\Tracking\PostbackRecorder;
 use App\Support\Options;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
@@ -57,6 +58,7 @@ class TrackController extends Controller
     {
         $defaultAccount = GoogleAdsAccount::getDefault(request()->user());
         $watchedProductId = request()->query('watched_product_id');
+        $pregeneratedSecret = Str::random(48);
 
         return Inertia::render('Tracks/Form', [
             'track' => null,
@@ -64,6 +66,8 @@ class TrackController extends Controller
             'default_account_id' => $defaultAccount?->id,
             'watched_products' => $this->watchedProductsList(),
             'selected_watched_product_id' => $watchedProductId ? (int) $watchedProductId : null,
+            'pregenerated_secret' => $pregeneratedSecret,
+            'postback_base_url' => url('/hooks'),
             ...Options::forForms(),
         ]);
     }
@@ -245,6 +249,9 @@ class TrackController extends Controller
 
     public function edit(Track $track): Response
     {
+        $track->loadCount('pages');
+        $track->load('conversionAction:id,name');
+
         return Inertia::render('Tracks/Form', [
             'track' => [
                 'id' => $track->id,
@@ -258,12 +265,17 @@ class TrackController extends Controller
                 'typical_commission_cad' => $track->typical_commission_cad,
                 'google_ads_account_id' => $track->google_ads_account_id,
                 'conversion_action_id' => $track->conversion_action_id,
+                'conversion_action_name' => $track->conversionAction?->name,
                 'campaign_ids' => $track->campaign_ids ?? [],
+                'postback_url' => $track->postbackUrl(),
+                'postback_secret' => $track->postback_secret,
+                'pages_count' => $track->pages_count ?? $track->pages()->count(),
             ],
             'accounts' => $this->accounts(),
             'default_account_id' => GoogleAdsAccount::getDefault(request()->user())?->id,
             'watched_products' => $this->watchedProductsList(),
             'selected_watched_product_id' => $track->watched_product_id,
+            'postback_base_url' => url('/hooks'),
             ...Options::forForms(),
         ]);
     }
@@ -346,6 +358,7 @@ class TrackController extends Controller
             'google_ads_account_id' => ['required', 'integer', 'exists:google_ads_accounts,id'],
             'campaign_ids' => ['nullable', 'array'],
             'campaign_ids.*' => ['string', 'max:32'],
+            'postback_secret' => ['nullable', 'string', 'max:64'],
         ]);
     }
 

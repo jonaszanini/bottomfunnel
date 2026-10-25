@@ -6,12 +6,14 @@ use App\Enums\NegativeKeywordMatchType;
 use App\Enums\NegativeKeywordSource;
 use App\Enums\Strategy;
 use App\Enums\StrategySource;
+use App\Enums\TrendsTrend;
 use App\Enums\WatchedProductStatus;
 use App\Models\ApiUsage;
 use App\Models\ProductNegativeKeyword;
 use App\Models\User;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\QuotaBudget;
+use App\Services\WatchingProducts\SerpApiClient;
 use Database\Seeders\NegativeKeywordSeedSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -54,11 +56,15 @@ class WatchingProductsDetailTest extends TestCase
                 ->has('product')
                 ->where('product.name', 'Fimavyn Blood Sugar Formula')
                 ->where('product.payout_amount', 120)
+                ->where('product.trends_trend', 'unknown')
+                ->where('product.trends_trend_label', 'Unknown')
                 ->has('score_history')
                 ->has('negative_keywords')
                 ->has('campaign_guidance')
                 ->has('serpapi_usage')
                 ->has('options')
+                ->has('google_ads_accounts')
+                ->has('default_account_id')
             );
     }
 
@@ -241,5 +247,91 @@ class WatchingProductsDetailTest extends TestCase
             ->assertJson([
                 'ok' => true,
             ]);
+    }
+
+    public function test_watched_product_trends_trend_label_returns_unknown_when_metrics_are_zero_or_null(): void
+    {
+        // 1. All null/zero with null trend -> Unknown
+        $product1 = WatchedProduct::factory()->create([
+            'trends_7d' => null,
+            'trends_30d' => null,
+            'trends_90d' => null,
+            'trends_trend' => null,
+        ]);
+        $this->assertEquals(TrendsTrend::Unknown, $product1->effectiveTrendsTrend());
+        $this->assertEquals('Unknown', $product1->trendsTrendLabel());
+
+        // 2. All zeros with previously stored 'stable' trend -> Unknown
+        $product2 = WatchedProduct::factory()->create([
+            'trends_7d' => 0.0,
+            'trends_30d' => 0.0,
+            'trends_90d' => 0.0,
+            'trends_trend' => TrendsTrend::Stable,
+        ]);
+        $this->assertEquals(TrendsTrend::Unknown, $product2->effectiveTrendsTrend());
+        $this->assertEquals('Unknown', $product2->trendsTrendLabel());
+
+        // 3. Actual low-but-present volume with 'stable' trend -> Stable
+        $product3 = WatchedProduct::factory()->create([
+            'trends_7d' => 15.0,
+            'trends_30d' => 14.5,
+            'trends_90d' => 15.2,
+            'trends_trend' => TrendsTrend::Stable,
+        ]);
+        $this->assertEquals(TrendsTrend::Stable, $product3->effectiveTrendsTrend());
+        $this->assertEquals('Stable', $product3->trendsTrendLabel());
+
+        // 4. Volume present with 'rising' trend -> Rising
+        $product4 = WatchedProduct::factory()->create([
+            'trends_7d' => 85.0,
+            'trends_30d' => 50.0,
+            'trends_90d' => 20.0,
+            'trends_trend' => TrendsTrend::Rising,
+        ]);
+        $this->assertEquals(TrendsTrend::Rising, $product4->effectiveTrendsTrend());
+        $this->assertEquals('Rising', $product4->trendsTrendLabel());
+    }
+
+    public function test_serp_api_client_returns_unknown_trend_when_timeline_is_empty_or_all_zero(): void
+    {
+        config(['watching.serpapi_key' => 'test_serp_key']);
+
+        Http::fakeSequence('https://serpapi.com/search.json*')
+            ->push([
+                'interest_over_time' => [
+                    'timeline_data' => [],
+                ],
+            ], 200)
+            ->push([
+                'interest_over_time' => [
+                    'timeline_data' => [
+                        ['values' => [['extracted_value' => 0]]],
+                        ['values' => [['extracted_value' => 0]]],
+                    ],
+                ],
+            ], 200)
+            ->push([
+                'interest_over_time' => [
+                    'timeline_data' => [
+                        ['values' => [['extracted_value' => 12]]],
+                        ['values' => [['extracted_value' => 12]]],
+                        ['values' => [['extracted_value' => 12]]],
+                    ],
+                ],
+            ], 200);
+
+        $client = app(SerpApiClient::class);
+
+        // Case A: Empty timeline data
+        $trendsEmpty = $client->fetchGoogleTrends('Empty Product', forceFresh: true);
+        $this->assertEquals('unknown', $trendsEmpty['trends_trend']);
+
+        // Case B: Timeline points all 0
+        $trendsZero = $client->fetchGoogleTrends('Zero Product', forceFresh: true);
+        $this->assertEquals('unknown', $trendsZero['trends_trend']);
+
+        // Case C: Timeline points with actual volume classified as stable
+        $trendsStable = $client->fetchGoogleTrends('Stable Product', forceFresh: true);
+        $this->assertEquals('stable', $trendsStable['trends_trend']);
     }
 }

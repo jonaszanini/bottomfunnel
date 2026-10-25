@@ -89,4 +89,23 @@ class SidebarLayoutTest extends TestCase
             ->get('/affiliate-network-accounts')
             ->assertOk();
     }
+
+    public function test_authenticated_user_can_filter_dashboard_data(): void
+    {
+        $user = User::factory()->create([
+            'username' => 'owner',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->get('/?from=2026-01-01&to=2026-01-31&strategy=bof_direct&conversion_status=converted');
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Dashboard')
+            ->where('filters.from', '2026-01-01')
+            ->where('filters.to', '2026-01-31')
+            ->where('filters.strategy', 'bof_direct')
+            ->where('filters.conversion_status', 'converted')
+        );
+    }
 }

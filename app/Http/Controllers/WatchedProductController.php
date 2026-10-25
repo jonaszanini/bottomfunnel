@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Enums\BrandBiddingStatus;
+use App\Enums\ComplianceRisk;
 use App\Enums\FlowspyTrafficTrend;
 use App\Enums\ListingStatus;
 use App\Enums\NegativeKeywordMatchType;
@@ -15,6 +16,7 @@ use App\Enums\TrendsTrend;
 use App\Enums\TrueBofStatus;
 use App\Enums\WatchedProductStatus;
 use App\Jobs\RefreshSingleWatchedProductJob;
+use App\Models\GoogleAdsAccount;
 use App\Models\ProductNegativeKeyword;
 use App\Models\ProductScoreHistory;
 use App\Models\Track;
@@ -120,8 +122,8 @@ class WatchedProductController extends Controller
                 'strategy_label' => $product->strategy?->label() ?? $recommendation['strategy']->label(),
                 'strategy_source' => $product->strategy_source?->value ?? 'auto',
                 'strategy_reason' => $recommendation['reason'],
-                'trends_trend' => $product->trends_trend?->value,
-                'trends_trend_label' => $product->trends_trend?->label(),
+                'trends_trend' => $product->effectiveTrendsTrend()->value,
+                'trends_trend_label' => $product->trendsTrendLabel(),
                 'trends_30d' => $product->trends_30d !== null ? (float) $product->trends_30d : null,
                 'flowspy_traffic_trend' => $product->flowspy_traffic_trend?->value,
                 'brand_bidding' => $product->brand_bidding->value,
@@ -134,6 +136,12 @@ class WatchedProductController extends Controller
                 'bof_qualifier' => $product->bof_qualifier,
                 'bof_homonym' => (bool) $product->bof_homonym,
                 'geos' => $product->geos ?? [],
+                'allowed_geos' => $product->allowed_geos ?? [],
+                'compliance_risk' => $product->compliance_risk?->value ?? 'low',
+                'compliance_risk_label' => $product->compliance_risk?->label() ?? 'Low Risk',
+                'compliance_notes' => $product->compliance_notes,
+                'network_approval_required' => (bool) $product->network_approval_required,
+                'payouts_by_platform' => $product->payouts_by_platform ?? [],
                 'platforms' => $product->platforms ?? [],
                 'platform' => $product->platform,
                 'approval_required' => (bool) $product->approval_required,
@@ -151,6 +159,10 @@ class WatchedProductController extends Controller
                     'account_name' => $track->account?->name,
                     'account_customer_id' => $track->account?->customer_id,
                     'campaign_count' => count((array) ($track->campaign_ids ?? [])),
+                    'postback_url' => $track->postbackUrl(),
+                    'pages_count' => $track->pages()->count(),
+                    'conversion_action_id' => $track->conversion_action_id,
+                    'conversion_action_name' => $track->conversionAction?->name,
                 ])->all(),
                 'last_reviewed_at' => $product->last_reviewed_at?->toIso8601String(),
                 'last_reviewed_formatted' => $product->last_reviewed_at?->format('M d, Y'),
@@ -217,6 +229,10 @@ class WatchedProductController extends Controller
                     'value' => $m->value,
                     'label' => $m->label(),
                 ], PayoutModel::cases()),
+                'compliance_risks' => array_map(fn (ComplianceRisk $c) => [
+                    'value' => $c->value,
+                    'label' => $c->label(),
+                ], ComplianceRisk::cases()),
             ],
         ]);
     }
@@ -224,7 +240,7 @@ class WatchedProductController extends Controller
     /**
      * Display detailed product page with breakdown, guidance, score history, and negative keywords.
      */
-    public function show(WatchedProduct $watchedProduct): Response
+    public function show(Request $request, WatchedProduct $watchedProduct): Response
     {
         $recommendation = $this->strategyRecommender->recommend($watchedProduct);
         $guidance = $this->guidance->forProduct($watchedProduct);
@@ -331,8 +347,8 @@ class WatchedProductController extends Controller
             'trends_7d' => $watchedProduct->trends_7d !== null ? (float) $watchedProduct->trends_7d : null,
             'trends_30d' => $watchedProduct->trends_30d !== null ? (float) $watchedProduct->trends_30d : null,
             'trends_90d' => $watchedProduct->trends_90d !== null ? (float) $watchedProduct->trends_90d : null,
-            'trends_trend' => $watchedProduct->trends_trend?->value,
-            'trends_trend_label' => $watchedProduct->trends_trend?->label(),
+            'trends_trend' => $watchedProduct->effectiveTrendsTrend()->value,
+            'trends_trend_label' => $watchedProduct->trendsTrendLabel(),
             'flowspy_traffic_trend' => $watchedProduct->flowspy_traffic_trend?->value,
             'kp_volume' => $watchedProduct->kp_volume,
             'kp_yoy' => $watchedProduct->kp_yoy !== null ? (float) $watchedProduct->kp_yoy : null,
@@ -356,6 +372,12 @@ class WatchedProductController extends Controller
 
             // Metadata
             'geos' => $watchedProduct->geos ?? [],
+            'allowed_geos' => $watchedProduct->allowed_geos ?? [],
+            'compliance_risk' => $watchedProduct->compliance_risk?->value ?? 'low',
+            'compliance_risk_label' => $watchedProduct->compliance_risk?->label() ?? 'Low Risk',
+            'compliance_notes' => $watchedProduct->compliance_notes,
+            'network_approval_required' => (bool) $watchedProduct->network_approval_required,
+            'payouts_by_platform' => $watchedProduct->payouts_by_platform ?? [],
             'approval_required' => (bool) $watchedProduct->approval_required,
             'demand_notes' => $watchedProduct->demand_notes,
             'sales_page_url' => $watchedProduct->sales_page_url,
@@ -391,6 +413,18 @@ class WatchedProductController extends Controller
             'score_history' => $history,
             'negative_keywords' => $negatives,
             'campaign_guidance' => $guidance,
+            'google_ads_accounts' => GoogleAdsAccount::query()
+                ->orderBy('name')
+                ->get(['id', 'name', 'customer_id', 'is_default', 'status'])
+                ->map(fn (GoogleAdsAccount $acc) => [
+                    'id' => $acc->id,
+                    'name' => $acc->name,
+                    'customer_id' => $acc->customer_id,
+                    'is_default' => (bool) $acc->is_default,
+                    'status' => $acc->status,
+                ])
+                ->all(),
+            'default_account_id' => GoogleAdsAccount::getDefault($request->user())?->id,
             'serpapi_usage' => [
                 'used_this_month' => $this->budget->callsUsedThisMonth(),
                 'monthly_cap' => (int) config('watching.serpapi_monthly_cap', 230),
@@ -407,6 +441,7 @@ class WatchedProductController extends Controller
                 'currencies' => ['USD', 'CAD', 'EUR', 'GBP', 'BRL'],
                 'payout_models' => array_map(fn (PayoutModel $m) => ['value' => $m->value, 'label' => $m->label()], PayoutModel::cases()),
                 'trends_trends' => array_map(fn (TrendsTrend $t) => ['value' => $t->value, 'label' => $t->label()], TrendsTrend::cases()),
+                'compliance_risks' => array_map(fn (ComplianceRisk $c) => ['value' => $c->value, 'label' => $c->label()], ComplianceRisk::cases()),
                 'platforms' => $this->getAvailablePlatforms(),
             ],
         ]);
@@ -711,6 +746,11 @@ class WatchedProductController extends Controller
             'bof_qualifier' => ['nullable', 'string', 'max:255'],
             'bof_homonym' => ['boolean'],
             'geos' => ['nullable'],
+            'allowed_geos' => ['nullable'],
+            'compliance_risk' => ['nullable', Rule::enum(ComplianceRisk::class)],
+            'compliance_notes' => ['nullable', 'string', 'max:5000'],
+            'network_approval_required' => ['boolean'],
+            'payouts_by_platform' => ['nullable'],
             'negatives' => ['nullable', 'string', 'max:5000'],
             'approval_required' => ['boolean'],
             'demand_notes' => ['nullable', 'string', 'max:5000'],

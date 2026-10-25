@@ -329,4 +329,55 @@ class TrackPageCampaignTest extends TestCase
                 ->where('pages.0.campaign_account_name', 'Growth Scale Account')
             );
     }
+
+    public function test_track_create_form_provides_prelaunch_checklist_props(): void
+    {
+        $response = $this->actingAs($this->user)->get('/tracks/create');
+
+        $response->assertOk()
+            ->assertInertia(fn (Assert $inertia) => $inertia
+                ->component('Tracks/Form')
+                ->where('track', null)
+                ->has('accounts')
+                ->where('pregenerated_secret', fn ($secret) => is_string($secret) && strlen($secret) === 48)
+                ->where('postback_base_url', fn ($url) => str_contains($url, '/hooks'))
+            );
+    }
+
+    public function test_track_edit_form_provides_prelaunch_checklist_props_with_pages_and_postback(): void
+    {
+        $track = Track::query()->create([
+            'product_name' => 'Keto Peak Scale',
+            'platform' => 'clickbank',
+            'affiliate_url' => 'https://hop.clickbank.net/?aff=test&vendor=ketopeak',
+            'page_type' => 'review_robust',
+            'strategy' => 'target_cpa',
+            'language' => 'en',
+            'google_ads_account_id' => $this->account->id,
+            'campaign_ids' => ['90001'],
+        ]);
+
+        Page::query()->create([
+            'track_id' => $track->id,
+            'campaign_id' => '90001',
+            'name' => 'Lander 1',
+            'language' => 'en',
+            'page_type' => 'review_robust',
+            'structure_json' => ['blocks' => []],
+            'injected_script' => '',
+            'html' => '<html>Test</html>',
+        ]);
+
+        $response = $this->actingAs($this->user)->get("/tracks/{$track->id}/edit");
+
+        $response->assertOk()
+            ->assertInertia(fn (Assert $inertia) => $inertia
+                ->component('Tracks/Form')
+                ->where('track.id', $track->id)
+                ->where('track.pages_count', 1)
+                ->where('track.postback_url', $track->postbackUrl())
+                ->where('track.postback_secret', $track->postback_secret)
+                ->where('postback_base_url', fn ($url) => str_contains($url, '/hooks'))
+            );
+    }
 }

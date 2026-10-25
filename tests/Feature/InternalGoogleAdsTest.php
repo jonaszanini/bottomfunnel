@@ -77,6 +77,131 @@ class InternalGoogleAdsTest extends TestCase
             ]);
     }
 
+    public function test_post_campaigns_with_negative_keywords_adds_negatives(): void
+    {
+        Http::fake([
+            'https://googleads.googleapis.com/v22/customers/1234567890/campaignBudgets:mutate' => Http::response([
+                'results' => [['resourceName' => 'customers/1234567890/campaignBudgets/88888']],
+            ], 200),
+            'https://googleads.googleapis.com/v22/customers/1234567890/campaigns:mutate' => Http::response([
+                'results' => [['resourceName' => 'customers/1234567890/campaigns/99999']],
+            ], 200),
+            'https://googleads.googleapis.com/v22/customers/1234567890/campaignCriteria:mutate' => Http::response([
+                'results' => [
+                    ['resourceName' => 'customers/1234567890/campaignCriteria/99999~201'],
+                    ['resourceName' => 'customers/1234567890/campaignCriteria/99999~202'],
+                ],
+            ], 200),
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson('/internal/google-ads/campaigns', [
+            'name' => 'Alpha Boost Campaign with Negatives',
+            'budget_amount_micros' => 10000000,
+            'bidding_strategy' => 'MANUAL_CPC',
+            'negative_keywords' => ['free', 'coupon'],
+            'geos' => ['US', 'CA'],
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson([
+                'ok' => true,
+                'data' => [
+                    'campaign_id' => '99999',
+                    'negatives_added' => 2,
+                ],
+            ]);
+    }
+
+    public function test_post_campaigns_with_full_expanded_parameters_creates_complete_search_campaign(): void
+    {
+        Http::fake([
+            'https://googleads.googleapis.com/v22/customers/1234567890/campaignBudgets:mutate' => Http::response([
+                'results' => [['resourceName' => 'customers/1234567890/campaignBudgets/88888']],
+            ], 200),
+            'https://googleads.googleapis.com/v22/customers/1234567890/campaigns:mutate' => Http::response([
+                'results' => [['resourceName' => 'customers/1234567890/campaigns/99999']],
+            ], 200),
+            'https://googleads.googleapis.com/v22/customers/1234567890/campaignCriteria:mutate' => Http::response([
+                'results' => [
+                    ['resourceName' => 'customers/1234567890/campaignCriteria/99999~101'],
+                    ['resourceName' => 'customers/1234567890/campaignCriteria/99999~102'],
+                ],
+            ], 200),
+            'https://googleads.googleapis.com/v22/customers/1234567890/adGroups:mutate' => Http::response([
+                'results' => [['resourceName' => 'customers/1234567890/adGroups/77777']],
+            ], 200),
+            'https://googleads.googleapis.com/v22/customers/1234567890/adGroupCriteria:mutate' => Http::response([
+                'results' => [
+                    ['resourceName' => 'customers/1234567890/adGroupCriteria/77777~201'],
+                    ['resourceName' => 'customers/1234567890/adGroupCriteria/77777~202'],
+                ],
+            ], 200),
+            'https://googleads.googleapis.com/v22/customers/1234567890/adGroupAds:mutate' => Http::response([
+                'results' => [['resourceName' => 'customers/1234567890/adGroupAds/77777~55555']],
+            ], 200),
+        ]);
+
+        $response = $this->actingAs($this->user)->postJson('/internal/google-ads/campaigns', [
+            'name' => 'Fimavyn Blood Sugar Formula - Search',
+            'budget_amount_micros' => 20000000,
+            'bidding_strategy' => 'MANUAL_CPC',
+            'target_search_network' => true,
+            'target_content_network' => false,
+            'start_date' => '2026-11-01',
+            'end_date' => '2026-12-31',
+            'language' => 'en',
+            'geos' => ['US', 'CA'],
+            'negative_keywords' => ['free', 'coupon'],
+            'ad_group_name' => 'Fimavyn - Exact Match',
+            'cpc_bid_micros' => 2500000,
+            'keywords' => ['fimavyn buy', 'fimavyn official'],
+            'keyword_match_type' => 'EXACT',
+            'final_url' => 'https://example.com/fimavyn-tsl',
+            'headlines' => ['Official Store Direct', '100% Authentic Formula', 'Save On Multi-Packs Today'],
+            'descriptions' => [
+                'Order direct from the official distributor. Secure 256-bit checkout with fast shipping.',
+                'Claim your special bundle discount today. Backed by a full 60-day money-back guarantee.',
+            ],
+        ]);
+
+        $response->assertStatus(201)
+            ->assertJson([
+                'ok' => true,
+                'data' => [
+                    'campaign_id' => '99999',
+                    'ad_group_id' => '77777',
+                    'geos_added' => 2,
+                    'language_added' => true,
+                    'negatives_added' => 2,
+                    'keywords_added' => 2,
+                    'rsa_created' => true,
+                ],
+            ]);
+
+        $this->assertDatabaseHas('google_ads_campaigns', [
+            'campaign_id' => '99999',
+            'name' => 'Fimavyn Blood Sugar Formula - Search',
+            'status' => 'PAUSED',
+            'budget_amount_micros' => 20000000,
+            'bidding_strategy' => 'MANUAL_CPC',
+        ]);
+    }
+
+    public function test_post_campaigns_fails_when_no_google_ads_account_is_linked(): void
+    {
+        GoogleAdsAccount::query()->delete();
+
+        $response = $this->actingAs($this->user)->postJson('/internal/google-ads/campaigns', [
+            'name' => 'Alpha Boost Campaign',
+            'budget_amount_micros' => 10000000,
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJson([
+                'message' => 'No linked Google Ads account found. Please link an account in Google Ads settings first.',
+            ]);
+    }
+
     public function test_post_ad_groups_creates_ad_group(): void
     {
         Http::fake([

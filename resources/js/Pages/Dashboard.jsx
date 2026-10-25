@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import Layout, { Field, button, control, money } from '../Components/Layout';
 
@@ -30,43 +31,95 @@ export default function Dashboard({ filters, report, trackOptions, pageTypes, st
         ['ROI', summary.roi === null ? 'n/a' : `${summary.roi}%`],
     ];
 
+    const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+
+    const hasActiveFilters = Boolean(
+        filters.track_id ||
+        filters.strategy ||
+        filters.page_type ||
+        filters.platform ||
+        filters.conversion_status
+    );
+
     return (
         <Layout title="Dashboard">
-            <form className="mb-4 grid gap-3 rounded-xl border border-theme bg-theme-surface p-4 shadow-sm md:grid-cols-4" onSubmit={apply}>
-                <Field label="From"><input className={control} type="date" name="from" defaultValue={filters.from} /></Field>
-                <Field label="To"><input className={control} type="date" name="to" defaultValue={filters.to} /></Field>
-                <Field label="Track">
-                    <select className={control} name="track_id" defaultValue={filters.track_id}>
-                        <option value="">All tracks</option>
-                        {trackOptions.map((track) => <option key={track.id} value={track.id}>{track.product_name}</option>)}
-                    </select>
-                </Field>
-                <Field label="Strategy">
-                    <select className={control} name="strategy" defaultValue={filters.strategy}>
-                        <option value="">All strategies</option>
-                        {Object.entries(strategies).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                    </select>
-                </Field>
-                <Field label="Page type">
-                    <select className={control} name="page_type" defaultValue={filters.page_type}>
-                        <option value="">All page types</option>
-                        {Object.entries(pageTypes).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                    </select>
-                </Field>
-                <Field label="Platform">
-                    <select className={control} name="platform" defaultValue={filters.platform}>
-                        <option value="">All platforms</option>
-                        {Object.entries(platforms).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                    </select>
-                </Field>
-                <Field label="Conversion status">
-                    <select className={control} name="conversion_status" defaultValue={filters.conversion_status}>
-                        <option value="">All statuses</option>
-                        {Object.entries(conversionStatuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                    </select>
-                </Field>
-                <div className="flex items-end"><button className={button}>Apply filters</button></div>
-            </form>
+            <div className="mb-4 rounded-xl border border-theme bg-theme-surface shadow-sm overflow-hidden">
+                {/* Mobile Accordion Header (< md) */}
+                <button
+                    type="button"
+                    onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
+                    className="flex w-full min-h-[44px] items-center justify-between px-4 py-3 text-left font-medium text-theme-primary md:hidden cursor-pointer hover:bg-theme-subtle/50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accentFocusRing)]"
+                    aria-expanded={isMobileFiltersOpen}
+                    aria-controls="dashboard-filters-form"
+                    aria-label="Toggle dashboard filters"
+                >
+                    <div className="flex items-center gap-2">
+                        <svg className="w-4 h-4 text-theme-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                        </svg>
+                        <span className="text-sm font-semibold">Filters</span>
+                        {hasActiveFilters && (
+                            <span className="rounded-full bg-theme-accent/15 px-2 py-0.5 text-[11px] font-bold text-theme-accent">
+                                Active
+                            </span>
+                        )}
+                    </div>
+                    <svg
+                        className={`w-4 h-4 text-theme-muted transition-transform duration-200 ${isMobileFiltersOpen ? 'rotate-180' : ''}`}
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden="true"
+                    >
+                        <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                </button>
+
+                {/* Filter Form Block: Collapsible on mobile (< md), always visible on desktop (md+) */}
+                <div
+                    id="dashboard-filters-form"
+                    className={`${isMobileFiltersOpen ? 'block' : 'hidden'} md:block border-t border-theme/60 md:border-t-0`}
+                >
+                    <form className="grid gap-3 p-4 md:grid-cols-4" onSubmit={apply}>
+                        <Field label="From"><input className={control} type="date" name="from" defaultValue={filters.from} /></Field>
+                        <Field label="To"><input className={control} type="date" name="to" defaultValue={filters.to} /></Field>
+                        <Field label="Track">
+                            <select className={control} name="track_id" defaultValue={filters.track_id}>
+                                <option value="">All tracks</option>
+                                {trackOptions.map((track) => <option key={track.id} value={track.id}>{track.product_name}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Strategy">
+                            <select className={control} name="strategy" defaultValue={filters.strategy}>
+                                <option value="">All strategies</option>
+                                {Object.entries(strategies).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Page type">
+                            <select className={control} name="page_type" defaultValue={filters.page_type}>
+                                <option value="">All page types</option>
+                                {Object.entries(pageTypes).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Platform">
+                            <select className={control} name="platform" defaultValue={filters.platform}>
+                                <option value="">All platforms</option>
+                                {Object.entries(platforms).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                            </select>
+                        </Field>
+                        <Field label="Conversion status">
+                            <select className={control} name="conversion_status" defaultValue={filters.conversion_status}>
+                                <option value="">All statuses</option>
+                                {Object.entries(conversionStatuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                            </select>
+                        </Field>
+                        <div className="flex items-end"><button className={button}>Apply filters</button></div>
+                    </form>
+                </div>
+            </div>
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 {cards.map(([label, value]) => (

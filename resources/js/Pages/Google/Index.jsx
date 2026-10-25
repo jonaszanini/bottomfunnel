@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { Link, router, useForm } from '@inertiajs/react';
 import Layout, { Field, button, control, quiet, money } from '../../Components/Layout';
 import GoogleAdsAccountSelect from '../../Components/GoogleAdsAccountSelect';
+import CampaignCreationModal from '../../Components/CampaignCreationModal';
 
 export default function Index({ accounts = [], campaigns = [], default_account_id, pending = [] }) {
     const [showCampaignModal, setShowCampaignModal] = useState(false);
-    const [submittingCampaign, setSubmittingCampaign] = useState(false);
-    const [campaignError, setCampaignError] = useState('');
 
     const defaultAccId = default_account_id || accounts.find((a) => a.is_default)?.id || (accounts.length > 0 ? accounts[0].id : '');
 
@@ -14,56 +13,6 @@ export default function Index({ accounts = [], campaigns = [], default_account_i
         customer_id: pending[0] || '',
         login_customer_id: '',
     });
-
-    const [campaignData, setCampaignData] = useState({
-        account_id: defaultAccId,
-        name: '',
-        budget_cad: '10.00',
-        bidding_strategy: 'MANUAL_CPC',
-    });
-
-    async function handleCreateCampaign(event) {
-        event.preventDefault();
-        setCampaignError('');
-        setSubmittingCampaign(true);
-
-        const budgetMicros = Math.round(Number(campaignData.budget_cad || 10) * 1_000_000);
-
-        try {
-            const response = await fetch('/internal/google-ads/campaigns', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-                },
-                body: JSON.stringify({
-                    account_id: campaignData.account_id ? Number(campaignData.account_id) : undefined,
-                    name: campaignData.name || `Search Campaign ${new Date().toISOString().slice(0, 10)}`,
-                    budget_amount_micros: budgetMicros,
-                    bidding_strategy: campaignData.bidding_strategy,
-                }),
-            });
-
-            const result = await response.json();
-            if (!response.ok) {
-                throw new Error(result.error || result.message || 'Failed to create campaign.');
-            }
-
-            setShowCampaignModal(false);
-            setCampaignData({
-                account_id: defaultAccId,
-                name: '',
-                budget_cad: '10.00',
-                bidding_strategy: 'MANUAL_CPC',
-            });
-            router.reload({ only: ['campaigns', 'accounts'] });
-        } catch (err) {
-            setCampaignError(err.message);
-        } finally {
-            setSubmittingCampaign(false);
-        }
-    }
 
     return (
         <Layout title="Google Ads Accounts & Campaigns">
@@ -126,87 +75,16 @@ export default function Index({ accounts = [], campaigns = [], default_account_i
                 </form>
             )}
 
-            {/* Campaign Creation Card / Form */}
-            {showCampaignModal && (
-                <div className="mb-6 rounded-xl border border-[var(--accentColor)]/40 bg-theme-surface p-5 shadow-md">
-                    <h2 className="text-lg font-semibold text-theme-primary mb-1">Create Search Campaign (PAUSED)</h2>
-                    <p className="text-xs text-theme-secondary mb-4">
-                        Explicitly select which Google Ads account will own this campaign. All campaigns are created in PAUSED status for safety.
-                    </p>
-
-                    <form onSubmit={handleCreateCampaign} className="space-y-4">
-                        <div>
-                            <span className="mb-1 block text-sm font-medium text-theme-secondary">Target Google Ads Account *</span>
-                            <GoogleAdsAccountSelect
-                                accounts={accounts}
-                                value={campaignData.account_id}
-                                onChange={(val) => setCampaignData({ ...campaignData, account_id: val })}
-                                required
-                            />
-                        </div>
-
-                        <div className="grid gap-4 md:grid-cols-3">
-                            <Field label="Campaign Name">
-                                <input
-                                    className={control}
-                                    placeholder="e.g. Search Campaign Alpha"
-                                    value={campaignData.name}
-                                    onChange={(e) => setCampaignData({ ...campaignData, name: e.target.value })}
-                                />
-                            </Field>
-
-                            <Field label="Daily Budget (CAD$)">
-                                <input
-                                    className={control}
-                                    type="number"
-                                    step="0.01"
-                                    min="1"
-                                    placeholder="10.00"
-                                    value={campaignData.budget_cad}
-                                    onChange={(e) => setCampaignData({ ...campaignData, budget_cad: e.target.value })}
-                                />
-                            </Field>
-
-                            <Field label="Bidding Strategy">
-                                <select
-                                    className={control}
-                                    value={campaignData.bidding_strategy}
-                                    onChange={(e) => setCampaignData({ ...campaignData, bidding_strategy: e.target.value })}
-                                >
-                                    <option value="MANUAL_CPC">Manual CPC</option>
-                                    <option value="MAXIMIZE_CLICKS">Maximize Clicks</option>
-                                    <option value="MAXIMIZE_CONVERSIONS">Maximize Conversions</option>
-                                    <option value="TARGET_CPA">Target CPA</option>
-                                    <option value="TARGET_ROAS">Target ROAS</option>
-                                </select>
-                            </Field>
-                        </div>
-
-                        {campaignError && (
-                            <div className="rounded-lg border border-[var(--dangerColor)]/30 bg-[var(--dangerColor)]/10 p-3 text-sm text-[var(--dangerColor)]">
-                                {campaignError}
-                            </div>
-                        )}
-
-                        <div className="flex items-center justify-end gap-2 pt-2">
-                            <button
-                                type="button"
-                                className={quiet}
-                                onClick={() => setShowCampaignModal(false)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                className={button}
-                                disabled={submittingCampaign || !campaignData.account_id}
-                            >
-                                {submittingCampaign ? 'Creating in Google Ads...' : 'Create Campaign'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            )}
+            {/* Campaign Creation Modal */}
+            <CampaignCreationModal
+                isOpen={showCampaignModal}
+                onClose={() => setShowCampaignModal(false)}
+                accounts={accounts}
+                defaultAccountId={defaultAccId}
+                onSuccess={() => {
+                    router.reload({ only: ['campaigns', 'accounts'] });
+                }}
+            />
 
             {/* Linked Accounts Section */}
             <div className="mb-8">
@@ -310,11 +188,21 @@ export default function Index({ accounts = [], campaigns = [], default_account_i
 
                 <div className="overflow-hidden rounded-xl border border-theme bg-theme-surface shadow-sm text-theme-primary">
                     {campaigns.length === 0 ? (
-                        <div className="p-6 text-center text-sm text-theme-muted">
-                            <p>No campaigns tracked yet.</p>
-                            <p className="mt-1 text-xs text-theme-secondary">
-                                Create a campaign using the "New Campaign" button above or via Artisan command <code className="font-mono text-theme-accent">php artisan google-ads:campaign create --account=ID</code>.
+                        <div className="p-8 text-center text-sm text-theme-muted space-y-3">
+                            <p className="font-medium text-theme-primary">No campaigns tracked yet.</p>
+                            <p className="text-xs text-theme-secondary max-w-sm mx-auto">
+                                Launch a new Google Ads Search campaign with targeting, ad group, and keywords without touching the terminal.
                             </p>
+                            <div className="pt-1">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowCampaignModal(true)}
+                                    disabled={accounts.length === 0}
+                                    className={`${button} text-xs`}
+                                >
+                                    + New Campaign
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         <div className="overflow-x-auto">

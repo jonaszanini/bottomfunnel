@@ -3,6 +3,7 @@ import { Head, Link, router, useForm } from '@inertiajs/react';
 import Layout, { Field, button, control, quiet } from '../../Components/Layout';
 import { getComponentScoreColor } from './Show';
 import { getPlatformBadgeClass, inferPlatformFromUrl } from '../../utils/platform';
+import OfferConstraintsEditor from './Components/OfferConstraintsEditor';
 
 export function getScoreHsl(score) {
     if (score === null || score === undefined) {
@@ -220,6 +221,11 @@ export default function Index({ products, filters, metrics, options }) {
         bof_qualifier: '',
         bof_homonym: false,
         geos: 'US, CA',
+        allowed_geos: [],
+        compliance_risk: 'low',
+        compliance_notes: '',
+        network_approval_required: false,
+        payouts_by_platform: [],
         negatives: '',
         approval_required: false,
         demand_notes: '',
@@ -280,6 +286,11 @@ export default function Index({ products, filters, metrics, options }) {
             bof_qualifier: '',
             bof_homonym: false,
             geos: 'US, CA',
+            allowed_geos: [],
+            compliance_risk: 'low',
+            compliance_notes: '',
+            network_approval_required: false,
+            payouts_by_platform: [],
             negatives: '',
             approval_required: false,
             demand_notes: '',
@@ -315,6 +326,11 @@ export default function Index({ products, filters, metrics, options }) {
             bof_qualifier: product.bof_qualifier || '',
             bof_homonym: Boolean(product.bof_homonym),
             geos: Array.isArray(product.geos) ? product.geos.join(', ') : (product.geos || ''),
+            allowed_geos: Array.isArray(product.allowed_geos) ? product.allowed_geos : [],
+            compliance_risk: product.compliance_risk || 'low',
+            compliance_notes: product.compliance_notes || '',
+            network_approval_required: Boolean(product.network_approval_required),
+            payouts_by_platform: Array.isArray(product.payouts_by_platform) ? product.payouts_by_platform : [],
             negatives: product.negatives || '',
             approval_required: Boolean(product.approval_required),
             demand_notes: product.demand_notes || '',
@@ -498,7 +514,7 @@ export default function Index({ products, filters, metrics, options }) {
         const deltaNum = Number(delta);
 
         let icon = null;
-        let label = product.trends_trend_label || 'Stable';
+        let label = product.trends_trend_label || 'Unknown';
         let textClass = 'text-theme-muted font-medium';
         let iconBg = 'bg-theme-subtle text-theme-muted';
 
@@ -542,6 +558,16 @@ export default function Index({ products, filters, metrics, options }) {
                         <circle cx="12" cy="12" r="9" />
                         <line x1="9" y1="9" x2="15" y2="15" strokeLinecap="round" />
                         <line x1="15" y1="9" x2="9" y2="15" strokeLinecap="round" />
+                    </svg>
+                );
+                break;
+            case 'unknown':
+                label = 'Unknown';
+                textClass = 'text-theme-muted font-medium';
+                iconBg = 'bg-theme-subtle text-theme-muted';
+                icon = (
+                    <svg className="w-3 h-3 stroke-[2.5]" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M12 18h.01" />
                     </svg>
                 );
                 break;
@@ -893,6 +919,14 @@ export default function Index({ products, filters, metrics, options }) {
                                                                     Testing{product.tracks_count > 1 ? ` (${product.tracks_count})` : ''}
                                                                 </span>
                                                             )}
+                                                            {product.compliance_risk === 'restricted' && (
+                                                                <span
+                                                                    className="inline-flex items-center gap-1 rounded-md border border-rose-500/40 bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-bold text-rose-600 dark:text-rose-400"
+                                                                    title="Restricted by advertising policies"
+                                                                >
+                                                                    Restricted
+                                                                </span>
+                                                            )}
                                                             {product.sales_page_url && (
                                                                 <a
                                                                     href={product.sales_page_url}
@@ -928,6 +962,24 @@ export default function Index({ products, filters, metrics, options }) {
                                                                 </>
                                                             )}
                                                         </div>
+                                                        {Array.isArray(product.allowed_geos) && product.allowed_geos.length > 0 && (
+                                                            <div className="mt-1 flex items-center gap-1 flex-wrap">
+                                                                {product.allowed_geos.slice(0, 3).map((geo) => (
+                                                                    <span
+                                                                        key={geo}
+                                                                        className="inline-block px-1.5 py-0.2 text-[10px] font-mono font-bold rounded bg-theme-subtle text-theme-secondary border border-theme"
+                                                                        title={`Allowed Geo: ${geo}`}
+                                                                    >
+                                                                        {geo}
+                                                                    </span>
+                                                                ))}
+                                                                {product.allowed_geos.length > 3 && (
+                                                                    <span className="text-[10px] text-theme-muted font-mono font-medium">
+                                                                        +{product.allowed_geos.length - 3}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </td>
 
@@ -1564,6 +1616,14 @@ export default function Index({ products, filters, metrics, options }) {
                                         <span>Approval Required</span>
                                     </label>
                                 </div>
+
+                                {/* Offer Constraints & Go / No-Go Fields */}
+                                <OfferConstraintsEditor
+                                    data={form.data}
+                                    setData={form.setData}
+                                    errors={form.errors}
+                                    options={options}
+                                />
 
                                 <div className="grid grid-cols-2 gap-3">
                                     <Field label="Sales Page URL" error={form.errors.sales_page_url}>

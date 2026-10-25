@@ -24,6 +24,12 @@ class GoogleAdsCampaignCommand extends Command
                             {--budget=10000000 : Budget amount in micros (default 10 units)}
                             {--bid=1500000 : Max CPC bid in micros (default 1.5 units)}
                             {--strategy=MANUAL_CPC : Bidding strategy (MANUAL_CPC, MAXIMIZE_CLICKS, etc.)}
+                            {--geos= : Comma-separated list of country codes (e.g. US,CA,GB)}
+                            {--language= : Language code (e.g. en, es, fr)}
+                            {--no-search-partners : Exclude Google Search Partners}
+                            {--display : Include Google Display Network}
+                            {--start-date= : Campaign start date (YYYY-MM-DD)}
+                            {--end-date= : Campaign end date (YYYY-MM-DD)}
                             {--keywords= : Comma-separated list of keywords}
                             {--match=BROAD : Keyword match type (BROAD, PHRASE, EXACT)}
                             {--headlines= : Pipe- or comma-separated list of 3-15 headlines (max 30 chars)}
@@ -82,7 +88,13 @@ class GoogleAdsCampaignCommand extends Command
         $strategy = (string) $this->option('strategy');
 
         $this->info("Creating Search campaign '{$name}' with budget {$budget} micros for account '{$account->name}' ({$account->customer_id})...");
-        $result = $googleAds->createSearchCampaign($account, $name, $budget, $strategy);
+        $options = [
+            'target_search_network' => ! $this->option('no-search-partners'),
+            'target_content_network' => (bool) $this->option('display'),
+            'start_date' => $this->option('start-date'),
+            'end_date' => $this->option('end-date'),
+        ];
+        $result = $googleAds->createSearchCampaign($account, $name, $budget, $strategy, $options);
 
         GoogleAdsCampaign::query()->updateOrCreate(
             [
@@ -98,6 +110,19 @@ class GoogleAdsCampaignCommand extends Command
                 'resource_name' => $result['campaign_resource'] ?? null,
             ]
         );
+
+        if ($this->option('geos')) {
+            $geos = array_filter(array_map('trim', explode(',', (string) $this->option('geos'))));
+            if (! empty($geos)) {
+                $googleAds->addLocationTargets($account, $result['campaign_id'], $geos);
+                $this->info('Added location targets: '.implode(', ', $geos));
+            }
+        }
+
+        if ($this->option('language')) {
+            $googleAds->addLanguageTarget($account, $result['campaign_id'], (string) $this->option('language'));
+            $this->info('Added language target: '.$this->option('language'));
+        }
 
         $this->info("Campaign created: ID {$result['campaign_id']} (Status: PAUSED) under account '{$account->name}'");
         $this->line("Resource: {$result['campaign_resource']}");

@@ -15,6 +15,50 @@ class GoogleAdsClient
 
     public const IP_EXCLUSION_SAFETY_THRESHOLD = 490;
 
+    /**
+     * Map of common ISO 2-letter country codes to Google Ads geoTargetConstants IDs.
+     */
+    public const GEO_TARGET_CONSTANTS = [
+        'US' => '2840',
+        'CA' => '2124',
+        'GB' => '2826',
+        'UK' => '2826',
+        'AU' => '2036',
+        'NZ' => '2554',
+        'IE' => '2372',
+        'DE' => '2276',
+        'FR' => '2250',
+        'IT' => '2380',
+        'ES' => '2724',
+        'NL' => '2528',
+        'BE' => '2056',
+        'AT' => '2040',
+        'CH' => '2756',
+        'SE' => '2752',
+        'NO' => '2578',
+        'DK' => '2208',
+        'FI' => '2246',
+        'BR' => '2076',
+        'MX' => '2484',
+        'IN' => '2356',
+        'ZA' => '2710',
+        'SG' => '2702',
+        'JP' => '2392',
+    ];
+
+    /**
+     * Map of common language codes to Google Ads languageConstant IDs.
+     */
+    public const LANGUAGE_CONSTANTS = [
+        'en' => '1000',
+        'es' => '1003',
+        'fr' => '1002',
+        'de' => '1001',
+        'it' => '1004',
+        'pt' => '1014',
+        'nl' => '1010',
+    ];
+
     public function authorizationUrl(string $state): string
     {
         $this->assertOauthConfigured();
@@ -606,7 +650,8 @@ class GoogleAdsClient
         GoogleAdsAccount $account,
         string $name,
         int $budgetAmountMicros,
-        string $biddingStrategy = 'MANUAL_CPC'
+        string $biddingStrategy = 'MANUAL_CPC',
+        array $options = []
     ): array {
         $customerId = $this->digits($account->customer_id);
 
@@ -647,6 +692,9 @@ class GoogleAdsClient
             default => ['manualCpc' => new \stdClass],
         };
 
+        $targetSearchNetwork = (bool) ($options['target_search_network'] ?? true);
+        $targetContentNetwork = (bool) ($options['target_content_network'] ?? false);
+
         $campaignData = array_merge([
             'name' => $name,
             'advertisingChannelType' => 'SEARCH',
@@ -654,11 +702,18 @@ class GoogleAdsClient
             'campaignBudget' => $budgetResource,
             'networkSettings' => [
                 'targetGoogleSearch' => true,
-                'targetSearchNetwork' => true,
-                'targetContentNetwork' => false,
+                'targetSearchNetwork' => $targetSearchNetwork,
+                'targetContentNetwork' => $targetContentNetwork,
                 'targetPartnerSearchNetwork' => false,
             ],
         ], $bidding);
+
+        if (! empty($options['start_date'])) {
+            $campaignData['startDate'] = (string) $options['start_date'];
+        }
+        if (! empty($options['end_date'])) {
+            $campaignData['endDate'] = (string) $options['end_date'];
+        }
 
         $campaignResponse = $this->mutate(
             $this->accessToken($account),
@@ -890,6 +945,124 @@ class GoogleAdsClient
         ]);
 
         return $resourceNames;
+    }
+
+    /**
+     * Add target countries (locations) to a campaign.
+     *
+     * @param  list<string>  $geos  List of 2-letter country codes (e.g. US, CA) or criterion IDs
+     * @return list<string> Resource names of created criteria
+     */
+    public function addLocationTargets(
+        GoogleAdsAccount $account,
+        string $campaignId,
+        array $geos
+    ): array {
+        $customerId = $this->digits($account->customer_id);
+        $campaignId = $this->digits($campaignId);
+        $campaignResource = "customers/{$customerId}/campaigns/{$campaignId}";
+
+        $operations = [];
+        foreach ($geos as $geo) {
+            $code = strtoupper(trim((string) $geo));
+            if ($code === '') {
+                continue;
+            }
+
+            $targetId = self::GEO_TARGET_CONSTANTS[$code] ?? (ctype_digit($code) ? $code : null);
+            if (! $targetId) {
+                continue;
+            }
+
+            $operations[] = [
+                'create' => [
+                    'campaign' => $campaignResource,
+                    'location' => [
+                        'geoTargetConstant' => "geoTargetConstants/{$targetId}",
+                    ],
+                ],
+            ];
+        }
+
+        if (empty($operations)) {
+            return [];
+        }
+
+        $response = $this->mutate(
+            $this->accessToken($account),
+            $customerId,
+            $account->login_customer_id,
+            '/campaignCriteria:mutate',
+            ['operations' => $operations]
+        );
+
+        $results = $response['results'] ?? [];
+        $resourceNames = [];
+        foreach ($results as $res) {
+            if (isset($res['resourceName']) && is_string($res['resourceName'])) {
+                $resourceNames[] = $res['resourceName'];
+            }
+        }
+
+        Log::info('Google Ads Mutate: Added location targets to campaign', [
+            'account_id' => $account->id,
+            'customer_id' => $account->customer_id,
+            'campaign_id' => $campaignId,
+            'count' => count($resourceNames),
+            'geos' => $geos,
+            'actor' => auth()->user()?->username ?? auth()->user()?->email ?? 'cli/system',
+        ]);
+
+        return $resourceNames;
+    }
+
+    /**
+     * Add language targeting to a campaign.
+     */
+    public function addLanguageTarget(
+        GoogleAdsAccount $account,
+        string $campaignId,
+        string $language
+    ): ?string {
+        $customerId = $this->digits($account->customer_id);
+        $campaignId = $this->digits($campaignId);
+        $campaignResource = "customers/{$customerId}/campaigns/{$campaignId}";
+
+        $lang = strtolower(trim($language));
+        $langId = self::LANGUAGE_CONSTANTS[$lang] ?? (ctype_digit($lang) ? $lang : '1000');
+
+        $response = $this->mutate(
+            $this->accessToken($account),
+            $customerId,
+            $account->login_customer_id,
+            '/campaignCriteria:mutate',
+            [
+                'operations' => [
+                    [
+                        'create' => [
+                            'campaign' => $campaignResource,
+                            'language' => [
+                                'languageConstant' => "languageConstants/{$langId}",
+                            ],
+                        ],
+                    ],
+                ],
+            ]
+        );
+
+        $resourceName = $response['results'][0]['resourceName'] ?? null;
+
+        Log::info('Google Ads Mutate: Added language target to campaign', [
+            'account_id' => $account->id,
+            'customer_id' => $account->customer_id,
+            'campaign_id' => $campaignId,
+            'language' => $language,
+            'language_constant' => $langId,
+            'resource_name' => $resourceName,
+            'actor' => auth()->user()?->username ?? auth()->user()?->email ?? 'cli/system',
+        ]);
+
+        return is_string($resourceName) ? $resourceName : null;
     }
 
     /**

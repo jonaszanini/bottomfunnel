@@ -228,7 +228,7 @@ class SerpApiClient
                 'trends_7d' => 0.0,
                 'trends_30d' => 0.0,
                 'trends_90d' => 0.0,
-                'trends_trend' => TrendsTrend::Stable->value,
+                'trends_trend' => TrendsTrend::Unknown->value,
             ];
         }
 
@@ -240,7 +240,12 @@ class SerpApiClient
 
         $totalPoints = count($values);
         if ($totalPoints === 0) {
-            return [];
+            return [
+                'trends_7d' => 0.0,
+                'trends_30d' => 0.0,
+                'trends_90d' => 0.0,
+                'trends_trend' => TrendsTrend::Unknown->value,
+            ];
         }
 
         // Approximate points for 7d (~10% of 90d points), 30d (~33%), and 90d (100%)
@@ -274,7 +279,9 @@ class SerpApiClient
         }
 
         $trend = TrendsTrend::Stable;
-        if ($isDeadPostPeak) {
+        if ($maxVal <= 0.0) {
+            $trend = TrendsTrend::Unknown;
+        } elseif ($isDeadPostPeak) {
             $trend = TrendsTrend::DeadPostPeak;
         } elseif ($avg7d > ($avg30d * 1.2)) {
             $trend = TrendsTrend::Rising;
