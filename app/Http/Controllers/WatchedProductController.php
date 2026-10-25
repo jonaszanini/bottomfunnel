@@ -182,19 +182,8 @@ class WatchedProductController extends Controller
             'serpapi_limit' => (int) config('watching.serpapi_total_limit', 250),
         ];
 
-        // Gather all distinct platforms
-        $existingPlatforms = WatchedProduct::query()
-            ->whereNotNull('platforms')
-            ->pluck('platforms')
-            ->flatten()
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-
-        $defaultPlatforms = ['SmartAdv', 'ClickBank', 'BuyGoods', 'MaxWeb', 'Digistore24'];
-        $availablePlatforms = array_values(array_unique(array_merge($defaultPlatforms, $existingPlatforms)));
-        sort($availablePlatforms);
+        // Gather centralized platforms merged with distinct existing values
+        $availablePlatforms = $this->getAvailablePlatforms();
 
         return Inertia::render('WatchingProducts/Index', [
             'products' => $products,
@@ -418,6 +407,7 @@ class WatchedProductController extends Controller
                 'currencies' => ['USD', 'CAD', 'EUR', 'GBP', 'BRL'],
                 'payout_models' => array_map(fn (PayoutModel $m) => ['value' => $m->value, 'label' => $m->label()], PayoutModel::cases()),
                 'trends_trends' => array_map(fn (TrendsTrend $t) => ['value' => $t->value, 'label' => $t->label()], TrendsTrend::cases()),
+                'platforms' => $this->getAvailablePlatforms(),
             ],
         ]);
     }
@@ -428,6 +418,7 @@ class WatchedProductController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validateProduct($request);
+        $validated = $this->syncPlatforms($validated);
 
         // Compute CAD cache
         if (isset($validated['payout_amount']) && $validated['payout_amount'] !== null) {
@@ -447,6 +438,7 @@ class WatchedProductController extends Controller
     public function update(Request $request, WatchedProduct $watchedProduct): RedirectResponse
     {
         $validated = $this->validateProduct($request, $watchedProduct);
+        $validated = $this->syncPlatforms($validated, $watchedProduct);
 
         // Update CAD computed cache if payout changed
         if (isset($validated['payout_amount']) && $validated['payout_amount'] !== null) {
@@ -694,7 +686,7 @@ class WatchedProductController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'status' => ['required', Rule::enum(WatchedProductStatus::class)],
             'platforms' => ['nullable'],
-            'platform' => ['nullable', 'string', 'max:64'],
+            'platform' => ['nullable', 'string', Rule::in((array) config('watching.platforms', []))],
             'payout_amount' => ['nullable', 'numeric', 'min:0', 'max:999999.99'],
             'payout_currency' => ['nullable', 'string', 'size:3'],
             'payout_model' => ['nullable', Rule::enum(PayoutModel::class)],
@@ -747,5 +739,77 @@ class WatchedProductController extends Controller
             'notes' => ['nullable', 'string', 'max:10000'],
             'last_reviewed_at' => ['nullable', 'date'],
         ]);
+    }
+
+    /**
+     * Get centralized available platforms list merged with distinct existing values.
+     *
+     * @return array<int, string>
+     */
+    protected function getAvailablePlatforms(): array
+    {
+        $configPlatforms = (array) config('watching.platforms', [
+            'Affplus',
+            'Affplus (ClickHunts)',
+            'Affplus (WW)',
+            'BuyGoods',
+            'ClickBank',
+            'Digistore24',
+            'MaxWeb',
+            'SmartAdv',
+            'Other',
+            'Unknown',
+        ]);
+
+        $existingPlatforms = WatchedProduct::query()
+            ->whereNotNull('platforms')
+            ->pluck('platforms')
+            ->flatten()
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        $extra = array_values(array_diff($existingPlatforms, $configPlatforms));
+
+        return array_values(array_merge($configPlatforms, $extra));
+    }
+
+    /**
+     * Synchronize primary platform and platforms JSON array on save.
+     *
+     * @param  array<string, mixed>  $validated
+     * @return array<string, mixed>
+     */
+    protected function syncPlatforms(array $validated, ?WatchedProduct $existing = null): array
+    {
+        $platform = array_key_exists('platform', $validated)
+            ? ($validated['platform'] !== null && trim((string) $validated['platform']) !== '' ? trim((string) $validated['platform']) : null)
+            : ($existing?->platform);
+
+        // Determine current platforms array
+        $platforms = [];
+        if (array_key_exists('platforms', $validated) && $validated['platforms'] !== null) {
+            $raw = $validated['platforms'];
+            if (is_string($raw)) {
+                $platforms = array_values(array_filter(array_map('trim', explode(',', $raw))));
+            } elseif (is_array($raw)) {
+                $platforms = array_values(array_filter(array_map(fn ($item) => trim((string) $item), $raw)));
+            }
+        } elseif ($existing) {
+            $platforms = $existing->platforms ?? [];
+        }
+
+        if ($platform !== null && $platform !== '') {
+            if (empty($platforms)) {
+                $platforms = [$platform];
+            } elseif (! in_array($platform, $platforms, true)) {
+                $platforms[] = $platform;
+            }
+            $validated['platform'] = $platform;
+            $validated['platforms'] = array_values(array_unique($platforms));
+        }
+
+        return $validated;
     }
 }

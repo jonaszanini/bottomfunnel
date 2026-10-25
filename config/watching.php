@@ -4,6 +4,28 @@
 return [
     /*
     |--------------------------------------------------------------------------
+    | Watching Products Platforms / Marketplaces
+    |--------------------------------------------------------------------------
+    |
+    | Centralized list of supported platforms/marketplaces where products
+    | are sourced. Used across validation, filters, and UI forms.
+    |
+    */
+    'platforms' => [
+        'Affplus',
+        'Affplus (ClickHunts)',
+        'Affplus (WW)',
+        'BuyGoods',
+        'ClickBank',
+        'Digistore24',
+        'MaxWeb',
+        'SmartAdv',
+        'Other',
+        'Unknown',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | SerpApi Configuration & Monthly Free-Tier Quota
     |--------------------------------------------------------------------------
     |

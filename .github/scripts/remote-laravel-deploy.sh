@@ -46,6 +46,7 @@ if [ -f artisan ]; then
   chmod -R 775 storage bootstrap/cache 2>/dev/null || true
 
   "$PHP_BIN" artisan migrate --force
+  "$PHP_BIN" artisan watching:backfill-platform 2>/dev/null || true
   "$PHP_BIN" artisan optimize:clear
   "$PHP_BIN" artisan config:cache
   "$PHP_BIN" artisan route:clear

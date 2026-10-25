@@ -10,6 +10,7 @@ import {
     Tooltip,
     CartesianGrid,
 } from 'recharts';
+import { getPlatformBadgeClass, inferPlatformFromUrl } from '../../utils/platform';
 
 export function getScoreHsl(score) {
     if (score === null || score === undefined) {
@@ -124,6 +125,7 @@ export default function Show({
     const [isAddingNegative, setIsAddingNegative] = useState(false);
     const [isGeneratingCampaign, setIsGeneratingCampaign] = useState(false);
     const [isEditingProduct, setIsEditingProduct] = useState(false);
+    const [showPlatformInfo, setShowPlatformInfo] = useState(false);
 
     // Negative form
     const negativeForm = useForm({
@@ -134,6 +136,7 @@ export default function Show({
     // Product edit form
     const editForm = useForm({
         name: product.name || '',
+        platform: product.platform || (Array.isArray(product.platforms) && product.platforms[0]) || 'Unknown',
         status: product.status || 'watch',
         product_kind: product.product_kind || 'nutra',
         esteira: Boolean(product.esteira),
@@ -166,6 +169,33 @@ export default function Show({
         checkouts: product.checkouts || 0,
         commission_earned: product.commission_earned || 0,
     });
+
+    const handleUrlFieldChange = (field, value) => {
+        editForm.setData((prev) => {
+            const next = { ...prev, [field]: value };
+            if (!prev.platform || prev.platform === 'Unknown' || prev.platform === '') {
+                const suggested = inferPlatformFromUrl(value);
+                if (suggested) {
+                    next.platform = suggested;
+                }
+            }
+            return next;
+        });
+    };
+
+    const handleUrlPaste = (field, e) => {
+        const pastedText = e.clipboardData?.getData('text') || '';
+        if (pastedText && (!editForm.data.platform || editForm.data.platform === 'Unknown' || editForm.data.platform === '')) {
+            const suggested = inferPlatformFromUrl(pastedText);
+            if (suggested) {
+                editForm.setData((prev) => ({
+                    ...prev,
+                    [field]: pastedText,
+                    platform: suggested,
+                }));
+            }
+        }
+    };
 
     const showToast = (msg) => {
         setToastMessage(msg);
@@ -394,6 +424,28 @@ export default function Show({
                             <span className="rounded-md border border-theme bg-theme-subtle px-2 py-0.5 text-xs font-semibold text-theme-secondary uppercase">
                                 {product.product_kind_label}
                             </span>
+                            <span className="rounded-md border border-theme bg-theme-subtle px-2 py-0.5 text-xs font-semibold text-theme-secondary uppercase">
+                                {product.status_label || product.status}
+                            </span>
+                            {(() => {
+                                const primary = product.platform || (Array.isArray(product.platforms) && product.platforms[0]) || 'Unknown';
+                                const otherPlatforms = (Array.isArray(product.platforms) ? product.platforms : []).filter((p) => p !== primary);
+                                return (
+                                    <div className="inline-flex items-center gap-1">
+                                        <span className={`rounded-md border px-2 py-0.5 text-xs font-semibold ${getPlatformBadgeClass(primary)}`}>
+                                            {primary}
+                                        </span>
+                                        {otherPlatforms.length > 0 && (
+                                            <span
+                                                className="rounded-md border border-theme bg-theme-subtle px-1.5 py-0.5 text-xs font-semibold text-theme-muted cursor-help"
+                                                title={`Also on: ${otherPlatforms.join(', ')}`}
+                                            >
+                                                +{otherPlatforms.length}
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                             {product.esteira && (
                                 <span className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
                                     Esteira
@@ -414,6 +466,8 @@ export default function Show({
 
                         <div className="flex flex-wrap items-center gap-3 text-xs text-theme-muted">
                             <span>Status: <strong className="text-theme-primary uppercase">{product.status_label}</strong></span>
+                            <span>•</span>
+                            <span>Platform: <strong className="text-theme-primary">{product.platform || 'Unknown'}</strong></span>
                             <span>•</span>
                             <span>Page Type: <strong className="text-theme-primary">{product.page_type || 'General'}</strong></span>
                             <span>•</span>
@@ -508,6 +562,55 @@ export default function Show({
                                     onChange={(e) => editForm.setData('name', e.target.value)}
                                     required
                                 />
+                            </Field>
+
+                            <Field
+                                label={
+                                    <div className="flex items-center gap-1.5">
+                                        <span>Platform</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowPlatformInfo((prev) => !prev)}
+                                            className="text-theme-muted hover:text-theme-accent p-0.5 rounded cursor-pointer transition-colors"
+                                            title="Click for platform guidance"
+                                            aria-label="Platform guidance"
+                                        >
+                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                <circle cx="12" cy="12" r="10" />
+                                                <line x1="12" y1="16" x2="12" y2="12" />
+                                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                                            </svg>
+                                        </button>
+                                        {showPlatformInfo && (
+                                            <div className="relative">
+                                                <div className="absolute left-0 bottom-full mb-1 z-30 w-64 rounded-lg border border-theme bg-theme-surface p-2.5 text-[11px] font-normal normal-case text-theme-secondary shadow-lg">
+                                                    <div className="flex justify-between items-start mb-1 font-semibold text-theme-primary">
+                                                        <span>Platform / Marketplace</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setShowPlatformInfo(false)}
+                                                            className="text-theme-muted hover:text-theme-primary text-xs"
+                                                        >
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                    Primary affiliate network or marketplace where this product was found. Auto-suggested when pasting sales page or affiliate links.
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                }
+                                error={editForm.errors.platform}
+                            >
+                                <select
+                                    className={control}
+                                    value={editForm.data.platform || 'Unknown'}
+                                    onChange={(e) => editForm.setData('platform', e.target.value)}
+                                >
+                                    {(options?.platforms || []).map((p) => (
+                                        <option key={p} value={p}>{p}</option>
+                                    ))}
+                                </select>
                             </Field>
 
                             <Field label="Status" error={editForm.errors.status}>
@@ -622,7 +725,8 @@ export default function Show({
                                     type="url"
                                     className={control}
                                     value={editForm.data.sales_page_url}
-                                    onChange={(e) => editForm.setData('sales_page_url', e.target.value)}
+                                    onChange={(e) => handleUrlFieldChange('sales_page_url', e.target.value)}
+                                    onPaste={(e) => handleUrlPaste('sales_page_url', e)}
                                 />
                             </Field>
 
@@ -631,7 +735,8 @@ export default function Show({
                                     type="url"
                                     className={control}
                                     value={editForm.data.affiliate_link}
-                                    onChange={(e) => editForm.setData('affiliate_link', e.target.value)}
+                                    onChange={(e) => handleUrlFieldChange('affiliate_link', e.target.value)}
+                                    onPaste={(e) => handleUrlPaste('affiliate_link', e)}
                                 />
                             </Field>
                         </div>

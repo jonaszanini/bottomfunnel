@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import Layout, { Field, button, control, quiet } from '../../Components/Layout';
 import { getComponentScoreColor } from './Show';
+import { getPlatformBadgeClass, inferPlatformFromUrl } from '../../utils/platform';
 
 export function getScoreHsl(score) {
     if (score === null || score === undefined) {
@@ -49,6 +50,7 @@ export default function Index({ products, filters, metrics, options }) {
     const [editingProduct, setEditingProduct] = useState(null);
     const [deleteConfirmProduct, setDeleteConfirmProduct] = useState(null);
     const [scoreModalProduct, setScoreModalProduct] = useState(null);
+    const [showPlatformInfo, setShowPlatformInfo] = useState(false);
 
     // Toast notification state
     const [toastMessage, setToastMessage] = useState('');
@@ -198,6 +200,7 @@ export default function Index({ products, filters, metrics, options }) {
     // Form handling for create / edit drawer
     const form = useForm({
         name: '',
+        platform: 'Unknown',
         status: 'watch',
         product_kind: 'nutra',
         esteira: false,
@@ -225,11 +228,39 @@ export default function Index({ products, filters, metrics, options }) {
         notes: '',
     });
 
+    const handleUrlFieldChange = (field, value) => {
+        form.setData((prev) => {
+            const next = { ...prev, [field]: value };
+            if (!prev.platform || prev.platform === 'Unknown' || prev.platform === '') {
+                const suggested = inferPlatformFromUrl(value);
+                if (suggested) {
+                    next.platform = suggested;
+                }
+            }
+            return next;
+        });
+    };
+
+    const handleUrlPaste = (field, e) => {
+        const pastedText = e.clipboardData?.getData('text') || '';
+        if (pastedText && (!form.data.platform || form.data.platform === 'Unknown' || form.data.platform === '')) {
+            const suggested = inferPlatformFromUrl(pastedText);
+            if (suggested) {
+                form.setData((prev) => ({
+                    ...prev,
+                    [field]: pastedText,
+                    platform: suggested,
+                }));
+            }
+        }
+    };
+
     const openCreateDrawer = () => {
         setEditingProduct(null);
         form.clearErrors();
         form.setData({
             name: '',
+            platform: 'Unknown',
             status: 'watch',
             product_kind: 'nutra',
             esteira: false,
@@ -264,6 +295,7 @@ export default function Index({ products, filters, metrics, options }) {
         form.clearErrors();
         form.setData({
             name: product.name || '',
+            platform: product.platform || (Array.isArray(product.platforms) && product.platforms[0]) || 'Unknown',
             status: product.status || 'watch',
             product_kind: product.product_kind || 'nutra',
             esteira: Boolean(product.esteira),
@@ -792,6 +824,7 @@ export default function Index({ products, filters, metrics, options }) {
                                         {renderSortTh('#', 'rank', 'w-12 text-center')}
                                         {renderSortTh('Score', 'score', 'w-20 text-center')}
                                         {renderSortTh('Product Name', 'name')}
+                                        {renderSortTh('Platform', 'platform', 'w-36')}
                                         {renderSortTh('Net Payout (CAD)', 'payout_cad', 'w-36 text-right')}
                                         {renderSortTh('Momentum', 'momentum', 'w-36')}
                                         {renderSortTh('Compliance', 'compliance', 'w-44 text-center')}
@@ -896,6 +929,29 @@ export default function Index({ products, filters, metrics, options }) {
                                                             )}
                                                         </div>
                                                     </div>
+                                                </td>
+
+                                                {/* Platform */}
+                                                <td className="px-3 py-3 whitespace-nowrap text-xs">
+                                                    {(() => {
+                                                        const primary = product.platform || (Array.isArray(product.platforms) && product.platforms[0]) || 'Unknown';
+                                                        const otherPlatforms = (Array.isArray(product.platforms) ? product.platforms : []).filter((p) => p !== primary);
+                                                        return (
+                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${getPlatformBadgeClass(primary)}`}>
+                                                                    {primary}
+                                                                </span>
+                                                                {otherPlatforms.length > 0 && (
+                                                                    <span
+                                                                        className="inline-flex items-center rounded-md border border-theme bg-theme-subtle px-1.5 py-0.5 text-[10px] font-semibold text-theme-muted cursor-help"
+                                                                        title={`Also available on: ${otherPlatforms.join(', ')}`}
+                                                                    >
+                                                                        +{otherPlatforms.length}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </td>
 
                                                 {/* Net Payout (CAD) */}
@@ -1021,6 +1077,26 @@ export default function Index({ products, filters, metrics, options }) {
                                                     )}
                                                 </div>
                                                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-theme-muted">
+                                                    {(() => {
+                                                        const primary = product.platform || (Array.isArray(product.platforms) && product.platforms[0]) || 'Unknown';
+                                                        const otherPlatforms = (Array.isArray(product.platforms) ? product.platforms : []).filter((p) => p !== primary);
+                                                        return (
+                                                            <div className="flex items-center gap-1 flex-wrap">
+                                                                <span className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold ${getPlatformBadgeClass(primary)}`}>
+                                                                    {primary}
+                                                                </span>
+                                                                {otherPlatforms.length > 0 && (
+                                                                    <span
+                                                                        className="inline-flex items-center rounded-md border border-theme bg-theme-subtle px-1 py-0.2 text-[9px] font-semibold text-theme-muted cursor-help"
+                                                                        title={`Also on: ${otherPlatforms.join(', ')}`}
+                                                                    >
+                                                                        +{otherPlatforms.length}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                    <span>•</span>
                                                     <span>{product.page_type || 'General'}</span>
                                                     <span>•</span>
                                                     <span>{product.strategy_label || 'BoF Direct'}</span>
@@ -1298,6 +1374,55 @@ export default function Index({ products, filters, metrics, options }) {
                                     />
                                 </Field>
 
+                                <Field
+                                    label={
+                                        <div className="flex items-center gap-1.5">
+                                            <span>Platform</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowPlatformInfo((prev) => !prev)}
+                                                className="text-theme-muted hover:text-theme-accent p-0.5 rounded cursor-pointer transition-colors"
+                                                title="Click for platform guidance"
+                                                aria-label="Platform guidance"
+                                            >
+                                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                    <circle cx="12" cy="12" r="10" />
+                                                    <line x1="12" y1="16" x2="12" y2="12" />
+                                                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                                                </svg>
+                                            </button>
+                                            {showPlatformInfo && (
+                                                <div className="relative">
+                                                    <div className="absolute left-0 bottom-full mb-1 z-30 w-64 rounded-lg border border-theme bg-theme-surface p-2.5 text-[11px] font-normal normal-case text-theme-secondary shadow-lg">
+                                                        <div className="flex justify-between items-start mb-1 font-semibold text-theme-primary">
+                                                            <span>Platform / Marketplace</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setShowPlatformInfo(false)}
+                                                                className="text-theme-muted hover:text-theme-primary text-xs"
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        </div>
+                                                        Primary affiliate network or marketplace where this product was found. Auto-suggested when pasting sales page or affiliate links.
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    }
+                                    error={form.errors.platform}
+                                >
+                                    <select
+                                        className={control}
+                                        value={form.data.platform || 'Unknown'}
+                                        onChange={(e) => form.setData('platform', e.target.value)}
+                                    >
+                                        {(options?.platforms || []).map((p) => (
+                                            <option key={p} value={p}>{p}</option>
+                                        ))}
+                                    </select>
+                                </Field>
+
                                 <div className="grid grid-cols-2 gap-3">
                                     <Field label="Status" error={form.errors.status}>
                                         <select
@@ -1446,7 +1571,8 @@ export default function Index({ products, filters, metrics, options }) {
                                             type="url"
                                             className={control}
                                             value={form.data.sales_page_url}
-                                            onChange={(e) => form.setData('sales_page_url', e.target.value)}
+                                            onChange={(e) => handleUrlFieldChange('sales_page_url', e.target.value)}
+                                            onPaste={(e) => handleUrlPaste('sales_page_url', e)}
                                         />
                                     </Field>
 
@@ -1455,7 +1581,8 @@ export default function Index({ products, filters, metrics, options }) {
                                             type="url"
                                             className={control}
                                             value={form.data.affiliate_link}
-                                            onChange={(e) => form.setData('affiliate_link', e.target.value)}
+                                            onChange={(e) => handleUrlFieldChange('affiliate_link', e.target.value)}
+                                            onPaste={(e) => handleUrlPaste('affiliate_link', e)}
                                         />
                                     </Field>
                                 </div>
