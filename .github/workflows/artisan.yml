@@ -46,4 +46,4 @@ jobs:
           set -euo pipefail
           SSH_ARGS="-p ${SSH_PORT} -o ConnectTimeout=60 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes"
           echo "Running artisan ${TASK}..."
-          ssh ${SSH_ARGS} "${SSH_USER}@${SSH_HOST}" "/opt/alt/php83/usr/bin/php ${DEPLOY_ROOT}/artisan ${TASK}"
+          ssh ${SSH_ARGS} "${SSH_USER}@${SSH_HOST}" "cd ~/domains/bottomfunnel.app/public_html && /opt/alt/php83/usr/bin/php artisan ${TASK} --no-interaction"

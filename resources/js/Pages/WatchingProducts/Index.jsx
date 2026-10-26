@@ -61,6 +61,7 @@ export function getComplianceRiskBadge(risk, label) {
 
 export default function Index({ products, filters, metrics, options }) {
     const [search, setSearch] = useState(filters.search || '');
+    const [openVolumeInfo, setOpenVolumeInfo] = useState(null);
     const [selectedStatus, setSelectedStatus] = useState(filters.status || 'all');
     const [selectedStrategy, setSelectedStrategy] = useState(filters.strategy || 'all');
     const [selectedBrandBidding, setSelectedBrandBidding] = useState(filters.brand_bidding || 'all');
@@ -1211,17 +1212,48 @@ export default function Index({ products, filters, metrics, options }) {
 
                                                 {/* Search Volume */}
                                                 <td className="px-2 py-2 whitespace-nowrap text-right text-xs">
-                                                    <div className="flex items-center justify-end gap-1">
+                                                    <div className="relative flex items-center justify-end gap-1">
                                                         <span className="font-semibold text-xs text-theme-primary">
                                                             {formatSearchVolume(product.search_volume_total, product.search_volume_is_range)}
                                                         </span>
-                                                        {product.search_volume_total !== null && product.search_volume_total !== undefined && (
-                                                            <span
-                                                                className="inline-flex items-center text-theme-muted hover:text-theme-accent cursor-help text-[11px]"
-                                                                title={formatVolumeTooltip(product)}
-                                                            >
-                                                                ⓘ
-                                                            </span>
+                                                        {product.search_volume_error && (
+                                                            <span className="text-amber-500 text-[11px]" aria-label="Volume refresh error">⚠</span>
+                                                        )}
+                                                        {(product.search_volume_total !== null && product.search_volume_total !== undefined
+                                                            || product.search_volume_error
+                                                            || (product.search_volume_by_geo && Object.keys(product.search_volume_by_geo).length > 0)) && (
+                                                            <>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setOpenVolumeInfo((prev) => (prev === product.id ? null : product.id));
+                                                                    }}
+                                                                    className="inline-flex items-center text-theme-muted hover:text-theme-accent cursor-pointer text-[11px]"
+                                                                    aria-label="Search volume details"
+                                                                    aria-expanded={openVolumeInfo === product.id}
+                                                                >
+                                                                    ⓘ
+                                                                </button>
+                                                                {openVolumeInfo === product.id && (
+                                                                    <div
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className="absolute right-0 top-full mt-1 z-30 w-64 max-w-[calc(100vw-2rem)] whitespace-normal rounded-lg border border-theme bg-theme-surface p-2.5 text-left text-[11px] text-theme-secondary shadow-xl"
+                                                                    >
+                                                                        {product.search_volume_error && (
+                                                                            <div className="mb-1.5 text-rose-600 dark:text-rose-400 break-words">
+                                                                                ⚠ {product.search_volume_error}
+                                                                                {product.search_volume_error_at && (
+                                                                                    <span className="block text-theme-muted">Failed: {String(product.search_volume_error_at).slice(0, 10)}</span>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                        {formatVolumeTooltip({ ...product, search_volume_error: null }).split(' • ').map((line, i) => (
+                                                                            <div key={i}>{line}</div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </div>
                                                 </td>

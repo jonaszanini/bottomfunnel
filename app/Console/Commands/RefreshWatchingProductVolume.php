@@ -107,7 +107,8 @@ class RefreshWatchingProductVolume extends Command
         Log::info('watching:refresh-volume: '.$summary);
 
         if ($result['errors'] > 0) {
-            $distinct = \App\Models\WatchedProduct::query()
+            $distinct = WatchedProduct::query()
+                ->whereIn('id', $products->pluck('id'))
                 ->whereNotNull('search_volume_error')
                 ->distinct()
                 ->limit(5)
@@ -115,6 +116,12 @@ class RefreshWatchingProductVolume extends Command
             foreach ($distinct as $err) {
                 $this->warn('Error: '.$err);
             }
+        }
+
+        if ($result['updated'] === 0 && $result['errors'] > 0) {
+            $this->error('All processed products failed to refresh search volume.');
+
+            return self::FAILURE;
         }
 
         return self::SUCCESS;

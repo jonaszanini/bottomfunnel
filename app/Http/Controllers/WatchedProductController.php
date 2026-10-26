@@ -22,6 +22,7 @@ use App\Models\ProductNegativeKeyword;
 use App\Models\ProductScoreHistory;
 use App\Models\Track;
 use App\Models\WatchedProduct;
+use App\Services\Google\GoogleAdsQuotaException;
 use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\CampaignGuidance;
 use App\Services\WatchingProducts\Fx\FrankfurterFx;
@@ -166,6 +167,7 @@ class WatchedProductController extends Controller
                 'search_volume_checked_at' => $product->search_volume_checked_at?->toIso8601String(),
                 'search_volume_checked_formatted' => $product->search_volume_checked_at?->format('M d, Y'),
                 'search_volume_error' => $product->search_volume_error,
+                'search_volume_error_at' => $product->search_volume_error_at?->toIso8601String(),
                 'platforms' => $product->platforms ?? [],
                 'platform' => $product->platform,
                 'approval_required' => (bool) $product->approval_required,
@@ -426,6 +428,7 @@ class WatchedProductController extends Controller
             'search_volume_checked_at' => $watchedProduct->search_volume_checked_at?->toIso8601String(),
             'search_volume_checked_formatted' => $watchedProduct->search_volume_checked_at?->format('M d, Y'),
             'search_volume_error' => $watchedProduct->search_volume_error,
+            'search_volume_error_at' => $watchedProduct->search_volume_error_at?->toIso8601String(),
             'approval_required' => (bool) $watchedProduct->approval_required,
             'demand_notes' => $watchedProduct->demand_notes,
             'sales_page_url' => $watchedProduct->sales_page_url,
@@ -657,13 +660,26 @@ class WatchedProductController extends Controller
      */
     public function refreshVolume(Request $request, WatchedProduct $watchedProduct, KeywordVolumeService $volumeService): RedirectResponse
     {
-        $result = $volumeService->refreshProduct($watchedProduct);
+        try {
+            $result = $volumeService->refreshProduct($watchedProduct);
+        } catch (GoogleAdsQuotaException $e) {
+            report($e);
+
+            return redirect()->back()
+                ->with('error', 'Google Ads quota exhausted. Partial results (if any) were saved; please try again later.');
+        } catch (\Throwable $e) {
+            report($e);
+
+            return redirect()->back()
+                ->with('error', 'Failed to refresh search volume: '.$e->getMessage());
+        }
 
         if (! $result['success']) {
             return redirect()->back()
                 ->with('error', $result['error'] ?? 'Failed to refresh Google Keyword Planner search volume.');
         }
 
+        $watchedProduct->refresh();
         $totalFormatted = $watchedProduct->search_volume_total !== null
             ? number_format($watchedProduct->search_volume_total)
             : 'N/A';

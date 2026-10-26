@@ -27,8 +27,6 @@ const MONTH_NAMES = [
 ];
 
 export default function SearchVolumeSection({ product, onToast }) {
-    if (!product) return null;
-
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [openPopover, setOpenPopover] = useState(null); // 'volume' | 'competition' | 'bid' | 'trend' | 'keyword' | null
 
@@ -44,12 +42,17 @@ export default function SearchVolumeSection({ product, onToast }) {
             {},
             {
                 preserveScroll: true,
-                onSuccess: () => {
+                onSuccess: (page) => {
+                    const flashError = page?.props?.flash?.error;
+                    if (flashError) {
+                        if (onToast) onToast(`Volume refresh failed: ${flashError}`, 'error');
+                        return;
+                    }
                     if (onToast) onToast('Search volume refreshed via Google Ads Keyword Planner!');
                 },
                 onError: (err) => {
                     const msg = err?.error || 'Failed to refresh search volume.';
-                    if (onToast) onToast(msg);
+                    if (onToast) onToast(msg, 'error');
                 },
                 onFinish: () => {
                     setIsRefreshing(false);
@@ -58,7 +61,7 @@ export default function SearchVolumeSection({ product, onToast }) {
         );
     };
 
-    const searchVolumeByGeo = product.search_volume_by_geo && typeof product.search_volume_by_geo === 'object'
+    const searchVolumeByGeo = product?.search_volume_by_geo && typeof product.search_volume_by_geo === 'object'
         ? product.search_volume_by_geo
         : {};
 
@@ -139,6 +142,8 @@ export default function SearchVolumeSection({ product, onToast }) {
         return sorted.slice(-12);
     }, [geoEntries]);
 
+    if (!product) return null;
+
     const targetKeyword = product.search_volume_keyword || product.name;
     const isCustomKeyword = Boolean(product.search_volume_keyword);
 
@@ -164,7 +169,7 @@ export default function SearchVolumeSection({ product, onToast }) {
                             </svg>
                         </button>
                         {openPopover === 'volume' && (
-                            <div className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-xl">
+                            <div className="absolute right-0 sm:right-auto sm:left-0 top-full mt-2 z-30 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-xl">
                                 <div className="flex justify-between items-center mb-1 font-semibold text-theme-primary">
                                     <span>Keyword Planner Volume</span>
                                     <button
@@ -351,7 +356,7 @@ export default function SearchVolumeSection({ product, onToast }) {
                                 </svg>
                             </button>
                             {openPopover === 'competition' && (
-                                <div className="absolute right-0 top-full mt-2 z-30 w-72 rounded-xl border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-xl">
+                                <div className="absolute right-0 top-full mt-2 z-30 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-xl">
                                     <div className="flex justify-between items-center mb-1 font-semibold text-theme-primary">
                                         <span>Competition & Index</span>
                                         <button
@@ -382,7 +387,7 @@ export default function SearchVolumeSection({ product, onToast }) {
                                 </svg>
                             </button>
                             {openPopover === 'bid' && (
-                                <div className="absolute right-0 top-full mt-2 z-30 w-72 rounded-xl border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-xl">
+                                <div className="absolute right-0 top-full mt-2 z-30 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-xl">
                                     <div className="flex justify-between items-center mb-1 font-semibold text-theme-primary">
                                         <span>Top of Page Bids (USD)</span>
                                         <button
@@ -502,7 +507,7 @@ export default function SearchVolumeSection({ product, onToast }) {
                                     </svg>
                                 </button>
                                 {openPopover === 'trend' && (
-                                    <div className="absolute left-0 top-full mt-2 z-30 w-72 rounded-xl border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-xl">
+                                    <div className="absolute right-0 sm:right-auto sm:left-0 top-full mt-2 z-30 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-xl">
                                         <div className="flex justify-between items-center mb-1 font-semibold text-theme-primary">
                                             <span>Monthly Trend Breakdown</span>
                                             <button

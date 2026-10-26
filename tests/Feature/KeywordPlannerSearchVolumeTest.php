@@ -9,6 +9,7 @@ use App\Models\WatchedProduct;
 use App\Services\Google\GoogleAdsClient;
 use App\Services\Google\GoogleAdsQuotaException;
 use Carbon\Carbon;
+use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -380,12 +381,13 @@ class KeywordPlannerSearchVolumeTest extends TestCase
         ]);
 
         $this->artisan('watching:refresh-volume')
-            ->assertExitCode(0);
+            ->assertExitCode(1);
 
         $fresh = $product->fresh();
         $this->assertNotNull($fresh->search_volume_error);
         $this->assertStringContainsString('Invalid customer id', $fresh->search_volume_error);
-        $this->assertNotNull($fresh->search_volume_checked_at);
+        $this->assertNull($fresh->search_volume_checked_at);
+        $this->assertNotNull($fresh->search_volume_error_at);
     }
 
     public function test_controller_filters_volume_correctly(): void
@@ -502,6 +504,145 @@ class KeywordPlannerSearchVolumeTest extends TestCase
         $this->assertSame(7200, $fresh->search_volume_total);
         $this->assertNotNull($fresh->search_volume_checked_at);
         $this->assertArrayHasKey('US', $fresh->search_volume_by_geo);
+    }
+
+    private function fakeTokenAnd(callable|PromiseInterface $metrics): void
+    {
+        Http::fake([
+            'https://oauth2.googleapis.com/token' => Http::response(['access_token' => 'mock-access-token', 'expires_in' => 3600], 200),
+            'https://googleads.googleapis.com/v26/customers/1234567890:generateKeywordHistoricalMetrics*' => $metrics,
+        ]);
+    }
+
+    private function errorResponse(int $code = 400, string $status = 'INVALID_ARGUMENT', string $message = 'Bad geo.')
+    {
+        return Http::response(['error' => ['code' => $code, 'message' => $message, 'status' => $status]], $code);
+    }
+
+    public function test_command_exits_failure_when_every_product_errors(): void
+    {
+        WatchedProduct::create(['name' => 'Fail A', 'status' => WatchedProductStatus::Watch, 'allowed_geos' => ['US']]);
+        WatchedProduct::create(['name' => 'Fail B', 'status' => WatchedProductStatus::Watch, 'allowed_geos' => ['CA']]);
+
+        $this->fakeTokenAnd($this->errorResponse());
+
+        $this->artisan('watching:refresh-volume')->assertExitCode(1);
+    }
+
+    public function test_partial_geo_failure_keeps_successful_geo(): void
+    {
+        $product = WatchedProduct::create(['name' => 'Partial Product', 'status' => WatchedProductStatus::Watch, 'allowed_geos' => ['US', 'CA']]);
+
+        $this->fakeTokenAnd(function ($request) {
+            $body = json_decode($request->body(), true);
+            $geo = $body['geoTargetConstants'][0] ?? '';
+            if (str_contains($geo, '2124')) {
+                return $this->errorResponse(400, 'INVALID_ARGUMENT', 'CA failed.');
+            }
+
+            return Http::response(['results' => [['text' => 'Partial Product', 'keywordMetrics' => ['avgMonthlySearches' => '900', 'competition' => 'LOW']]]], 200);
+        });
+
+        $this->artisan('watching:refresh-volume');
+
+        $fresh = $product->fresh();
+        $this->assertArrayHasKey('US', $fresh->search_volume_by_geo);
+        $this->assertArrayNotHasKey('CA', $fresh->search_volume_by_geo);
+        $this->assertSame(900, $fresh->search_volume_total);
+        $this->assertStringContainsString('CA', $fresh->search_volume_error);
+        $this->assertStringNotContainsString('(US)', $fresh->search_volume_error);
+        $this->assertNotNull($fresh->search_volume_error_at);
+    }
+
+    public function test_quota_exception_mid_loop_persists_already_fetched_geos(): void
+    {
+        $product = WatchedProduct::create(['name' => 'Quota Product', 'status' => WatchedProductStatus::Watch, 'allowed_geos' => ['US', 'CA']]);
+
+        $this->fakeTokenAnd(function ($request) {
+            $body = json_decode($request->body(), true);
+            $geo = $body['geoTargetConstants'][0] ?? '';
+            if (str_contains($geo, '2124')) {
+                return $this->errorResponse(429, 'RESOURCE_EXHAUSTED', 'Resource has been exhausted (e.g. check quota).');
+            }
+
+            return Http::response(['results' => [['text' => 'Quota Product', 'keywordMetrics' => ['avgMonthlySearches' => '300', 'competition' => 'LOW']]]], 200);
+        });
+
+        $this->artisan('watching:refresh-volume')->assertExitCode(1);
+
+        $fresh = $product->fresh();
+        $this->assertSame(300, $fresh->search_volume_by_geo['US']['avg_monthly_searches']);
+        $this->assertNotNull($fresh->search_volume_error);
+    }
+
+    public function test_existing_data_survives_error_and_checked_at_unchanged(): void
+    {
+        $checkedAt = Carbon::now()->subDays(10)->startOfSecond();
+        $product = WatchedProduct::create([
+            'name' => 'Existing Data Product',
+            'status' => WatchedProductStatus::Watch,
+            'allowed_geos' => ['US'],
+            'search_volume_total' => 1500,
+            'search_volume_by_geo' => ['US' => ['keyword' => 'Existing Data Product', 'avg_monthly_searches' => 1500, 'is_range' => false]],
+            'search_volume_checked_at' => $checkedAt,
+        ]);
+
+        $this->fakeTokenAnd($this->errorResponse());
+
+        $this->artisan('watching:refresh-volume');
+
+        $fresh = $product->fresh();
+        $this->assertSame(1500, $fresh->search_volume_total);
+        $this->assertSame(1500, $fresh->search_volume_by_geo['US']['avg_monthly_searches']);
+        $this->assertTrue($checkedAt->equalTo($fresh->search_volume_checked_at));
+        $this->assertNotNull($fresh->search_volume_error_at);
+        $this->assertNotNull($fresh->search_volume_error);
+    }
+
+    public function test_errored_product_is_retried_within_stale_window(): void
+    {
+        $product = WatchedProduct::create([
+            'name' => 'Retry Product',
+            'status' => WatchedProductStatus::Watch,
+            'allowed_geos' => ['US'],
+            'search_volume_checked_at' => Carbon::now()->subDay(),
+            'search_volume_error' => 'Previous failure',
+            'search_volume_error_at' => Carbon::now()->subHour(),
+        ]);
+
+        $this->fakeTokenAnd(Http::response(['results' => [['text' => 'Retry Product', 'keywordMetrics' => ['avgMonthlySearches' => '4200', 'competition' => 'LOW']]]], 200));
+
+        $this->artisan('watching:refresh-volume', ['--stale-days' => 7])->assertExitCode(0);
+
+        $fresh = $product->fresh();
+        $this->assertSame(4200, $fresh->search_volume_total);
+        $this->assertNull($fresh->search_volume_error);
+        $this->assertNull($fresh->search_volume_error_at);
+    }
+
+    public function test_refresh_route_flashes_error_on_failure(): void
+    {
+        $product = WatchedProduct::create(['name' => 'Route Error Product', 'status' => WatchedProductStatus::Watch, 'allowed_geos' => ['US']]);
+
+        $this->fakeTokenAnd($this->errorResponse());
+
+        $response = $this->actingAs($this->user)->post("/watching-products/{$product->id}/refresh-volume");
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
+        $response->assertSessionMissing('toast');
+    }
+
+    public function test_refresh_route_quota_exception_flashes_error_not_500(): void
+    {
+        $product = WatchedProduct::create(['name' => 'Route Quota Product', 'status' => WatchedProductStatus::Watch, 'allowed_geos' => ['US']]);
+
+        $this->fakeTokenAnd($this->errorResponse(429, 'RESOURCE_EXHAUSTED', 'Resource has been exhausted (e.g. check quota).'));
+
+        $response = $this->actingAs($this->user)->post("/watching-products/{$product->id}/refresh-volume");
+
+        $response->assertRedirect();
+        $response->assertSessionHas('error');
     }
 
     public function test_schedule_is_registered_in_console(): void

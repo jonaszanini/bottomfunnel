@@ -126,6 +126,7 @@ export default function Show({
     options = {},
 }) {
     const [toastMessage, setToastMessage] = useState('');
+    const [toastType, setToastType] = useState('success');
 
     const resolveTab = (tab) => {
         if (tab === 'campaign') return 'guidance';
@@ -291,9 +292,10 @@ export default function Show({
         }
     };
 
-    const showToast = (msg) => {
+    const showToast = (msg, type = 'success') => {
+        setToastType(type);
         setToastMessage(msg);
-        setTimeout(() => setToastMessage(''), 3000);
+        setTimeout(() => setToastMessage(''), type === 'error' ? 6000 : 3000);
     };
 
     const handleCopy = (text, label) => {
@@ -450,7 +452,7 @@ export default function Show({
 
             {/* Toast Notification */}
             {toastMessage && (
-                <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-theme-surface px-4 py-3 text-sm font-medium text-emerald-600 dark:text-emerald-400 shadow-xl animate-bounce">
+                <div role={toastType === 'error' ? 'alert' : 'status'} className={`fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-xl border bg-theme-surface px-4 py-3 text-sm font-medium shadow-xl max-w-[calc(100vw-2.5rem)] ${toastType === 'error' ? 'border-rose-500/40 text-rose-600 dark:text-rose-400' : 'border-emerald-500/40 text-emerald-600 dark:text-emerald-400 animate-bounce'}`}>
                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
                         <polyline points="22 4 12 14.01 9 11.01" />

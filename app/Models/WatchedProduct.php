@@ -109,6 +109,7 @@ class WatchedProduct extends Model
         'search_volume_keyword',
         'search_volume_checked_at',
         'search_volume_error',
+        'search_volume_error_at',
     ];
 
     /**
@@ -176,6 +177,7 @@ class WatchedProduct extends Model
             'search_volume_total' => 'integer',
             'search_volume_is_range' => 'boolean',
             'search_volume_checked_at' => 'datetime',
+            'search_volume_error_at' => 'datetime',
         ];
     }
 

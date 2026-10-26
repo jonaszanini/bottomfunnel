@@ -128,6 +128,7 @@ class KeywordVolumeService
         // Structure to collect per-product geo metrics: [$productId => [$geo => $metricData]]
         $productGeoMetrics = [];
         $productErrors = [];
+        $quotaException = null;
 
         // For each geo, batch all keywords into API calls
         foreach ($geoToProducts as $geo => $productsInGeo) {
@@ -169,13 +170,17 @@ class KeywordVolumeService
                     }
                 }
             } catch (GoogleAdsQuotaException $e) {
-                // Abort cleanly without partial corruption on quota exhaustion
+                // Stop querying further geos, but persist what was already fetched.
                 Log::error('KeywordVolumeService: Google Ads quota exhausted during refresh: '.$e->getMessage());
-                throw $e;
+                $quotaException = $e;
+                foreach ($productsInGeo as $product) {
+                    $productErrors[$product->id][$geo] = 'Google Ads quota exhausted: '.$e->getMessage();
+                }
+                break;
             } catch (\Throwable $e) {
                 Log::warning("KeywordVolumeService: Error refreshing volume for geo {$geo}: {$e->getMessage()}");
                 foreach ($productsInGeo as $product) {
-                    $productErrors[$product->id] = 'Google Ads: '.$e->getMessage();
+                    $productErrors[$product->id][$geo] = 'Google Ads ('.$geo.'): '.$e->getMessage();
                 }
             }
         }
@@ -187,7 +192,7 @@ class KeywordVolumeService
 
         // Persist computed volume per product
         foreach ($eligibleProducts as $product) {
-            $existingByGeo = (array) ($product->searchVolume_by_geo ?? []);
+            $existingByGeo = (array) ($product->search_volume_by_geo ?? []);
             $newGeos = $productGeoMetrics[$product->id] ?? [];
 
             // Merge newly fetched geos into product's geo breakdown
@@ -212,14 +217,22 @@ class KeywordVolumeService
             }
 
             $searchVolumeTotal = $hasAnyNonZero ? $totalSearches : null;
-            $error = $productErrors[$product->id] ?? null;
+            $geoErrors = $productErrors[$product->id] ?? [];
+            $error = empty($geoErrors) ? null : implode('; ', $geoErrors);
 
             if ($error !== null) {
                 $errorCount++;
-                $product->update([
-                    'search_volume_error' => substr($error, 0, 255),
-                    'search_volume_checked_at' => now(),
-                ]);
+                // Keep checked_at at the last successful fetch; merge any geos that did succeed.
+                $attrs = [
+                    'search_volume_error' => mb_substr($error, 0, 255),
+                    'search_volume_error_at' => now(),
+                ];
+                if (! empty($newGeos)) {
+                    $attrs['search_volume_by_geo'] = $mergedByGeo;
+                    $attrs['search_volume_total'] = $searchVolumeTotal;
+                    $attrs['search_volume_is_range'] = $isRange;
+                }
+                $product->update($attrs);
             } else {
                 $product->update([
                     'search_volume_by_geo' => $mergedByGeo,
@@ -227,6 +240,7 @@ class KeywordVolumeService
                     'search_volume_is_range' => $isRange,
                     'search_volume_checked_at' => now(),
                     'search_volume_error' => null,
+                    'search_volume_error_at' => null,
                 ]);
 
                 $updatedCount++;
@@ -237,6 +251,10 @@ class KeywordVolumeService
                     $rangeCount++;
                 }
             }
+        }
+
+        if ($quotaException !== null) {
+            throw $quotaException;
         }
 
         return [
