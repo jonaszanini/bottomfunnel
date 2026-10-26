@@ -1111,7 +1111,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                         const otherPlatforms = (Array.isArray(product.platforms) ? product.platforms : []).filter((p) => p !== primary);
                                                         return (
                                                             <div className="flex items-center gap-1">
-                                                                <span title={primary} className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold max-w-[88px] truncate ${getPlatformBadgeClass(primary)}`}>
+                                                                <span title={primary} className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-semibold max-w-[88px] truncate align-middle ${getPlatformBadgeClass(primary)}`}>
                                                                     {primary}
                                                                 </span>
                                                                 {otherPlatforms.length > 0 && (
