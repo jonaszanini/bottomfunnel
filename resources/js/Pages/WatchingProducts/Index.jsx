@@ -958,14 +958,14 @@ export default function Index({ products, filters, metrics, options }) {
                                     <tr>
                                         {renderSortTh('#', 'rank', 'w-12 text-center')}
                                         {renderSortTh('Score', 'score', 'w-20 text-center')}
-                                        {renderSortTh('Product Name', 'name')}
-                                        {renderSortTh('Platform', 'platform', 'w-36')}
-                                        {renderSortTh('Net Payout (CAD)', 'payout_cad', 'w-36 text-right')}
-                                        {renderSortTh('Momentum', 'momentum', 'w-36')}
-                                        {renderSortTh('Compliance', 'compliance', 'w-44 text-center')}
+                                        {renderSortTh('Product Name', 'name', 'min-w-[260px]')}
+                                        {renderSortTh('Platform', 'platform', 'w-24')}
+                                        {renderSortTh('Net Payout (CAD)', 'payout_cad', 'w-28 text-right')}
+                                        {renderSortTh('Momentum', 'momentum', 'w-24')}
+                                        {renderSortTh('Compliance', 'compliance', 'w-40 text-center')}
                                         {renderSortTh('Recheck', 'recheck_at', 'w-28 text-center')}
                                         {renderSortTh('Status', 'status', 'w-24 text-center')}
-                                        <th scope="col" className="px-3 py-3 text-right select-none w-28">Actions</th>
+                                        <th scope="col" className="px-2 py-3 text-center select-none w-16">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-theme">
@@ -982,12 +982,12 @@ export default function Index({ products, filters, metrics, options }) {
                                                 }`}
                                             >
                                                 {/* Rank */}
-                                                <td className="px-3 py-3 text-center whitespace-nowrap font-bold text-xs text-theme-secondary">
+                                                <td className="px-2 py-2 text-center whitespace-nowrap font-bold text-xs text-theme-secondary">
                                                     {product.rank ? `#${product.rank}` : '—'}
                                                 </td>
 
                                                 {/* Potential Score with Continuous HSL Gradient & ⓘ Popover Trigger */}
-                                                <td className="px-3 py-3 whitespace-nowrap text-center">
+                                                <td className="px-2 py-2 whitespace-nowrap text-center">
                                                     <div className="flex items-center justify-center gap-1.5">
                                                         <span
                                                             style={scoreHsl.style}
@@ -1015,7 +1015,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                 </td>
 
                                                 {/* Product Name & Typographic Subtitle */}
-                                                <td className="px-3 py-3 font-medium text-theme-primary">
+                                                <td className="px-2 py-2 font-medium text-theme-primary">
                                                     <div className="flex flex-col">
                                                         <div className="flex items-center gap-1.5 flex-wrap">
                                                             <Link
@@ -1049,7 +1049,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                                 </a>
                                                             )}
                                                         </div>
-                                                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-theme-muted">
+                                                        <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] leading-tight text-theme-muted">
                                                             <span>{product.page_type || 'General'}</span>
                                                             <span>•</span>
                                                             <span className="inline-flex items-center gap-1">
@@ -1074,12 +1074,12 @@ export default function Index({ products, filters, metrics, options }) {
                                                             {product.approval_status === 'yes' ? (
                                                                 <>
                                                                     <span>•</span>
-                                                                    <span className="text-amber-600 dark:text-amber-400 font-medium">Approval req</span>
+                                                                    <span className="text-amber-600 dark:text-amber-400 font-medium cursor-help" title="Approval required">Appr. req</span>
                                                                 </>
                                                             ) : product.approval_status === 'unknown' ? (
                                                                 <>
                                                                     <span>•</span>
-                                                                    <span className="text-theme-muted font-medium">Approval unknown</span>
+                                                                    <span className="text-theme-muted font-medium cursor-help" title="Approval unknown">Appr. ?</span>
                                                                 </>
                                                             ) : null}
                                                         </div>
@@ -1105,13 +1105,13 @@ export default function Index({ products, filters, metrics, options }) {
                                                 </td>
 
                                                 {/* Platform */}
-                                                <td className="px-3 py-3 whitespace-nowrap text-xs">
+                                                <td className="px-2 py-2 whitespace-nowrap text-xs">
                                                     {(() => {
                                                         const primary = product.platform || (Array.isArray(product.platforms) && product.platforms[0]) || 'Unknown';
                                                         const otherPlatforms = (Array.isArray(product.platforms) ? product.platforms : []).filter((p) => p !== primary);
                                                         return (
-                                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                                <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold ${getPlatformBadgeClass(primary)}`}>
+                                                            <div className="flex items-center gap-1">
+                                                                <span title={primary} className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold max-w-[88px] truncate ${getPlatformBadgeClass(primary)}`}>
                                                                     {primary}
                                                                 </span>
                                                                 {otherPlatforms.length > 0 && (
@@ -1128,7 +1128,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                 </td>
 
                                                 {/* Net Payout (CAD) */}
-                                                <td className="px-3 py-3 whitespace-nowrap text-right text-xs">
+                                                <td className="px-2 py-2 whitespace-nowrap text-right text-xs">
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         <div className="font-bold text-sm text-theme-primary">
                                                             {formatCad(product.payout_cad)}
@@ -1150,13 +1150,13 @@ export default function Index({ products, filters, metrics, options }) {
                                                 </td>
 
                                                 {/* Momentum Indicator */}
-                                                <td className="px-3 py-3 whitespace-nowrap text-xs">
+                                                <td className="px-2 py-2 whitespace-nowrap text-xs">
                                                     {getMomentumIndicator(product)}
                                                 </td>
 
                                                 {/* Grouped Compliance Pill (TrueBoF + Brand Bidding + Google Ads Risk) */}
-                                                <td className="px-3 py-3 whitespace-nowrap text-center text-xs">
-                                                    <div className="flex flex-col items-center gap-1">
+                                                <td className="px-2 py-2 whitespace-nowrap text-center text-xs">
+                                                    <div className="flex flex-col items-center gap-0.5">
                                                         {getCompliancePill(product)}
                                                         <div className="flex items-center gap-1">
                                                             <span className="text-[10px] text-theme-muted">Ads:</span>
@@ -1166,7 +1166,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                 </td>
 
                                                 {/* Recheck Date */}
-                                                <td className="px-3 py-3 whitespace-nowrap text-center text-xs">
+                                                <td className="px-2 py-2 whitespace-nowrap text-center text-xs">
                                                     {product.recheck_at ? (
                                                         <div className="flex flex-col items-center">
                                                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
@@ -1191,7 +1191,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                 </td>
 
                                                 {/* Quick Status Select */}
-                                                <td className="px-3 py-3 whitespace-nowrap text-center">
+                                                <td className="px-2 py-2 whitespace-nowrap text-center">
                                                     <select
                                                         value={product.status}
                                                         onChange={(e) => handleQuickStatusChange(product, e.target.value)}
@@ -1205,8 +1205,8 @@ export default function Index({ products, filters, metrics, options }) {
                                                 </td>
 
                                                 {/* Actions */}
-                                                <td className="px-3 py-3 whitespace-nowrap text-right">
-                                                    <div className="flex items-center justify-end gap-1">
+                                                <td className="px-2 py-2 whitespace-nowrap text-right">
+                                                    <div className="flex flex-col items-center gap-0.5">
                                                         <Link
                                                             href={`/watching-products/${product.id}`}
                                                             className="px-2 py-1 rounded text-theme-accent hover:bg-theme-subtle text-xs font-semibold transition-colors"
@@ -1214,6 +1214,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                         >
                                                             View
                                                         </Link>
+                                                        <div className="flex items-center gap-0.5">
 
                                                         {product.sales_page_url ? (
                                                             product.affiliate_link ? (
@@ -1270,6 +1271,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                                                             </svg>
                                                         </button>
+                                                        </div>
                                                     </div>
                                                 </td>
                                             </tr>
