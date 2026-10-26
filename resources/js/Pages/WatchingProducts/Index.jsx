@@ -204,12 +204,12 @@ export default function Index({ products, filters, metrics, options }) {
             <th
                 scope="col"
                 onClick={() => handleSort(columnKey)}
-                className={`px-3 py-3 select-none cursor-pointer group transition-colors hover:text-theme-primary ${isActive ? 'text-theme-accent font-bold bg-theme-subtle/50' : ''} ${className}`}
+                className={`px-2 py-3 select-none cursor-pointer group transition-colors hover:text-theme-primary ${isActive ? 'text-theme-accent font-bold bg-theme-subtle/50' : ''} ${className}`}
                 title={`Sort by ${label} (${isActive && isAsc ? 'Descending' : 'Ascending'})`}
                 aria-sort={isActive ? (isAsc ? 'ascending' : 'descending') : 'none'}
             >
-                <div className={`flex items-center gap-1.5 ${className.includes('text-right') ? 'justify-end' : ''}`}>
-                    <span>{label}</span>
+                <div className={`flex items-center gap-1 min-w-0 ${className.includes('text-right') ? 'justify-end' : ''} ${className.includes('text-center') ? 'justify-center' : ''}`}>
+                    <span className="truncate">{label}</span>
                     <span className="inline-flex shrink-0">
                         {isActive ? (
                             isAsc ? (
@@ -602,7 +602,7 @@ export default function Index({ products, filters, metrics, options }) {
 
         return (
             <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${pillStyle}`}
+                className={`inline-flex max-w-full items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold border truncate ${pillStyle}`}
                 title={fullTitle}
             >
                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotStyle}`} />
@@ -613,7 +613,7 @@ export default function Index({ products, filters, metrics, options }) {
         );
     };
 
-    const getMomentumIndicator = (product) => {
+    const getMomentumIndicator = (product, compact = false) => {
         const trend = product.trends_trend || 'unknown';
         const delta = product.score_delta;
         const hasDelta = delta !== null && delta !== undefined && Number(delta) !== 0;
@@ -686,11 +686,12 @@ export default function Index({ products, filters, metrics, options }) {
         const title = `Momentum: ${label}${hasDelta ? ` (${deltaNum > 0 ? `+${deltaNum}` : deltaNum} score change)` : ''}`;
 
         return (
-            <div className="flex items-center gap-1.5 whitespace-nowrap" title={title}>
-                <span className={`flex items-center justify-center w-5 h-5 rounded-full shrink-0 ${iconBg}`}>
+            <div className={`flex items-center whitespace-nowrap ${compact ? 'gap-1' : 'gap-1.5'}`} title={title}>
+                <span className={`flex items-center justify-center ${compact ? 'w-4 h-4' : 'w-5 h-5'} rounded-full shrink-0 ${iconBg}`}>
                     {icon}
                 </span>
-                <span className={`text-xs ${textClass}`}>{label}</span>
+                {!compact && <span className={`text-xs ${textClass}`}>{label}</span>}
+                {compact && <span className="sr-only">{label}</span>}
                 {hasDelta && (
                     <span
                         className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
@@ -1012,21 +1013,19 @@ export default function Index({ products, filters, metrics, options }) {
                     </div>
                 ) : (
                     <>
-                        <div className="hidden md:block overflow-x-auto">
-                            <table className="min-w-full divide-y divide-theme text-left text-sm">
+                        <div className="hidden md:block">
+                            <table className="w-full table-fixed divide-y divide-theme text-left text-sm">
                                 <thead className="bg-theme-subtle/40 text-xs font-semibold uppercase tracking-wider text-theme-muted">
                                     <tr>
-                                        {renderSortTh('#', 'rank', 'w-12 text-center')}
-                                        {renderSortTh('Score', 'score', 'w-20 text-center')}
-                                        {renderSortTh('Product Name', 'name', 'min-w-[260px]')}
-                                        {renderSortTh('Platform', 'platform', 'w-24')}
-                                        {renderSortTh('Net Payout (CAD)', 'payout_cad', 'w-28 text-right')}
-                                        {renderSortTh('Volume', 'search_volume_total', 'w-20 text-right')}
-                                        {renderSortTh('Momentum', 'momentum', 'w-24')}
-                                        {renderSortTh('Compliance', 'compliance', 'w-40 text-center')}
-                                        {renderSortTh('Recheck', 'recheck_at', 'w-28 text-center')}
+                                        {renderSortTh('#', 'rank', 'w-10 text-center')}
+                                        {renderSortTh('Score', 'score', 'w-16 text-center')}
+                                        {renderSortTh('Product Name', 'name', '')}
+                                        {renderSortTh('Platform', 'platform', 'w-24 hidden xl:table-cell')}
+                                        {renderSortTh('Payout', 'payout_cad', 'w-20 text-right hidden lg:table-cell')}
+                                        {renderSortTh('Trend', 'search_volume_total', 'w-20')}
+                                        {renderSortTh('Compliance', 'compliance', 'w-28 text-center hidden xl:table-cell')}
                                         {renderSortTh('Status', 'status', 'w-24 text-center')}
-                                        <th scope="col" className="px-2 py-3 text-center select-none w-16">Actions</th>
+                                        <th scope="col" className="px-2 py-3 text-center select-none w-20">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-theme">
@@ -1049,10 +1048,10 @@ export default function Index({ products, filters, metrics, options }) {
 
                                                 {/* Potential Score with Continuous HSL Gradient & ⓘ Popover Trigger */}
                                                 <td className="px-2 py-2 whitespace-nowrap text-center">
-                                                    <div className="flex items-center justify-center gap-1.5">
+                                                    <div className="flex items-center justify-center gap-0.5">
                                                         <span
                                                             style={scoreHsl.style}
-                                                            className="inline-block rounded-md border px-2 py-0.5 text-xs font-black min-w-[34px] text-center shadow-2xs"
+                                                            className="inline-block rounded-md border px-1.5 py-0.5 text-xs font-black min-w-[28px] text-center shadow-2xs"
                                                             title={`Score: ${product.score ?? 'N/A'} (Band: ${scoreHsl.band})`}
                                                         >
                                                             {product.score !== null ? product.score : '—'}
@@ -1076,18 +1075,19 @@ export default function Index({ products, filters, metrics, options }) {
                                                 </td>
 
                                                 {/* Product Name & Typographic Subtitle */}
-                                                <td className="px-2 py-2 font-medium text-theme-primary">
-                                                    <div className="flex flex-col">
-                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                <td className="px-2 py-2 font-medium text-theme-primary min-w-0">
+                                                    <div className="flex flex-col min-w-0">
+                                                        <div className="flex items-center gap-1.5 min-w-0">
                                                             <Link
                                                                 href={`/watching-products/${product.id}`}
-                                                                className="font-bold text-sm text-theme-primary hover:text-theme-accent transition-colors"
+                                                                title={product.name}
+                                                                className="font-bold text-sm text-theme-primary hover:text-theme-accent transition-colors truncate min-w-0"
                                                             >
                                                                 {product.name}
                                                             </Link>
                                                             {product.tracks_count > 0 && (
                                                                 <span
-                                                                    className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
+                                                                    className="inline-flex shrink-0 items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
                                                                     title={`Testing in ${product.tracks_count} Track(s)`}
                                                                 >
                                                                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -1099,7 +1099,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                                     href={product.sales_page_url}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
-                                                                    className="text-theme-muted hover:text-theme-accent inline-flex items-center"
+                                                                    className="text-theme-muted hover:text-theme-accent inline-flex shrink-0 items-center"
                                                                     title="Open Sales Page"
                                                                 >
                                                                     <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1110,7 +1110,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                                 </a>
                                                             )}
                                                         </div>
-                                                        <div className="mt-0.5 flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[11px] leading-tight text-theme-muted">
+                                                        <div className="mt-0.5 flex flex-nowrap items-center gap-x-1 overflow-hidden whitespace-nowrap text-[11px] leading-tight text-theme-muted">
                                                             <span>{product.page_type || 'General'}</span>
                                                             <span>•</span>
                                                             <span className="inline-flex items-center gap-1">
@@ -1143,13 +1143,12 @@ export default function Index({ products, filters, metrics, options }) {
                                                                     <span className="text-theme-muted font-medium cursor-help" title="Approval unknown">Appr. ?</span>
                                                                 </>
                                                             ) : null}
-                                                        </div>
                                                         {Array.isArray(product.allowed_geos) && product.allowed_geos.length > 0 && (
-                                                            <div className="mt-1 flex items-center gap-1 flex-wrap">
+                                                            <span className="ml-1 inline-flex shrink-0 items-center gap-0.5">
                                                                 {product.allowed_geos.slice(0, 3).map((geo) => (
                                                                     <span
                                                                         key={geo}
-                                                                        className="inline-block px-1.5 py-0.2 text-[10px] font-mono font-bold rounded bg-theme-subtle text-theme-secondary border border-theme"
+                                                                        className="inline-block px-1 py-0.2 text-[10px] font-mono font-bold rounded bg-theme-subtle text-theme-secondary border border-theme"
                                                                         title={`Allowed Geo: ${geo}`}
                                                                     >
                                                                         {geo}
@@ -1160,19 +1159,20 @@ export default function Index({ products, filters, metrics, options }) {
                                                                         +{product.allowed_geos.length - 3}
                                                                     </span>
                                                                 )}
-                                                            </div>
+                                                            </span>
                                                         )}
+                                                        </div>
                                                     </div>
                                                 </td>
 
                                                 {/* Platform */}
-                                                <td className="px-2 py-2 whitespace-nowrap text-xs">
+                                                <td className="px-2 py-2 whitespace-nowrap text-xs hidden xl:table-cell overflow-hidden">
                                                     {(() => {
                                                         const primary = product.platform || (Array.isArray(product.platforms) && product.platforms[0]) || 'Unknown';
                                                         const otherPlatforms = (Array.isArray(product.platforms) ? product.platforms : []).filter((p) => p !== primary);
                                                         return (
                                                             <div className="flex items-center gap-1">
-                                                                <span title={primary} className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-semibold max-w-[88px] truncate align-middle ${getPlatformBadgeClass(primary)}`}>
+                                                                <span title={primary} className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-semibold max-w-[60px] truncate align-middle ${getPlatformBadgeClass(primary)}`}>
                                                                     {primary}
                                                                 </span>
                                                                 {otherPlatforms.length > 0 && (
@@ -1188,31 +1188,28 @@ export default function Index({ products, filters, metrics, options }) {
                                                     })()}
                                                 </td>
 
-                                                {/* Net Payout (CAD) */}
-                                                <td className="px-2 py-2 whitespace-nowrap text-right text-xs">
-                                                    <div className="flex items-center justify-end gap-1.5">
-                                                        <div className="font-bold text-sm text-theme-primary">
-                                                            {formatCad(product.payout_cad)}
-                                                        </div>
-                                                        {Array.isArray(product.payouts_by_platform) && product.payouts_by_platform.length > 1 && (
-                                                            <span
-                                                                className="inline-flex items-center rounded bg-theme-subtle border border-theme px-1.5 py-0.2 text-[10px] font-medium text-theme-muted cursor-help"
-                                                                title={`Payout Tiers:\n${product.payouts_by_platform.map((tier) => `• ${tier.geo_tier || 'Global'}: ${tier.amount ?? tier.payout ?? 0} ${tier.currency || 'USD'}${tier.platform ? ` (${tier.platform})` : ''}`).join('\n')}`}
-                                                            >
-                                                                +{product.payouts_by_platform.length - 1} tiers
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    {product.payout_currency && product.payout_currency !== 'CAD' && product.payout_formatted && (
-                                                        <div className="text-[11px] text-theme-muted">
-                                                            {product.payout_formatted}
-                                                        </div>
+                                                {/* Net Payout (CAD only; original currency + tiers in tooltip) */}
+                                                <td
+                                                    className="px-2 py-2 whitespace-nowrap text-right text-xs hidden lg:table-cell"
+                                                    title={[
+                                                        product.payout_currency && product.payout_currency !== 'CAD' && product.payout_formatted ? `Original: ${product.payout_formatted}` : null,
+                                                        Array.isArray(product.payouts_by_platform) && product.payouts_by_platform.length > 1
+                                                            ? `Payout Tiers:\n${product.payouts_by_platform.map((tier) => `• ${tier.geo_tier || 'Global'}: ${tier.amount ?? tier.payout ?? 0} ${tier.currency || 'USD'}${tier.platform ? ` (${tier.platform})` : ''}`).join('\n')}`
+                                                            : null,
+                                                    ].filter(Boolean).join('\n') || undefined}
+                                                >
+                                                    <span className="font-bold text-sm text-theme-primary">
+                                                        {formatCad(product.payout_cad)}
+                                                    </span>
+                                                    {Array.isArray(product.payouts_by_platform) && product.payouts_by_platform.length > 1 && (
+                                                        <sup className="ml-0.5 text-[9px] text-theme-muted">+{product.payouts_by_platform.length - 1}</sup>
                                                     )}
                                                 </td>
 
-                                                {/* Search Volume */}
-                                                <td className="px-2 py-2 whitespace-nowrap text-right text-xs">
-                                                    <div className="relative flex items-center justify-end gap-1">
+                                                {/* Trend: momentum (line 1) + search volume (line 2) */}
+                                                <td className="px-2 py-2 whitespace-nowrap text-xs">
+                                                    {getMomentumIndicator(product, true)}
+                                                    <div className="relative mt-0.5 flex items-center gap-1">
                                                         <span className="font-semibold text-xs text-theme-primary">
                                                             {formatSearchVolume(product.search_volume_total, product.search_volume_is_range)}
                                                         </span>
@@ -1258,45 +1255,12 @@ export default function Index({ products, filters, metrics, options }) {
                                                     </div>
                                                 </td>
 
-                                                {/* Momentum Indicator */}
-                                                <td className="px-2 py-2 whitespace-nowrap text-xs">
-                                                    {getMomentumIndicator(product)}
-                                                </td>
-
                                                 {/* Grouped Compliance Pill (TrueBoF + Brand Bidding + Google Ads Risk) */}
-                                                <td className="px-2 py-2 whitespace-nowrap text-center text-xs">
-                                                    <div className="flex flex-col items-center gap-0.5">
+                                                <td className="px-2 py-2 whitespace-nowrap text-center text-xs hidden xl:table-cell overflow-hidden">
+                                                    <div className="flex flex-col items-center gap-0.5 min-w-0" title="Google Ads compliance risk shown below the BoF / brand-bidding pill">
                                                         {getCompliancePill(product)}
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="text-[10px] text-theme-muted">Ads:</span>
-                                                            {getComplianceRiskBadge(product.compliance_risk, product.compliance_risk_label)}
-                                                        </div>
+                                                        {getComplianceRiskBadge(product.compliance_risk, product.compliance_risk_label)}
                                                     </div>
-                                                </td>
-
-                                                {/* Recheck Date */}
-                                                <td className="px-2 py-2 whitespace-nowrap text-center text-xs">
-                                                    {product.recheck_at ? (
-                                                        <div className="flex flex-col items-center">
-                                                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
-                                                                product.is_recheck_overdue
-                                                                    ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold animate-pulse'
-                                                                    : 'bg-theme-subtle text-theme-secondary border-theme'
-                                                            }`}>
-                                                                {product.is_recheck_overdue && (
-                                                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                                                                )}
-                                                                {product.recheck_at_formatted || product.recheck_at}
-                                                            </span>
-                                                            {product.is_recheck_overdue && (
-                                                                <span className="text-[10px] text-rose-600 dark:text-rose-400 font-bold mt-0.5">
-                                                                    Overdue
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-theme-muted text-xs">—</span>
-                                                    )}
                                                 </td>
 
                                                 {/* Quick Status Select */}
@@ -1304,21 +1268,30 @@ export default function Index({ products, filters, metrics, options }) {
                                                     <select
                                                         value={product.status}
                                                         onChange={(e) => handleQuickStatusChange(product, e.target.value)}
-                                                        className={`rounded-md border px-2 py-0.5 text-xs font-semibold cursor-pointer focus:outline-none ${getStatusBadge(product.status)}`}
+                                                        className={`w-full max-w-[88px] rounded-md border px-1 py-0.5 text-xs font-semibold cursor-pointer focus:outline-none ${getStatusBadge(product.status)}`}
                                                         aria-label={`Change status for ${product.name}`}
                                                     >
                                                         <option value="test">Test</option>
                                                         <option value="watch">Watch</option>
                                                         <option value="rejected">Rejected</option>
                                                     </select>
+                                                    {product.recheck_at && (
+                                                        <div
+                                                            className={`mt-0.5 text-[10px] leading-tight ${product.is_recheck_overdue ? 'font-bold text-rose-600 dark:text-rose-400' : 'text-theme-muted'}`}
+                                                            title={product.is_recheck_overdue ? 'Recheck overdue' : 'Next recheck'}
+                                                        >
+                                                            {product.is_recheck_overdue ? '⏰ ' : '↻ '}
+                                                            {product.recheck_at_formatted || product.recheck_at}
+                                                        </div>
+                                                    )}
                                                 </td>
 
                                                 {/* Actions */}
-                                                <td className="px-2 py-2 whitespace-nowrap text-right">
-                                                    <div className="flex flex-col items-center gap-0.5">
+                                                <td className="px-1 py-2 whitespace-nowrap text-center">
+                                                    <div className="flex flex-col items-center gap-0">
                                                         <Link
                                                             href={`/watching-products/${product.id}`}
-                                                            className="px-2 py-1 rounded text-theme-accent hover:bg-theme-subtle text-xs font-semibold transition-colors"
+                                                            className="px-1.5 py-0.5 rounded text-theme-accent hover:bg-theme-subtle text-xs font-semibold transition-colors"
                                                             title="View Product Details"
                                                         >
                                                             View
