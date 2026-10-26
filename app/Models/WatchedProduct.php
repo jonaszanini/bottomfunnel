@@ -103,6 +103,12 @@ class WatchedProduct extends Model
         'promotion_criteria',
         'approval_status',
         'network_approval_status',
+        'search_volume_by_geo',
+        'search_volume_total',
+        'search_volume_is_range',
+        'search_volume_keyword',
+        'search_volume_checked_at',
+        'search_volume_error',
     ];
 
     /**
@@ -166,6 +172,10 @@ class WatchedProduct extends Model
             'last_refreshed_at' => 'datetime',
             'refresh_priority' => 'integer',
             'last_reviewed_at' => 'datetime',
+            'search_volume_by_geo' => 'array',
+            'search_volume_total' => 'integer',
+            'search_volume_is_range' => 'boolean',
+            'search_volume_checked_at' => 'datetime',
         ];
     }
 
@@ -527,6 +537,58 @@ class WatchedProduct extends Model
             $query->whereNotNull('recheck_at')
                 ->where('recheck_at', '<=', now()->toDateString());
         });
+
+        $query->when($filters['volume'] ?? null, function (Builder $query, string $volume) {
+            if ($volume === '1k') {
+                $query->whereNotNull('search_volume_total')->where('search_volume_total', '>=', 1000);
+            } elseif ($volume === '10k') {
+                $query->whereNotNull('search_volume_total')->where('search_volume_total', '>=', 10000);
+            } elseif ($volume === 'unknown') {
+                $query->whereNull('search_volume_total');
+            }
+        });
+
+        $query->when(($filters['sort'] ?? null) === 'search_volume_total', function (Builder $query) use ($filters) {
+            $dir = strtolower($filters['direction'] ?? 'desc') === 'asc' ? 'asc' : 'desc';
+            $query->orderBy('search_volume_total', $dir);
+        });
+    }
+
+    /**
+     * Determine target geos for search volume retrieval.
+     * Uses allowed_geos intersected with the configured geo map;
+     * falls back to default_geos (US, CA) if empty.
+     *
+     * @return list<string>
+     */
+    public function searchVolumeGeos(): array
+    {
+        $configuredGeos = array_keys((array) config('flowhub.keyword_volume.geos', [
+            'US' => '2840',
+            'CA' => '2124',
+            'GB' => '2826',
+            'AU' => '2036',
+        ]));
+
+        $allowed = array_values(array_filter(array_map('strtoupper', (array) ($this->allowed_geos ?? []))));
+        $intersected = array_values(array_intersect($allowed, $configuredGeos));
+
+        if (! empty($intersected)) {
+            return $intersected;
+        }
+
+        return (array) config('flowhub.keyword_volume.default_geos', ['US', 'CA']);
+    }
+
+    /**
+     * Effective keyword for search volume query.
+     * Overrides queried keyword; default is product name.
+     */
+    public function effectiveSearchVolumeKeyword(): string
+    {
+        $kw = trim((string) ($this->search_volume_keyword ?? ''));
+
+        return $kw !== '' ? $kw : trim((string) $this->name);
     }
 
     /**

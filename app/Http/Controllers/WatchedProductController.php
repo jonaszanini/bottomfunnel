@@ -25,6 +25,7 @@ use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\CampaignGuidance;
 use App\Services\WatchingProducts\Fx\FrankfurterFx;
+use App\Services\WatchingProducts\KeywordVolumeService;
 use App\Services\WatchingProducts\Money;
 use App\Services\WatchingProducts\NegativeKeywordGenerator;
 use App\Services\WatchingProducts\PotentialScoreService;
@@ -66,6 +67,9 @@ class WatchedProductController extends Controller
             'true_bof' => $request->input('true_bof', 'all'),
             'platform' => $request->input('platform', 'all'),
             'recheck_overdue' => $request->boolean('recheck_overdue'),
+            'volume' => $request->input('volume', 'all'),
+            'sort' => $request->input('sort'),
+            'direction' => $request->input('direction'),
         ];
 
         $query = WatchedProduct::query()
@@ -155,6 +159,13 @@ class WatchedProductController extends Controller
                 'is_recheck_overdue' => $product->recheck_at !== null && $product->recheck_at->lte(today()),
                 'promotion_criteria' => $product->promotion_criteria,
                 'payouts_by_platform' => $product->payouts_by_platform ?? [],
+                'search_volume_total' => $product->search_volume_total,
+                'search_volume_by_geo' => $product->search_volume_by_geo ?? [],
+                'search_volume_is_range' => (bool) $product->search_volume_is_range,
+                'search_volume_keyword' => $product->search_volume_keyword,
+                'search_volume_checked_at' => $product->search_volume_checked_at?->toIso8601String(),
+                'search_volume_checked_formatted' => $product->search_volume_checked_at?->format('M d, Y'),
+                'search_volume_error' => $product->search_volume_error,
                 'platforms' => $product->platforms ?? [],
                 'platform' => $product->platform,
                 'approval_required' => (bool) $product->approval_required,
@@ -408,6 +419,13 @@ class WatchedProductController extends Controller
             'is_recheck_overdue' => $watchedProduct->recheck_at !== null && $watchedProduct->recheck_at->lte(today()),
             'promotion_criteria' => $watchedProduct->promotion_criteria,
             'payouts_by_platform' => $watchedProduct->payouts_by_platform ?? [],
+            'search_volume_total' => $watchedProduct->search_volume_total,
+            'search_volume_by_geo' => $watchedProduct->search_volume_by_geo ?? [],
+            'search_volume_is_range' => (bool) $watchedProduct->search_volume_is_range,
+            'search_volume_keyword' => $watchedProduct->search_volume_keyword,
+            'search_volume_checked_at' => $watchedProduct->search_volume_checked_at?->toIso8601String(),
+            'search_volume_checked_formatted' => $watchedProduct->search_volume_checked_at?->format('M d, Y'),
+            'search_volume_error' => $watchedProduct->search_volume_error,
             'approval_required' => (bool) $watchedProduct->approval_required,
             'demand_notes' => $watchedProduct->demand_notes,
             'sales_page_url' => $watchedProduct->sales_page_url,
@@ -635,6 +653,27 @@ class WatchedProductController extends Controller
     }
 
     /**
+     * Manual "Refresh volume now" button on detail page.
+     */
+    public function refreshVolume(Request $request, WatchedProduct $watchedProduct, KeywordVolumeService $volumeService): RedirectResponse
+    {
+        $result = $volumeService->refreshProduct($watchedProduct);
+
+        if (! $result['success']) {
+            return redirect()->back()
+                ->with('error', $result['error'] ?? 'Failed to refresh Google Keyword Planner search volume.');
+        }
+
+        $totalFormatted = $watchedProduct->search_volume_total !== null
+            ? number_format($watchedProduct->search_volume_total)
+            : 'N/A';
+
+        return redirect()->back()
+            ->with('success', "Search volume refreshed: {$totalFormatted} monthly searches.")
+            ->with('toast', 'Search volume refreshed successfully.');
+    }
+
+    /**
      * Change product strategy.
      */
     public function updateStrategy(Request $request, WatchedProduct $watchedProduct): RedirectResponse
@@ -813,6 +852,7 @@ class WatchedProductController extends Controller
             'recheck_at' => ['nullable', 'date'],
             'promotion_criteria' => ['nullable', 'string', 'max:5000'],
             'payouts_by_platform' => ['nullable', 'array'],
+            'search_volume_keyword' => ['nullable', 'string', 'max:191'],
             'negatives' => ['nullable', 'string', 'max:5000'],
             'demand_notes' => ['nullable', 'string', 'max:5000'],
             'trends_7d' => ['nullable', 'numeric', 'min:0', 'max:100'],

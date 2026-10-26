@@ -66,6 +66,7 @@ export default function Index({ products, filters, metrics, options }) {
     const [selectedBrandBidding, setSelectedBrandBidding] = useState(filters.brand_bidding || 'all');
     const [selectedTrueBof, setSelectedTrueBof] = useState(filters.true_bof || 'all');
     const [selectedPlatform, setSelectedPlatform] = useState(filters.platform || 'all');
+    const [selectedVolume, setSelectedVolume] = useState(filters.volume || 'all');
     const [selectedRecheckOverdue, setSelectedRecheckOverdue] = useState(
         filters.recheck_overdue === 'true' || filters.recheck_overdue === true || filters.recheck_overdue === '1'
     );
@@ -135,6 +136,10 @@ export default function Index({ products, filters, metrics, options }) {
                 const aNum = a.payout_cad !== null && a.payout_cad !== undefined ? Number(a.payout_cad) : -Infinity;
                 const bNum = b.payout_cad !== null && b.payout_cad !== undefined ? Number(b.payout_cad) : -Infinity;
                 return sortConfig.direction === 'asc' ? aNum - bNum : bNum - aNum;
+            } else if (sortConfig.key === 'search_volume_total') {
+                const aVol = a.search_volume_total !== null && a.search_volume_total !== undefined ? Number(a.search_volume_total) : -Infinity;
+                const bVol = b.search_volume_total !== null && b.search_volume_total !== undefined ? Number(b.search_volume_total) : -Infinity;
+                return sortConfig.direction === 'asc' ? aVol - bVol : bVol - aVol;
             } else if (sortConfig.key === 'last_reviewed_at') {
                 const aTime = a.last_reviewed_at ? new Date(a.last_reviewed_at).getTime() : 0;
                 const bTime = b.last_reviewed_at ? new Date(b.last_reviewed_at).getTime() : 0;
@@ -254,6 +259,7 @@ export default function Index({ products, filters, metrics, options }) {
         bof_homonym: false,
         geos: 'US, CA',
         allowed_geos: [],
+        search_volume_keyword: '',
         compliance_risk: 'not_assessed',
         compliance_notes: '',
         approval_status: 'unknown',
@@ -325,6 +331,7 @@ export default function Index({ products, filters, metrics, options }) {
             bof_homonym: false,
             geos: 'US, CA',
             allowed_geos: [],
+            search_volume_keyword: '',
             compliance_risk: 'not_assessed',
             compliance_notes: '',
             approval_status: 'unknown',
@@ -371,6 +378,7 @@ export default function Index({ products, filters, metrics, options }) {
             bof_homonym: Boolean(product.bof_homonym),
             geos: Array.isArray(product.geos) ? product.geos.join(', ') : (product.geos || ''),
             allowed_geos: Array.isArray(product.allowed_geos) ? product.allowed_geos : [],
+            search_volume_keyword: product.search_volume_keyword || '',
             compliance_risk: product.compliance_risk || 'not_assessed',
             compliance_notes: product.compliance_notes || '',
             approval_status: product.approval_status || (product.approval_required ? 'yes' : 'unknown'),
@@ -449,6 +457,7 @@ export default function Index({ products, filters, metrics, options }) {
             brand_bidding: newFilters.brand_bidding !== undefined ? newFilters.brand_bidding : selectedBrandBidding,
             true_bof: newFilters.true_bof !== undefined ? newFilters.true_bof : selectedTrueBof,
             platform: newFilters.platform !== undefined ? newFilters.platform : selectedPlatform,
+            volume: newFilters.volume !== undefined ? newFilters.volume : selectedVolume,
             recheck_overdue: newFilters.recheck_overdue !== undefined
                 ? (newFilters.recheck_overdue ? 'true' : undefined)
                 : (selectedRecheckOverdue ? 'true' : undefined),
@@ -494,6 +503,7 @@ export default function Index({ products, filters, metrics, options }) {
         setSelectedBrandBidding('all');
         setSelectedTrueBof('all');
         setSelectedPlatform('all');
+        setSelectedVolume('all');
         setSelectedRecheckOverdue(false);
 
         router.get('/watching-products', {}, {
@@ -510,12 +520,42 @@ export default function Index({ products, filters, metrics, options }) {
         selectedBrandBidding !== 'all' ||
         selectedTrueBof !== 'all' ||
         selectedPlatform !== 'all' ||
+        selectedVolume !== 'all' ||
         selectedRecheckOverdue
     );
 
     const formatCad = (amount) => {
         if (amount === null || amount === undefined || isNaN(amount)) return '—';
         return `CA$${Number(amount).toFixed(2)}`;
+    };
+
+    const formatSearchVolume = (volume, isRange) => {
+        if (volume === null || volume === undefined || isNaN(volume)) return '—';
+        const num = Number(volume);
+        const prefix = isRange ? '~' : '';
+        if (num >= 1000000) return `${prefix}${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+        if (num >= 1000) return `${prefix}${(num / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+        return `${prefix}${num.toLocaleString()}`;
+    };
+
+    const formatVolumeTooltip = (product) => {
+        const parts = [];
+        if (product.search_volume_by_geo && typeof product.search_volume_by_geo === 'object') {
+            Object.entries(product.search_volume_by_geo).forEach(([geo, data]) => {
+                const avg = data.avg_monthly_searches !== null && data.avg_monthly_searches !== undefined
+                    ? Number(data.avg_monthly_searches).toLocaleString()
+                    : (data.min !== undefined && data.max !== undefined ? `${data.min}-${data.max}` : 'N/A');
+                const comp = data.competition || 'UNSPECIFIED';
+                parts.push(`${geo}: ${avg}/mo (${comp})`);
+            });
+        }
+        if (product.search_volume_checked_at) {
+            parts.push(`Checked: ${String(product.search_volume_checked_at).slice(0, 10)}`);
+        }
+        if (product.search_volume_error) {
+            parts.push(`Error: ${product.search_volume_error}`);
+        }
+        return parts.length > 0 ? parts.join(' • ') : 'No search volume data yet';
     };
 
     const getStatusBadge = (status) => {
@@ -889,6 +929,25 @@ export default function Index({ products, filters, metrics, options }) {
                             ))}
                         </select>
                     </div>
+
+                    {/* Volume Filter */}
+                    <div>
+                        <select
+                            className={control}
+                            value={selectedVolume}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedVolume(val);
+                                applyFilters({ volume: val });
+                            }}
+                            aria-label="Filter by Search Volume"
+                        >
+                            <option value="all">All volumes</option>
+                            <option value="1k">1k+</option>
+                            <option value="10k">10k+</option>
+                            <option value="unknown">Unknown</option>
+                        </select>
+                    </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-theme pt-3">
@@ -961,6 +1020,7 @@ export default function Index({ products, filters, metrics, options }) {
                                         {renderSortTh('Product Name', 'name', 'min-w-[260px]')}
                                         {renderSortTh('Platform', 'platform', 'w-24')}
                                         {renderSortTh('Net Payout (CAD)', 'payout_cad', 'w-28 text-right')}
+                                        {renderSortTh('Volume', 'search_volume_total', 'w-20 text-right')}
                                         {renderSortTh('Momentum', 'momentum', 'w-24')}
                                         {renderSortTh('Compliance', 'compliance', 'w-40 text-center')}
                                         {renderSortTh('Recheck', 'recheck_at', 'w-28 text-center')}
@@ -1147,6 +1207,23 @@ export default function Index({ products, filters, metrics, options }) {
                                                             {product.payout_formatted}
                                                         </div>
                                                     )}
+                                                </td>
+
+                                                {/* Search Volume */}
+                                                <td className="px-2 py-2 whitespace-nowrap text-right text-xs">
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <span className="font-semibold text-xs text-theme-primary">
+                                                            {formatSearchVolume(product.search_volume_total, product.search_volume_is_range)}
+                                                        </span>
+                                                        {product.search_volume_total !== null && product.search_volume_total !== undefined && (
+                                                            <span
+                                                                className="inline-flex items-center text-theme-muted hover:text-theme-accent cursor-help text-[11px]"
+                                                                title={formatVolumeTooltip(product)}
+                                                            >
+                                                                ⓘ
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
 
                                                 {/* Momentum Indicator */}
@@ -1358,6 +1435,12 @@ export default function Index({ products, filters, metrics, options }) {
                                                             <span className="text-indigo-600 dark:text-indigo-400 font-medium">Esteira</span>
                                                         </>
                                                     )}
+                                                </div>
+                                                <div className="text-xs text-theme-secondary font-medium mt-1">
+                                                    Vol: {formatSearchVolume(product.search_volume_total, product.search_volume_is_range)}
+                                                    {product.search_volume_by_geo && typeof product.search_volume_by_geo === 'object' && Object.keys(product.search_volume_by_geo).length > 0
+                                                        ? ` (${Object.keys(product.search_volume_by_geo).join('+')})`
+                                                        : ''}
                                                 </div>
                                             </div>
 

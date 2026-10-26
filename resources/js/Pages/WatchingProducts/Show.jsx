@@ -14,6 +14,7 @@ import { getPlatformBadgeClass, inferPlatformFromUrl } from '../../utils/platfor
 import CampaignCreationModal from '../../Components/CampaignCreationModal';
 import OfferConstraintsSection from './Components/OfferConstraintsSection';
 import OfferConstraintsEditor from './Components/OfferConstraintsEditor';
+import SearchVolumeSection from './Components/SearchVolumeSection';
 
 export function getScoreHsl(score) {
     if (score === null || score === undefined) {
@@ -252,6 +253,7 @@ export default function Show({
         recheck_at: product.recheck_at || '',
         promotion_criteria: product.promotion_criteria || '',
         allowed_geos: Array.isArray(product.allowed_geos) ? product.allowed_geos : [],
+        search_volume_keyword: product.search_volume_keyword || '',
         compliance_risk: product.compliance_risk || 'not_assessed',
         compliance_notes: product.compliance_notes || '',
         network_approval_required: Boolean(product.network_approval_required),
@@ -1041,6 +1043,9 @@ export default function Show({
                 <div className="space-y-6">
                     {/* Offer Constraints & Go / No-Go Decision Card */}
                     <OfferConstraintsSection product={product} />
+
+                    {/* Google Keyword Planner Search Volume Section */}
+                    <SearchVolumeSection product={product} onToast={showToast} />
 
                     {/* Score Component Bars Card */}
                     <div className="rounded-2xl border border-theme bg-theme-surface p-5 sm:p-6 shadow-xs">

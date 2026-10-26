@@ -40,6 +40,7 @@ export default function OfferConstraintsEditor({
     const [customGeoInput, setCustomGeoInput] = useState('');
     const [showApprovalInfo, setShowApprovalInfo] = useState(false);
     const [showPromotionInfo, setShowPromotionInfo] = useState(false);
+    const [showVolumeKeywordInfo, setShowVolumeKeywordInfo] = useState(false);
 
     // Normalize allowed_geos to array
     const allowedGeos = React.useMemo(() => {
@@ -370,6 +371,52 @@ export default function OfferConstraintsEditor({
                         <li><strong>TEST → SCALE:</strong> At least 2 verified sales with ROI &ge; 50% and stable CPA.</li>
                         <li><strong>DEMOTE / KILL:</strong> 0 sales at 100% commission spend (or 50% spend if 0 checkouts), listing down, or policy warning.</li>
                     </ul>
+                </div>
+            )}
+
+            {/* Volume Keyword Override */}
+            <Field
+                label={
+                    <span className="flex items-center gap-1.5">
+                        <span>Volume Keyword (Keyword Planner)</span>
+                        <button
+                            type="button"
+                            onClick={() => setShowVolumeKeywordInfo(!showVolumeKeywordInfo)}
+                            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-theme-subtle text-theme-muted hover:text-theme-accent text-[11px] font-bold cursor-pointer transition-colors"
+                            title="Click for Volume Keyword info"
+                        >
+                            ⓘ
+                        </button>
+                    </span>
+                }
+                error={errors.search_volume_keyword}
+            >
+                <input
+                    type="text"
+                    maxLength={191}
+                    className={control}
+                    placeholder="Defaults to product name if blank"
+                    value={data.search_volume_keyword || ''}
+                    onChange={(e) => setData('search_volume_keyword', e.target.value)}
+                />
+            </Field>
+
+            {/* Click-to-open ⓘ Popover for Volume Keyword */}
+            {showVolumeKeywordInfo && (
+                <div className="rounded-lg border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-sm space-y-1">
+                    <div className="font-semibold text-theme-primary flex items-center justify-between">
+                        <span>Keyword Planner Target Keyword</span>
+                        <button
+                            type="button"
+                            onClick={() => setShowVolumeKeywordInfo(false)}
+                            className="text-theme-muted hover:text-theme-primary cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <p className="text-[11px] text-theme-muted">
+                        Overrides the exact phrase sent to Google Ads Keyword Planner for monthly search volume calculations. If blank, Flow Hub queries the exact product name.
+                    </p>
                 </div>
             )}
 

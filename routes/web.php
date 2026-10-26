@@ -134,6 +134,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/watching-products/{watchedProduct}/review', [WatchedProductController::class, 'review'])->name('watching-products.review');
     Route::patch('/watching-products/{watchedProduct}/status', [WatchedProductController::class, 'updateStatus'])->name('watching-products.status');
     Route::post('/watching-products/{watchedProduct}/refresh-now', [WatchedProductController::class, 'refreshNow'])->name('watching-products.refresh-now');
+    Route::post('/watching-products/{watchedProduct}/refresh-volume', [WatchedProductController::class, 'refreshVolume'])->name('watching-products.refresh-volume');
     Route::post('/watching-products/{watchedProduct}/strategy', [WatchedProductController::class, 'updateStrategy'])->name('watching-products.strategy.update');
     Route::post('/watching-products/{watchedProduct}/negatives', [WatchedProductController::class, 'storeNegative'])->name('watching-products.negatives.store');
     Route::patch('/watching-products/{watchedProduct}/negatives/{negativeKeyword}', [WatchedProductController::class, 'updateNegative'])->name('watching-products.negatives.update');

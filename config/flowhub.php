@@ -19,7 +19,19 @@ return [
         'client_secret' => env('GOOGLE_ADS_CLIENT_SECRET'),
         'developer_token' => env('GOOGLE_ADS_DEVELOPER_TOKEN'),
         'redirect' => env('GOOGLE_ADS_REDIRECT_URI', env('APP_URL').'/google-ads/callback'),
-        'version' => env('GOOGLE_ADS_API_VERSION', 'v22'),
+        'version' => env('GOOGLE_ADS_API_VERSION', 'v26'),
+    ],
+
+    'keyword_volume' => [
+        'account_id' => env('KEYWORD_VOLUME_ACCOUNT_ID'),
+        'geos' => [
+            'US' => '2840',
+            'CA' => '2124',
+            'GB' => '2826',
+            'AU' => '2036',
+        ],
+        'default_geos' => ['US', 'CA'],
+        'language' => 'languageConstants/1000',
     ],
 
     'page_types' => [

@@ -202,6 +202,212 @@ class GoogleAdsClient
     }
 
     /**
+     * Retrieve historical search volume and CPC metrics for keywords in specific geos.
+     *
+     * @param  list<string>  $keywords
+     * @param  list<string>  $geoTargetConstantIds
+     * @return list<array{
+     *     keyword: string,
+     *     avg_monthly_searches: ?int,
+     *     min: ?int,
+     *     max: ?int,
+     *     competition: string,
+     *     competition_index: ?int,
+     *     low_bid_micros: ?int,
+     *     high_bid_micros: ?int,
+     *     monthly: list<array{year: int, month: string, searches: ?int}>,
+     *     is_range: bool
+     * }>
+     */
+    public function keywordHistoricalMetrics(
+        GoogleAdsAccount $account,
+        array $keywords,
+        array $geoTargetConstantIds,
+        string $language = 'languageConstants/1000'
+    ): array {
+        $cleanKeywords = array_values(array_unique(array_filter(array_map('trim', $keywords))));
+        if (empty($cleanKeywords)) {
+            return [];
+        }
+
+        // Case-insensitive lookup map of lowercased keyword -> original keyword
+        $requestedMap = [];
+        foreach ($cleanKeywords as $kw) {
+            $requestedMap[strtolower($kw)] = $kw;
+        }
+
+        // Ensure geoTargetConstants prefix
+        $geoConstants = array_values(array_map(function ($id) {
+            $id = trim((string) $id);
+
+            return str_starts_with($id, 'geoTargetConstants/') ? $id : 'geoTargetConstants/'.$id;
+        }, $geoTargetConstantIds));
+
+        // Ensure languageConstants prefix
+        $lang = str_starts_with($language, 'languageConstants/') ? $language : 'languageConstants/'.$language;
+        $customerId = $this->digits((string) $account->customer_id);
+
+        $normalizedResults = [];
+
+        // Chunk keywords at 1,000 per request
+        $chunks = array_chunk($cleanKeywords, 1000);
+        foreach ($chunks as $chunk) {
+            $body = [
+                'keywords' => $chunk,
+                'geoTargetConstants' => $geoConstants,
+                'language' => $lang,
+                'keywordPlanNetwork' => 'GOOGLE_SEARCH',
+                'historicalMetricsOptions' => [
+                    'includeAverageCpc' => true,
+                ],
+            ];
+
+            $response = $this->send(
+                $this->accessToken($account),
+                $account->login_customer_id,
+                'POST',
+                '/customers/'.$customerId.':generateKeywordHistoricalMetrics',
+                $body
+            );
+
+            $results = is_array($response['results'] ?? null) ? $response['results'] : [];
+            foreach ($results as $result) {
+                if (! is_array($result)) {
+                    continue;
+                }
+
+                $text = (string) ($result['text'] ?? '');
+                $closeVariants = (array) ($result['closeVariants'] ?? []);
+
+                // Map back to requested keyword case-insensitively, using closeVariants if needed
+                $matchedKeyword = null;
+                if (isset($requestedMap[strtolower($text)])) {
+                    $matchedKeyword = $requestedMap[strtolower($text)];
+                } else {
+                    foreach ($closeVariants as $variant) {
+                        $variantLower = strtolower(trim((string) $variant));
+                        if (isset($requestedMap[$variantLower])) {
+                            $matchedKeyword = $requestedMap[$variantLower];
+                            break;
+                        }
+                    }
+                }
+                if ($matchedKeyword === null) {
+                    $matchedKeyword = $text;
+                }
+
+                $metrics = is_array($result['keywordMetrics'] ?? null) ? $result['keywordMetrics'] : $result;
+
+                // Avg monthly searches: if missing, store null (NOT 0)
+                $avg = isset($metrics['avgMonthlySearches']) && is_numeric($metrics['avgMonthlySearches'])
+                    ? (int) $metrics['avgMonthlySearches']
+                    : null;
+
+                // Range buckets: searchVolume.min / searchVolume.max or searchVolumeRange or root min/max
+                $min = isset($metrics['searchVolume']['min']) && is_numeric($metrics['searchVolume']['min'])
+                    ? (int) $metrics['searchVolume']['min']
+                    : (isset($metrics['searchVolumeRange']['min']) && is_numeric($metrics['searchVolumeRange']['min'])
+                        ? (int) $metrics['searchVolumeRange']['min']
+                        : (isset($metrics['min']) && is_numeric($metrics['min']) ? (int) $metrics['min'] : null));
+
+                $max = isset($metrics['searchVolume']['max']) && is_numeric($metrics['searchVolume']['max'])
+                    ? (int) $metrics['searchVolume']['max']
+                    : (isset($metrics['searchVolumeRange']['max']) && is_numeric($metrics['searchVolumeRange']['max'])
+                        ? (int) $metrics['searchVolumeRange']['max']
+                        : (isset($metrics['max']) && is_numeric($metrics['max']) ? (int) $metrics['max'] : null));
+
+                // 12-month search volumes
+                $rawMonthly = is_array($metrics['monthlySearchVolumes'] ?? null)
+                    ? $metrics['monthlySearchVolumes']
+                    : (is_array($metrics['monthly'] ?? null) ? $metrics['monthly'] : []);
+
+                $monthly = [];
+                $monthlySearchesList = [];
+                foreach ($rawMonthly as $m) {
+                    if (! is_array($m)) {
+                        continue;
+                    }
+                    $searches = isset($m['monthlySearches']) && is_numeric($m['monthlySearches'])
+                        ? (int) $m['monthlySearches']
+                        : (isset($m['searches']) && is_numeric($m['searches']) ? (int) $m['searches'] : null);
+
+                    $monthVal = $m['month'] ?? '';
+                    if (is_string($monthVal) && ! is_numeric($monthVal)) {
+                        $monthMap = [
+                            'JANUARY' => 1, 'FEBRUARY' => 2, 'MARCH' => 3, 'APRIL' => 4,
+                            'MAY' => 5, 'JUNE' => 6, 'JULY' => 7, 'AUGUST' => 8,
+                            'SEPTEMBER' => 9, 'OCTOBER' => 10, 'NOVEMBER' => 11, 'DECEMBER' => 12,
+                        ];
+                        $month = $monthMap[strtoupper(trim($monthVal))] ?? $monthVal;
+                    } else {
+                        $month = (int) $monthVal;
+                    }
+
+                    $monthly[] = [
+                        'year' => (int) ($m['year'] ?? 0),
+                        'month' => $month,
+                        'searches' => $searches,
+                    ];
+                    if ($searches !== null) {
+                        $monthlySearchesList[] = $searches;
+                    }
+                }
+
+                // Range handling: set is_range=true when API returns range buckets or identical round monthly values
+                $isRange = false;
+                if (! empty($result['is_range']) || ! empty($metrics['is_range']) || ! empty($metrics['isRange'])) {
+                    $isRange = true;
+                }
+                if ($min !== null || $max !== null) {
+                    $isRange = true;
+                }
+                if (count($monthlySearchesList) >= 2) {
+                    $uniqueMonthly = array_values(array_unique($monthlySearchesList));
+                    if (count($uniqueMonthly) === 1 && $uniqueMonthly[0] > 0) {
+                        $isRange = true;
+                    }
+                }
+                if ($avg === null && ($min !== null || $max !== null)) {
+                    $isRange = true;
+                }
+
+                // Competition
+                $rawComp = strtoupper((string) ($metrics['competition'] ?? 'UNSPECIFIED'));
+                $competition = in_array($rawComp, ['LOW', 'MEDIUM', 'HIGH', 'UNSPECIFIED'], true) ? $rawComp : 'UNSPECIFIED';
+
+                // Competition index
+                $compIndex = isset($metrics['competitionIndex']) && is_numeric($metrics['competitionIndex'])
+                    ? (int) $metrics['competitionIndex']
+                    : (isset($metrics['competition_index']) && is_numeric($metrics['competition_index']) ? (int) $metrics['competition_index'] : null);
+
+                // Bid micros
+                $lowBid = isset($metrics['lowTopOfPageBidMicros']) && is_numeric($metrics['lowTopOfPageBidMicros'])
+                    ? (int) $metrics['lowTopOfPageBidMicros']
+                    : (isset($metrics['low_bid_micros']) && is_numeric($metrics['low_bid_micros']) ? (int) $metrics['low_bid_micros'] : null);
+
+                $highBid = isset($metrics['highTopOfPageBidMicros']) && is_numeric($metrics['highTopOfPageBidMicros'])
+                    ? (int) $metrics['highTopOfPageBidMicros']
+                    : (isset($metrics['high_bid_micros']) && is_numeric($metrics['high_bid_micros']) ? (int) $metrics['high_bid_micros'] : null);
+
+                $normalizedResults[strtolower($matchedKeyword)] = [
+                    'keyword' => $matchedKeyword,
+                    'avg_monthly_searches' => $avg,
+                    'min' => $min,
+                    'max' => $max,
+                    'competition' => $competition,
+                    'competition_index' => $compIndex,
+                    'low_bid_micros' => $lowBid,
+                    'high_bid_micros' => $highBid,
+                    'monthly' => $monthly,
+                    'is_range' => $isRange,
+                ];
+            }
+        }
+
+        return $normalizedResults;
+    }
+
+    /**
      * @return array{id: string, name: string, resource_name: string}
      */
     public function createConversionAction(GoogleAdsAccount $account, string $name): array
@@ -1557,6 +1763,11 @@ class GoogleAdsClient
         if ($response->failed()) {
             $message = $this->errorMessage($response);
             $transient = in_array($response->status(), [429, 500, 502, 503, 504], true);
+
+            if ($response->status() === 429 || str_contains($response->body(), 'RESOURCE_EXHAUSTED') || str_contains($message, 'RESOURCE_EXHAUSTED')) {
+                throw new GoogleAdsQuotaException($message);
+            }
+
             throw new GoogleRequestException($message, $transient);
         }
 

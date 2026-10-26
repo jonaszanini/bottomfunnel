@@ -28,6 +28,13 @@ Schedule::command('watching:refresh')
     ->timezone('America/Toronto')
     ->withoutOverlapping();
 
+// 1b. Weekly Watching Products Keyword Planner Search Volume Refresh (Monday morning)
+Schedule::command('watching:refresh-volume')
+    ->weeklyOn(1, '06:30')
+    ->timezone('America/Toronto')
+    ->withoutOverlapping()
+    ->onOneServer();
+
 // 2. Daily Foreign Exchange Rate Sync (Bank of Canada CAD pairs)
 Schedule::command('fx:refresh')
     ->dailyAt('05:00')

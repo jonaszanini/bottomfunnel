@@ -1,40 +1,46 @@
-name: Run artisan (manual)
+name: Run Artisan Command
 
 on:
   workflow_dispatch:
     inputs:
       task:
-        description: "Artisan task to run on production"
+        description: 'Artisan command to execute on production'
         required: true
         type: choice
         options:
-          - "watching:backfill-compliance --dry-run"
-          - "watching:backfill-compliance"
-          - "migrate --force"
-          - "migrate:status"
-          - "optimize:clear"
-          - "config:cache"
-          - "db:seed --force"
+          - 'watching:refresh-volume --dry-run'
+          - 'watching:refresh-volume'
+          - 'watching:backfill-compliance --dry-run'
+          - 'watching:backfill-compliance'
+          - 'optimize:clear'
+          - 'migrate --force'
 
 jobs:
   artisan:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: PROD
+    env:
+      DEPLOY_ROOT: /home/u372714627/domains/bottomfunnel.app/public_html
     steps:
       - name: Configure SSH known hosts
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
           printf "%s\n" "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
+
       - uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Run artisan with PHP 8.3
+
+      - name: Execute Artisan command on Hostinger
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
           TASK: ${{ inputs.task }}
         run: |
-          ssh -p "${SSH_PORT}" -o ConnectTimeout=60 "${SSH_USER}@${SSH_HOST}" \
-            "cd ~/domains/bottomfunnel.app/public_html && /opt/alt/php83/usr/bin/php artisan ${TASK} --no-interaction"
+          set -euo pipefail
+          SSH_ARGS="-p ${SSH_PORT} -o ConnectTimeout=60 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 -o TCPKeepAlive=yes"
+          echo "Running artisan ${TASK}..."
+          ssh ${SSH_ARGS} "${SSH_USER}@${SSH_HOST}" "/opt/alt/php83/usr/bin/php ${DEPLOY_ROOT}/artisan ${TASK}"
