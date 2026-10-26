@@ -14,6 +14,9 @@ on:
           - 'watching:backfill-compliance'
           - 'optimize:clear'
           - 'migrate --force'
+          - 'migrate:status'
+          - 'config:cache'
+          - 'db:seed --force'
 
 jobs:
   artisan:

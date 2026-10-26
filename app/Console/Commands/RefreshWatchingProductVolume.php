@@ -48,7 +48,8 @@ class RefreshWatchingProductVolume extends Command
         if ($staleDays > 0) {
             $query->where(function ($q) use ($staleDays) {
                 $q->whereNull('search_volume_checked_at')
-                    ->orWhere('search_volume_checked_at', '<=', now()->subDays($staleDays));
+                    ->orWhere('search_volume_checked_at', '<=', now()->subDays($staleDays))
+                    ->orWhereNotNull('search_volume_error');
             });
         }
 
