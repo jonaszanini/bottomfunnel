@@ -166,23 +166,12 @@ export default function Index({ products, filters, metrics, options }) {
                 const aTime = a.last_refreshed_at ? new Date(a.last_refreshed_at).getTime() : 0;
                 const bTime = b.last_refreshed_at ? new Date(b.last_refreshed_at).getTime() : 0;
                 return sortConfig.direction === 'asc' ? aTime - bTime : bTime - aTime;
-            } else if (sortConfig.key === 'recheck_at') {
-                const aTime = a.recheck_at ? new Date(a.recheck_at).getTime() : 0;
-                const bTime = b.recheck_at ? new Date(b.recheck_at).getTime() : 0;
-                return sortConfig.direction === 'asc' ? aTime - bTime : bTime - aTime;
             } else if (sortConfig.key === 'status') {
                 const priority = { test: 1, watch: 2, rejected: 3 };
                 const aPriority = priority[a.status] || 99;
                 const bPriority = priority[b.status] || 99;
                 if (aPriority !== bPriority) {
                     return sortConfig.direction === 'asc' ? aPriority - bPriority : bPriority - aPriority;
-                }
-            } else if (sortConfig.key === 'trends_trend' || sortConfig.key === 'momentum') {
-                const priority = { rising: 4, stable: 3, unknown: 2, falling: 1, dead_post_peak: 0 };
-                const aP = priority[a.trends_trend] ?? 2;
-                const bP = priority[b.trends_trend] ?? 2;
-                if (aP !== bP) {
-                    return sortConfig.direction === 'asc' ? aP - bP : bP - aP;
                 }
             } else if (sortConfig.key === 'brand_bidding' || sortConfig.key === 'compliance') {
                 const aBof = (a.true_bof === 'yes' ? 2 : (a.true_bof === 'ambiguous' ? 1 : 0));
@@ -1003,7 +992,7 @@ export default function Index({ products, filters, metrics, options }) {
             </div>
 
             {/* Products Table */}
-            <div className="overflow-hidden rounded-xl border border-theme bg-theme-surface shadow-xs">
+            <div className="overflow-visible rounded-xl border border-theme bg-theme-surface shadow-xs [&_thead_th:first-child]:rounded-tl-xl [&_thead_th:last-child]:rounded-tr-xl">
                 {products.length === 0 ? (
                     <div className="p-12 text-center">
                         <svg className="mx-auto h-10 w-10 text-theme-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -1035,18 +1024,19 @@ export default function Index({ products, filters, metrics, options }) {
                                 <thead className="bg-theme-subtle/40 text-xs font-semibold uppercase tracking-wider text-theme-muted">
                                     <tr>
                                         {renderSortTh('#', 'rank', 'w-10 text-center')}
-                                        {renderSortTh('Score', 'score', 'w-16 text-center')}
+                                        {renderSortTh('Score', 'score', 'w-[72px] text-center')}
                                         {renderSortTh('Product Name', 'name', '')}
                                         {renderSortTh('Platform', 'platform', 'w-24 hidden xl:table-cell')}
-                                        {renderSortTh('Payout', 'payout_cad', 'w-20 text-right hidden lg:table-cell')}
-                                        {renderSortTh('Trend', 'search_volume_total', 'w-20')}
+                                        {renderSortTh('Payout CAD', 'payout_cad', 'w-20 text-right hidden lg:table-cell')}
+                                        {renderSortTh('Trend', 'search_volume_total', 'w-24')}
                                         {renderSortTh('Compliance', 'compliance', 'w-28 text-center hidden xl:table-cell')}
                                         {renderSortTh('Status', 'status', 'w-24 text-center')}
                                         <th scope="col" className="px-2 py-3 text-center select-none w-20">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-theme">
-                                    {sortedProducts.map((product) => {
+                                    {sortedProducts.map((product, rowIndex) => {
+                                        const flipUp = sortedProducts.length > 3 && rowIndex >= sortedProducts.length - 2;
                                         const scoreHsl = getScoreHsl(product.score);
 
                                         return (
@@ -1068,7 +1058,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                     <div className="flex items-center justify-center gap-0.5">
                                                         <span
                                                             style={scoreHsl.style}
-                                                            className="inline-block rounded-md border px-1.5 py-0.5 text-xs font-black min-w-[28px] text-center shadow-2xs"
+                                                            className="inline-block rounded-md border px-1 py-0.5 text-xs font-black min-w-[26px] text-center shadow-2xs"
                                                             title={`Score: ${product.score ?? 'N/A'} (Band: ${scoreHsl.band})`}
                                                         >
                                                             {product.score !== null ? product.score : '—'}
@@ -1207,26 +1197,28 @@ export default function Index({ products, filters, metrics, options }) {
 
                                                 {/* Net Payout (CAD only; original currency + tiers in tooltip) */}
                                                 <td
-                                                    className="px-2 py-2 whitespace-nowrap text-right text-xs hidden lg:table-cell"
+                                                    className="px-2 py-2 whitespace-nowrap text-right text-xs hidden lg:table-cell overflow-hidden"
                                                     title={[
                                                         product.payout_currency && product.payout_currency !== 'CAD' && product.payout_formatted ? `Original: ${product.payout_formatted}` : null,
                                                         Array.isArray(product.payouts_by_platform) && product.payouts_by_platform.length > 1
                                                             ? `Payout Tiers:\n${product.payouts_by_platform.map((tier) => `• ${tier.geo_tier || 'Global'}: ${tier.amount ?? tier.payout ?? 0} ${tier.currency || 'USD'}${tier.platform ? ` (${tier.platform})` : ''}`).join('\n')}`
                                                             : null,
+                                                        Array.isArray(product.payouts_by_platform) && product.payouts_by_platform.length > 1
+                                                            ? `+${product.payouts_by_platform.length - 1} more tier(s)`
+                                                            : null,
                                                     ].filter(Boolean).join('\n') || undefined}
                                                 >
-                                                    <span className="font-bold text-sm text-theme-primary">
-                                                        {formatCad(product.payout_cad)}
+                                                    <span className="block truncate font-bold text-xs text-theme-primary">
+                                                        {product.payout_cad === null || product.payout_cad === undefined || isNaN(product.payout_cad)
+                                                            ? '—'
+                                                            : `$${Number(product.payout_cad).toFixed(2)}`}
                                                     </span>
-                                                    {Array.isArray(product.payouts_by_platform) && product.payouts_by_platform.length > 1 && (
-                                                        <sup className="ml-0.5 text-[9px] text-theme-muted">+{product.payouts_by_platform.length - 1}</sup>
-                                                    )}
                                                 </td>
 
                                                 {/* Trend: momentum (line 1) + search volume (line 2) */}
                                                 <td className="px-2 py-2 whitespace-nowrap text-xs">
                                                     {getMomentumIndicator(product, true)}
-                                                    <div className="relative mt-0.5 flex items-center gap-1" data-volume-popover>
+                                                    <div className="relative mt-0.5 flex items-center gap-0.5" data-volume-popover>
                                                         <span className="font-semibold text-xs text-theme-primary">
                                                             {formatSearchVolume(product.search_volume_total, product.search_volume_is_range)}
                                                         </span>
@@ -1252,7 +1244,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                                 {openVolumeInfo === product.id && (
                                                                     <div
                                                                         onClick={(e) => e.stopPropagation()}
-                                                                        className="absolute right-0 top-full mt-1 z-30 w-64 max-w-[calc(100vw-2rem)] whitespace-normal rounded-lg border border-theme bg-theme-surface p-2.5 text-left text-[11px] text-theme-secondary shadow-xl"
+                                                                        className={`absolute right-0 z-30 w-64 ${flipUp ? 'bottom-full mb-1' : 'top-full mt-1'} max-w-[calc(100vw-2rem)] whitespace-normal rounded-lg border border-theme bg-theme-surface p-2.5 text-left text-[11px] text-theme-secondary shadow-xl`}
                                                                     >
                                                                         {product.search_volume_error && (
                                                                             <div className="mb-1.5 text-rose-600 dark:text-rose-400 break-words">
@@ -1294,11 +1286,11 @@ export default function Index({ products, filters, metrics, options }) {
                                                     </select>
                                                     {product.recheck_at && (
                                                         <div
-                                                            className={`mt-0.5 text-[10px] leading-tight ${product.is_recheck_overdue ? 'font-bold text-rose-600 dark:text-rose-400' : 'text-theme-muted'}`}
-                                                            title={product.is_recheck_overdue ? 'Recheck overdue' : 'Next recheck'}
+                                                            className={`mt-0.5 truncate text-[10px] leading-tight ${product.is_recheck_overdue ? 'font-bold text-rose-600 dark:text-rose-400' : 'text-theme-muted'}`}
+                                                            title={`${product.is_recheck_overdue ? 'Recheck overdue' : 'Next recheck'}: ${product.recheck_at_formatted || product.recheck_at}`}
                                                         >
                                                             {product.is_recheck_overdue ? '⏰ ' : '↻ '}
-                                                            {product.recheck_at_formatted || product.recheck_at}
+                                                            {String(product.recheck_at_formatted || product.recheck_at).replace(/,\s*\d{4}$/, '')}
                                                         </div>
                                                     )}
                                                 </td>
