@@ -129,9 +129,11 @@ class KeywordVolumeService
         $productGeoMetrics = [];
         $productErrors = [];
         $quotaException = null;
+        $processedGeos = [];
 
         // For each geo, batch all keywords into API calls
         foreach ($geoToProducts as $geo => $productsInGeo) {
+            $processedGeos[] = $geo;
             $geoConstantId = $geoMap[$geo];
 
             // Collect unique keywords for this geo
@@ -175,6 +177,12 @@ class KeywordVolumeService
                 $quotaException = $e;
                 foreach ($productsInGeo as $product) {
                     $productErrors[$product->id][$geo] = 'Google Ads quota exhausted: '.$e->getMessage();
+                }
+                // Geos never reached because of the quota break are recorded as errors too.
+                foreach (array_diff(array_keys($geoToProducts), $processedGeos) as $skippedGeo) {
+                    foreach ($geoToProducts[$skippedGeo] as $product) {
+                        $productErrors[$product->id][$skippedGeo] = "Google Ads ({$skippedGeo}): skipped, quota exhausted";
+                    }
                 }
                 break;
             } catch (\Throwable $e) {

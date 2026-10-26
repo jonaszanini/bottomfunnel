@@ -10,6 +10,7 @@ use App\Models\AffiliateNetworkAccount;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Tests\TestCase;
 
 class AffiliateNetworkAccountTest extends TestCase
@@ -208,5 +209,52 @@ class AffiliateNetworkAccountTest extends TestCase
             ->postJson(route('affiliate-network-accounts.reveal-password', $account))
             ->assertNotFound()
             ->assertJsonPath('ok', false);
+    }
+
+    public function test_reveal_password_logs_access_without_password_and_sets_no_store(): void
+    {
+        Log::spy();
+        $account = AffiliateNetworkAccount::factory()->create(['password' => 'LogMe#1']);
+
+        $response = $this->actingAs($this->user)
+            ->postJson(route('affiliate-network-accounts.reveal-password', $account))
+            ->assertOk();
+
+        $this->assertStringContainsString('no-store', (string) $response->headers->get('Cache-Control'));
+
+        Log::shouldHaveReceived('info')
+            ->withArgs(fn ($message, $context = []) => $message === 'Affiliate network account password revealed.'
+                && ($context['account_id'] ?? null) === $account->id
+                && ($context['user_id'] ?? null) === $this->user->id
+                && ! str_contains(json_encode($context), 'LogMe#1'))
+            ->once();
+    }
+
+    public function test_reveal_password_is_throttled_after_30_requests(): void
+    {
+        $account = AffiliateNetworkAccount::factory()->create(['password' => 'Throttle#1']);
+        $url = route('affiliate-network-accounts.reveal-password', $account);
+
+        for ($i = 0; $i < 30; $i++) {
+            $this->actingAs($this->user)->postJson($url)->assertOk();
+        }
+
+        $this->actingAs($this->user)->postJson($url)->assertStatus(429);
+    }
+
+    public function test_reveal_password_decrypt_failure_returns_500_and_logs(): void
+    {
+        Log::spy();
+        $account = AffiliateNetworkAccount::factory()->create(['password' => 'Temp#1']);
+        DB::table('affiliate_network_accounts')->where('id', $account->id)->update(['password' => 'not-a-valid-ciphertext']);
+
+        $this->actingAs($this->user)
+            ->postJson(route('affiliate-network-accounts.reveal-password', $account))
+            ->assertStatus(500)
+            ->assertJson(['ok' => false, 'message' => 'Could not decrypt password']);
+
+        Log::shouldHaveReceived('error')
+            ->withArgs(fn ($message) => $message === 'Affiliate network account password decrypt failed.')
+            ->once();
     }
 }

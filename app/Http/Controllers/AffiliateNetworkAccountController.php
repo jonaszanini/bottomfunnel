@@ -199,14 +199,36 @@ class AffiliateNetworkAccountController extends Controller
      */
     public function revealPassword(Request $request, AffiliateNetworkAccount $affiliateNetworkAccount): JsonResponse
     {
+        $noStore = ['Cache-Control' => 'no-store, private', 'Pragma' => 'no-cache'];
         $raw = $affiliateNetworkAccount->getRawOriginal('password');
-        $decrypted = ($raw === null || $raw === '') ? null : $affiliateNetworkAccount->revealPassword();
+
+        if ($raw === null || $raw === '') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No password stored for this account.',
+            ], 404, $noStore);
+        }
+
+        try {
+            $decrypted = $affiliateNetworkAccount->revealPassword();
+        } catch (\Throwable $e) {
+            Log::error('Affiliate network account password decrypt failed.', [
+                'account_id' => $affiliateNetworkAccount->id,
+                'user_id' => $request->user()?->id,
+                'exception' => $e::class,
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Could not decrypt password',
+            ], 500, $noStore);
+        }
 
         if ($decrypted === null || $decrypted === '') {
             return response()->json([
                 'ok' => false,
                 'message' => 'No password stored for this account.',
-            ], 404);
+            ], 404, $noStore);
         }
 
         Log::info('Affiliate network account password revealed.', [
@@ -218,6 +240,6 @@ class AffiliateNetworkAccountController extends Controller
         return response()->json([
             'ok' => true,
             'password' => $decrypted,
-        ]);
+        ], 200, $noStore);
     }
 }

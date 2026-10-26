@@ -26,6 +26,53 @@ export default function Index({ accounts = [], filters = {}, networks = [], stat
     };
 
     // Clipboard write with fallback for non-HTTPS origins (e.g. local XAMPP over http)
+    const textareaCopy = (text) => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try {
+            ok = document.execCommand('copy');
+        } finally {
+            ta.value = '';
+            document.body.removeChild(ta);
+        }
+        if (!ok) throw new Error('Copy failed');
+    };
+
+    // Copy text produced by an async promise. Safari requires the clipboard write to start
+    // synchronously inside the user gesture, so pass a promise to ClipboardItem when supported.
+    const writeClipboardAsync = async (textPromise) => {
+        const secure = navigator.clipboard && window.isSecureContext;
+        if (secure && typeof window.ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+            try {
+                const item = new window.ClipboardItem({
+                    'text/plain': textPromise.then((t) => new Blob([t], { type: 'text/plain' })),
+                });
+                await navigator.clipboard.write([item]);
+                return;
+            } catch (err) {
+                // Surface fetch/HTTP errors; otherwise fall through to other strategies.
+                if (err && err.fromFetch) throw err;
+            }
+        }
+        const text = await textPromise;
+        if (secure) {
+            try {
+                await navigator.clipboard.writeText(text);
+                return;
+            } catch {
+                // fall back to textarea
+            }
+        }
+        textareaCopy(text);
+    };
+
     const writeClipboard = async (text) => {
         if (navigator.clipboard && window.isSecureContext) {
             await navigator.clipboard.writeText(text);
@@ -60,24 +107,33 @@ export default function Index({ accounts = [], filters = {}, networks = [], stat
     const handleCopyPassword = async (account) => {
         if (copyingPasswordId) return;
         setCopyingPasswordId(account.id);
-        try {
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            const res = await fetch(`/affiliate-network-accounts/${account.id}/reveal-password`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Accept: 'application/json',
-                    'X-CSRF-TOKEN': csrfToken,
-                },
-            });
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const fail = (msg) => {
+            const e = new Error(msg);
+            e.fromFetch = true;
+            return e;
+        };
+        const passwordPromise = fetch(`/affiliate-network-accounts/${account.id}/reveal-password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Accept: 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            cache: 'no-store',
+        }).then(async (res) => {
             if (!res.ok) {
-                if (res.status === 404) throw new Error('No password stored for this account.');
-                if (res.status === 429) throw new Error('Too many requests. Please wait a moment.');
-                throw new Error('Unable to fetch password.');
+                if (res.status === 404) throw fail('No password stored for this account.');
+                if (res.status === 429) throw fail('Too many requests. Please wait a moment.');
+                if (res.status === 500) throw fail('Could not decrypt password.');
+                throw fail('Unable to fetch password.');
             }
             const data = await res.json();
-            if (!data.ok || typeof data.password !== 'string') throw new Error('No password returned.');
-            await writeClipboard(data.password);
+            if (!data.ok || typeof data.password !== 'string') throw fail('No password returned.');
+            return data.password;
+        });
+        try {
+            await writeClipboardAsync(passwordPromise);
             showToast('Password copied');
         } catch (err) {
             showToast(err?.message || 'Could not copy password.');

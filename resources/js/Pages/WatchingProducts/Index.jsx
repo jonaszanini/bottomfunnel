@@ -62,6 +62,23 @@ export function getComplianceRiskBadge(risk, label) {
 export default function Index({ products, filters, metrics, options }) {
     const [search, setSearch] = useState(filters.search || '');
     const [openVolumeInfo, setOpenVolumeInfo] = useState(null);
+    useEffect(() => {
+        if (openVolumeInfo === null) return undefined;
+        const onPointer = (e) => {
+            if (!e.target.closest?.('[data-volume-popover]')) setOpenVolumeInfo(null);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') setOpenVolumeInfo(null);
+        };
+        document.addEventListener('mousedown', onPointer);
+        document.addEventListener('touchstart', onPointer);
+        document.addEventListener('keydown', onKey);
+        return () => {
+            document.removeEventListener('mousedown', onPointer);
+            document.removeEventListener('touchstart', onPointer);
+            document.removeEventListener('keydown', onKey);
+        };
+    }, [openVolumeInfo]);
     const [selectedStatus, setSelectedStatus] = useState(filters.status || 'all');
     const [selectedStrategy, setSelectedStrategy] = useState(filters.strategy || 'all');
     const [selectedBrandBidding, setSelectedBrandBidding] = useState(filters.brand_bidding || 'all');
@@ -1209,12 +1226,12 @@ export default function Index({ products, filters, metrics, options }) {
                                                 {/* Trend: momentum (line 1) + search volume (line 2) */}
                                                 <td className="px-2 py-2 whitespace-nowrap text-xs">
                                                     {getMomentumIndicator(product, true)}
-                                                    <div className="relative mt-0.5 flex items-center gap-1">
+                                                    <div className="relative mt-0.5 flex items-center gap-1" data-volume-popover>
                                                         <span className="font-semibold text-xs text-theme-primary">
                                                             {formatSearchVolume(product.search_volume_total, product.search_volume_is_range)}
                                                         </span>
                                                         {product.search_volume_error && (
-                                                            <span className="text-amber-500 text-[11px]" aria-label="Volume refresh error">⚠</span>
+                                                            <span role="img" className="text-amber-500 text-[11px]" aria-label="Volume refresh error">⚠</span>
                                                         )}
                                                         {(product.search_volume_total !== null && product.search_volume_total !== undefined
                                                             || product.search_volume_error

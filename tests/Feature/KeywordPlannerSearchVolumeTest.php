@@ -575,6 +575,23 @@ class KeywordPlannerSearchVolumeTest extends TestCase
         $this->assertNotNull($fresh->search_volume_error);
     }
 
+    public function test_quota_break_records_error_on_products_in_unreached_geos(): void
+    {
+        $usProduct = WatchedProduct::create(['name' => 'US Only Product', 'status' => WatchedProductStatus::Watch, 'allowed_geos' => ['US']]);
+        $gbProduct = WatchedProduct::create(['name' => 'GB Only Product', 'status' => WatchedProductStatus::Watch, 'allowed_geos' => ['GB']]);
+
+        $this->fakeTokenAnd($this->errorResponse(429, 'RESOURCE_EXHAUSTED', 'Resource has been exhausted (e.g. check quota).'));
+
+        $this->artisan('watching:refresh-volume')->assertExitCode(1);
+
+        $this->assertNotNull($usProduct->fresh()->search_volume_error);
+        $this->assertNotNull($usProduct->fresh()->search_volume_error_at);
+        $gb = $gbProduct->fresh();
+        $this->assertNotNull($gb->search_volume_error);
+        $this->assertStringContainsString('quota', $gb->search_volume_error);
+        $this->assertNotNull($gb->search_volume_error_at);
+    }
+
     public function test_existing_data_survives_error_and_checked_at_unchanged(): void
     {
         $checkedAt = Carbon::now()->subDays(10)->startOfSecond();
