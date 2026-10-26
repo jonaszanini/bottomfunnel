@@ -179,4 +179,34 @@ class AffiliateNetworkAccountTest extends TestCase
         $resSuspended->assertOk();
         $resSuspended->assertInertia(fn ($page) => $page->has('accounts', 1));
     }
+
+    public function test_reveal_password_route_requires_auth_for_copy(): void
+    {
+        $account = AffiliateNetworkAccount::factory()->create(['password' => 'CopyMe#1']);
+
+        $this->postJson(route('affiliate-network-accounts.reveal-password', $account))
+            ->assertUnauthorized()
+            ->assertJsonMissing(['password' => 'CopyMe#1']);
+    }
+
+    public function test_reveal_password_route_returns_decrypted_password_for_copy(): void
+    {
+        $account = AffiliateNetworkAccount::factory()->create(['password' => 'CopyMe#1']);
+
+        $this->actingAs($this->user)
+            ->postJson(route('affiliate-network-accounts.reveal-password', $account))
+            ->assertOk()
+            ->assertExactJson(['ok' => true, 'password' => 'CopyMe#1']);
+    }
+
+    public function test_reveal_password_route_returns_404_when_no_password(): void
+    {
+        $account = AffiliateNetworkAccount::factory()->create(['password' => 'Temp#1']);
+        DB::table('affiliate_network_accounts')->where('id', $account->id)->update(['password' => '']);
+
+        $this->actingAs($this->user)
+            ->postJson(route('affiliate-network-accounts.reveal-password', $account))
+            ->assertNotFound()
+            ->assertJsonPath('ok', false);
+    }
 }

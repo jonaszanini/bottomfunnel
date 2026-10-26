@@ -25,11 +25,65 @@ export default function Index({ accounts = [], filters = {}, networks = [], stat
         setTimeout(() => setToastMessage(''), 2500);
     };
 
+    // Clipboard write with fallback for non-HTTPS origins (e.g. local XAMPP over http)
+    const writeClipboard = async (text) => {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        let ok = false;
+        try {
+            ok = document.execCommand('copy');
+        } finally {
+            ta.value = '';
+            document.body.removeChild(ta);
+        }
+        if (!ok) throw new Error('Copy failed');
+    };
+
     const handleCopy = (text, label) => {
         if (!text) return;
-        navigator.clipboard.writeText(text).then(() => {
-            showToast(`Copied ${label} to clipboard!`);
-        });
+        writeClipboard(text)
+            .then(() => showToast(`Copied ${label} to clipboard!`))
+            .catch(() => showToast(`Could not copy ${label}.`));
+    };
+
+    const [copyingPasswordId, setCopyingPasswordId] = useState(null);
+    const handleCopyPassword = async (account) => {
+        if (copyingPasswordId) return;
+        setCopyingPasswordId(account.id);
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const res = await fetch(`/affiliate-network-accounts/${account.id}/reveal-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+            });
+            if (!res.ok) {
+                if (res.status === 404) throw new Error('No password stored for this account.');
+                if (res.status === 429) throw new Error('Too many requests. Please wait a moment.');
+                throw new Error('Unable to fetch password.');
+            }
+            const data = await res.json();
+            if (!data.ok || typeof data.password !== 'string') throw new Error('No password returned.');
+            await writeClipboard(data.password);
+            showToast('Password copied');
+        } catch (err) {
+            showToast(err?.message || 'Could not copy password.');
+        } finally {
+            setCopyingPasswordId(null);
+        }
     };
 
     // Filtered accounts list
@@ -440,6 +494,21 @@ export default function Index({ accounts = [], filters = {}, networks = [], stat
                                                                 </svg>
                                                                 Encrypted Password
                                                             </span>
+                                                            {account.has_password && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleCopyPassword(account)}
+                                                                    disabled={copyingPasswordId === account.id}
+                                                                    className="text-theme-muted hover:text-theme-primary transition-colors cursor-pointer p-0.5 disabled:opacity-50"
+                                                                    title="Copy password"
+                                                                    aria-label={`Copy password for ${account.nickname || account.username || 'account'}`}
+                                                                >
+                                                                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+                                                                        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+                                                                    </svg>
+                                                                </button>
+                                                            )}
                                                             {account.notes && (
                                                                 <span className="truncate max-w-[200px] text-[11px] text-theme-muted" title={account.notes}>
                                                                     • {account.notes}

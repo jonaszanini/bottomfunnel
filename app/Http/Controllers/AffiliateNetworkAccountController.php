@@ -10,6 +10,7 @@ use App\Models\AffiliateNetworkAccount;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -198,11 +199,25 @@ class AffiliateNetworkAccountController extends Controller
      */
     public function revealPassword(Request $request, AffiliateNetworkAccount $affiliateNetworkAccount): JsonResponse
     {
-        $decrypted = $affiliateNetworkAccount->revealPassword();
+        $raw = $affiliateNetworkAccount->getRawOriginal('password');
+        $decrypted = ($raw === null || $raw === '') ? null : $affiliateNetworkAccount->revealPassword();
+
+        if ($decrypted === null || $decrypted === '') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No password stored for this account.',
+            ], 404);
+        }
+
+        Log::info('Affiliate network account password revealed.', [
+            'account_id' => $affiliateNetworkAccount->id,
+            'user_id' => $request->user()?->id,
+            'ip' => $request->ip(),
+        ]);
 
         return response()->json([
             'ok' => true,
-            'password' => $decrypted ?? '',
+            'password' => $decrypted,
         ]);
     }
 }
