@@ -165,7 +165,7 @@ export default function Index({ accounts = [], filters = {}, networks = [], stat
 
     // Status counts
     const statusCounts = useMemo(() => {
-        const counts = { all: accounts.length, active: 0, suspended: 0, closed: 0 };
+        const counts = { all: accounts.length, active: 0, pending_approval: 0, suspended: 0, closed: 0 };
         accounts.forEach((a) => {
             if (counts[a.status] !== undefined) {
                 counts[a.status]++;
@@ -388,6 +388,7 @@ export default function Index({ accounts = [], filters = {}, networks = [], stat
                     {[
                         { key: 'all', label: 'All Accounts' },
                         { key: 'active', label: 'Active' },
+                        { key: 'pending_approval', label: 'Pending Approval' },
                         { key: 'suspended', label: 'Suspended' },
                         { key: 'closed', label: 'Closed' },
                     ].map((tab) => {
@@ -654,6 +655,8 @@ export default function Index({ accounts = [], filters = {}, networks = [], stat
                                                     <span className={`h-1.5 w-1.5 rounded-full ${
                                                         account.status === 'active'
                                                             ? 'bg-emerald-500'
+                                                            : account.status === 'pending_approval'
+                                                            ? 'bg-sky-500'
                                                             : account.status === 'suspended'
                                                             ? 'bg-amber-500'
                                                             : 'bg-rose-500'
@@ -919,6 +922,7 @@ export default function Index({ accounts = [], filters = {}, networks = [], stat
                                         className={control}
                                     >
                                         <option value="active">Active</option>
+                                        <option value="pending_approval">Pending Approval</option>
                                         <option value="suspended">Suspended</option>
                                         <option value="closed">Closed</option>
                                     </select>

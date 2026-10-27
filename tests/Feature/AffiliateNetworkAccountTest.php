@@ -257,4 +257,41 @@ class AffiliateNetworkAccountTest extends TestCase
             ->withArgs(fn ($message) => $message === 'Affiliate network account password decrypt failed.')
             ->once();
     }
+
+    public function test_account_can_have_pending_approval_status(): void
+    {
+        // 1. Create with pending_approval
+        $this->actingAs($this->user)->post('/affiliate-network-accounts', [
+            'network' => 'maxweb',
+            'nickname' => 'MaxWeb Pending',
+            'username' => 'maxweb_user',
+            'email' => 'user@maxweb.com',
+            'password' => 'PassSecret123!',
+            'status' => 'pending_approval',
+        ])->assertRedirect('/affiliate-network-accounts');
+
+        $account = AffiliateNetworkAccount::where('nickname', 'MaxWeb Pending')->firstOrFail();
+        $this->assertEquals(AffiliateNetworkAccountStatus::PendingApproval, $account->status);
+        $this->assertEquals('Pending Approval', $account->status->label());
+        $this->assertStringContainsString('text-sky-600', $account->status->badgeClass());
+
+        // 2. Filter by pending_approval
+        $res = $this->actingAs($this->user)->get('/affiliate-network-accounts?status=pending_approval');
+        $res->assertOk();
+        $res->assertInertia(fn ($page) => $page->has('accounts', 1)
+            ->where('accounts.0.status', 'pending_approval')
+            ->where('accounts.0.status_label', 'Pending Approval')
+        );
+
+        // 3. Update to active
+        $this->actingAs($this->user)->put("/affiliate-network-accounts/{$account->id}", [
+            'network' => 'maxweb',
+            'nickname' => 'MaxWeb Approved',
+            'status' => 'active',
+            'password' => '',
+        ])->assertRedirect('/affiliate-network-accounts');
+
+        $account->refresh();
+        $this->assertEquals(AffiliateNetworkAccountStatus::Active, $account->status);
+    }
 }

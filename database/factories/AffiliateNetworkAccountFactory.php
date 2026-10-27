@@ -43,6 +43,13 @@ class AffiliateNetworkAccountFactory extends Factory
         ]);
     }
 
+    public function pendingApproval(): static
+    {
+        return $this->state(fn () => [
+            'status' => AffiliateNetworkAccountStatus::PendingApproval,
+        ]);
+    }
+
     public function suspended(): static
     {
         return $this->state(fn () => [
