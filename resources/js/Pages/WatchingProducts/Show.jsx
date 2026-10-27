@@ -125,6 +125,7 @@ export default function Show({
     serpapi_usage = {},
     options = {},
 }) {
+    const [showReviewInfo, setShowReviewInfo] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const [toastType, setToastType] = useState('success');
 
@@ -519,6 +520,32 @@ export default function Show({
                         <span>Refresh now ({serpapi_usage.used_this_month}/{serpapi_usage.total_limit})</span>
                     </button>
 
+                    <div className="relative flex items-center gap-1">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (window.confirm('Mark this product as manually reviewed now?')) {
+                                    router.post(`/watching-products/${product.id}/review`, {}, { preserveScroll: true });
+                                }
+                            }}
+                            className="px-3 py-1.5 rounded-lg border border-theme bg-theme-surface hover:bg-theme-subtle text-xs font-semibold text-theme-primary transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                            <svg className="w-3.5 h-3.5 text-theme-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                            <span>Mark Reviewed (manual)</span>
+                        </button>
+                        <button
+                            type="button"
+                            aria-label="About manual review"
+                            onClick={() => setShowReviewInfo((v) => !v)}
+                            className="text-theme-muted hover:text-theme-primary text-sm leading-none cursor-pointer"
+                        >ⓘ</button>
+                        {showReviewInfo && (
+                            <div className="absolute right-0 top-full mt-2 z-30 w-72 rounded-lg border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-lg">
+                                Manual review: click after you personally checked this product (offer page, payout, compliance, competitors). It sets "Last Reviewed" to now. Nothing is fetched automatically; products not reviewed in 14+ days count as due for review.
+                            </div>
+                        )}
+                    </div>
+
                     <button
                         type="button"
                         onClick={() => setIsEditingProduct(!isEditingProduct)}
@@ -589,7 +616,7 @@ export default function Show({
                             <span>•</span>
                             <span>Last Refreshed: <strong className="text-theme-primary">{product.last_refreshed_formatted || 'Never'}</strong></span>
                             <span>•</span>
-                            <span>Last Reviewed: <strong className="text-theme-primary">{product.last_reviewed_formatted || 'Never'}</strong></span>
+                            <span>Last Reviewed (manual): <strong className="text-theme-primary">{product.last_reviewed_formatted || 'Never'}</strong></span>
                         </div>
                     </div>
 
