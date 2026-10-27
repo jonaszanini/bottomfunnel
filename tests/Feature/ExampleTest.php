@@ -13,6 +13,6 @@ class ExampleTest extends TestCase
     public function test_the_application_returns_a_successful_response(): void
     {
         $this->get('/login')->assertOk();
-        $this->get('/')->assertRedirect('/login');
+        $this->get('/')->assertOk()->assertSee('BottomFunnel');
     }
 }

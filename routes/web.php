@@ -56,6 +56,14 @@ Route::get('/cron/run', function () {
     ]);
 })->name('cron.run');
 
+Route::get('/', function (\Illuminate\Http\Request $request) {
+    if ($request->user()) {
+        return app()->call(DashboardController::class, ['request' => $request]);
+    }
+
+    return response()->view('landing');
+})->name('dashboard');
+
 Route::middleware('guest')->group(function () {
     Route::get('/login', [LoginController::class, 'create'])->name('login');
     Route::post('/login', [LoginController::class, 'store'])->middleware('throttle:5,1');
@@ -63,7 +71,6 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
-    Route::get('/', DashboardController::class)->name('dashboard');
 
     Route::resource('tracks', TrackController::class);
     Route::post('/tracks/{track}/spend', [TrackController::class, 'spend'])->name('tracks.spend');

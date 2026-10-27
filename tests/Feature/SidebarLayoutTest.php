@@ -31,11 +31,11 @@ class SidebarLayoutTest extends TestCase
         );
     }
 
-    public function test_unauthenticated_user_is_redirected_to_login(): void
+    public function test_unauthenticated_user_sees_public_landing(): void
     {
         $response = $this->get('/');
 
-        $response->assertRedirect('/login');
+        $response->assertOk()->assertSee('<title>BottomFunnel</title>', false)->assertSee('<h1', false)->assertSee('/login')->assertSee('/privacy-policy')->assertSee('/terms-of-service');
     }
 
     public function test_login_page_renders_inertia_root_with_theme_head(): void
