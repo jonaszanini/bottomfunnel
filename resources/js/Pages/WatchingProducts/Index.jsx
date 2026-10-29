@@ -1026,10 +1026,10 @@ export default function Index({ products, filters, metrics, options }) {
                                         {renderSortTh('#', 'rank', 'w-10 text-center')}
                                         {renderSortTh('Score', 'score', 'w-[72px] text-center')}
                                         {renderSortTh('Product Name', 'name', '')}
-                                        {renderSortTh('Platform', 'platform', 'w-24 hidden xl:table-cell')}
+                                        {renderSortTh('Platform', 'platform', 'w-36 hidden xl:table-cell')}
                                         {renderSortTh('Payout CAD', 'payout_cad', 'w-20 text-right hidden lg:table-cell')}
                                         {renderSortTh('Trend', 'search_volume_total', 'w-24')}
-                                        {renderSortTh('Compliance', 'compliance', 'w-28 text-center hidden xl:table-cell')}
+                                        {renderSortTh('Compliance', 'compliance', 'w-44 text-center hidden xl:table-cell')}
                                         {renderSortTh('Status', 'status', 'w-24 text-center')}
                                         <th scope="col" className="px-2 py-3 text-center select-none w-20">Actions</th>
                                     </tr>
@@ -1179,7 +1179,7 @@ export default function Index({ products, filters, metrics, options }) {
                                                         const otherPlatforms = (Array.isArray(product.platforms) ? product.platforms : []).filter((p) => p !== primary);
                                                         return (
                                                             <div className="flex items-center gap-1">
-                                                                <span title={primary} className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-semibold max-w-[60px] truncate align-middle ${getPlatformBadgeClass(primary)}`}>
+                                                                <span title={primary} className={`inline-block rounded-md border px-1.5 py-0.5 text-[11px] font-semibold max-w-[8.5rem] truncate align-middle ${getPlatformBadgeClass(primary)}`}>
                                                                     {primary}
                                                                 </span>
                                                                 {otherPlatforms.length > 0 && (
