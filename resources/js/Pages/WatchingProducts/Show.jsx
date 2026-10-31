@@ -1463,7 +1463,7 @@ export default function Show({
                         {product.notes && (
                             <div className="mt-4 p-3 rounded-xl border border-theme bg-theme-subtle/30 text-xs">
                                 <div className="font-semibold text-theme-secondary mb-1">Internal Notes:</div>
-                                <p className="text-theme-muted whitespace-pre-wrap">{product.notes}</p>
+                                <p className="text-theme-muted whitespace-pre-wrap break-words [overflow-wrap:anywhere] min-w-0">{product.notes}</p>
                             </div>
                         )}
                     </div>
