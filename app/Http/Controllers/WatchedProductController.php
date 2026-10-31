@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AffiliateApplicationStatus;
 use App\Enums\ApprovalStatus;
 use App\Enums\BrandBiddingStatus;
 use App\Enums\ComplianceRisk;
@@ -69,6 +70,7 @@ class WatchedProductController extends Controller
             'platform' => $request->input('platform', 'all'),
             'recheck_overdue' => $request->boolean('recheck_overdue'),
             'volume' => $request->input('volume', 'all'),
+            'affiliate_application_status' => $request->input('affiliate_application_status', 'all'),
             'sort' => $request->input('sort'),
             'direction' => $request->input('direction'),
         ];
@@ -152,6 +154,10 @@ class WatchedProductController extends Controller
                 'network_approval_status_label' => $product->network_approval_status?->label() ?? ($product->network_approval_required ? 'Requires Approval' : 'Approval Unknown'),
                 'approval_status' => $product->approval_status?->value ?? ($product->approval_required ? 'yes' : 'unknown'),
                 'approval_status_label' => $product->approval_status?->label() ?? ($product->approval_required ? 'Requires Approval' : 'Approval Unknown'),
+                'affiliate_application_status' => $product->affiliate_application_status?->value ?? 'not_requested',
+                'affiliate_application_status_label' => $product->affiliate_application_status?->label() ?? 'Não solicitado',
+                'affiliate_application_requested_at' => $product->affiliate_application_requested_at?->format('Y-m-d'),
+                'affiliate_application_requested_at_formatted' => $product->affiliate_application_requested_at?->format('M d, Y'),
                 'strategy_phase2' => $product->strategy_phase2?->value,
                 'strategy_phase2_label' => $product->strategy_phase2?->label(),
                 'strategy_switch_trigger' => $product->strategy_switch_trigger,
@@ -265,6 +271,10 @@ class WatchedProductController extends Controller
                     'label' => $a->label(),
                     'short_label' => $a->shortLabel(),
                 ], ApprovalStatus::cases()),
+                'affiliate_application_statuses' => array_map(fn (AffiliateApplicationStatus $s) => [
+                    'value' => $s->value,
+                    'label' => $s->label(),
+                ], AffiliateApplicationStatus::cases()),
             ],
         ]);
     }
@@ -413,6 +423,10 @@ class WatchedProductController extends Controller
             'network_approval_status_label' => $watchedProduct->network_approval_status?->label() ?? ($watchedProduct->network_approval_required ? 'Requires Approval' : 'Approval Unknown'),
             'approval_status' => $watchedProduct->approval_status?->value ?? ($watchedProduct->approval_required ? 'yes' : 'unknown'),
             'approval_status_label' => $watchedProduct->approval_status?->label() ?? ($watchedProduct->approval_required ? 'Requires Approval' : 'Approval Unknown'),
+            'affiliate_application_status' => $watchedProduct->affiliate_application_status?->value ?? 'not_requested',
+            'affiliate_application_status_label' => $watchedProduct->affiliate_application_status?->label() ?? 'Não solicitado',
+            'affiliate_application_requested_at' => $watchedProduct->affiliate_application_requested_at?->format('Y-m-d'),
+            'affiliate_application_requested_at_formatted' => $watchedProduct->affiliate_application_requested_at?->format('M d, Y'),
             'strategy_phase2' => $watchedProduct->strategy_phase2?->value,
             'strategy_phase2_label' => $watchedProduct->strategy_phase2?->label(),
             'strategy_switch_trigger' => $watchedProduct->strategy_switch_trigger,
@@ -494,6 +508,7 @@ class WatchedProductController extends Controller
                 'trends_trends' => array_map(fn (TrendsTrend $t) => ['value' => $t->value, 'label' => $t->label()], TrendsTrend::cases()),
                 'compliance_risks' => array_map(fn (ComplianceRisk $c) => ['value' => $c->value, 'label' => $c->label()], ComplianceRisk::cases()),
                 'approval_statuses' => array_map(fn (ApprovalStatus $a) => ['value' => $a->value, 'label' => $a->label(), 'short_label' => $a->shortLabel()], ApprovalStatus::cases()),
+                'affiliate_application_statuses' => array_map(fn (AffiliateApplicationStatus $s) => ['value' => $s->value, 'label' => $s->label()], AffiliateApplicationStatus::cases()),
                 'platforms' => $this->getAvailablePlatforms(),
             ],
         ]);
@@ -517,6 +532,16 @@ class WatchedProductController extends Controller
             $validated['network_approval_required'] = ($validated['network_approval_status'] === 'yes');
         } elseif (isset($validated['network_approval_required'])) {
             $validated['network_approval_status'] = $validated['network_approval_required'] ? 'yes' : 'unknown';
+        }
+
+        if (isset($validated['affiliate_application_status'])) {
+            $statusValue = $validated['affiliate_application_status'] instanceof AffiliateApplicationStatus
+                ? $validated['affiliate_application_status']->value
+                : (string) $validated['affiliate_application_status'];
+
+            if (in_array($statusValue, ['pending', 'approved', 'rejected'], true) && empty($validated['affiliate_application_requested_at'])) {
+                $validated['affiliate_application_requested_at'] = now('America/Toronto')->toDateString();
+            }
         }
 
         // Compute CAD cache
@@ -551,6 +576,16 @@ class WatchedProductController extends Controller
             $validated['network_approval_status'] = $validated['network_approval_required'] ? 'yes' : 'unknown';
         }
 
+        if (isset($validated['affiliate_application_status'])) {
+            $statusValue = $validated['affiliate_application_status'] instanceof AffiliateApplicationStatus
+                ? $validated['affiliate_application_status']->value
+                : (string) $validated['affiliate_application_status'];
+
+            if (in_array($statusValue, ['pending', 'approved', 'rejected'], true) && empty($validated['affiliate_application_requested_at'])) {
+                $validated['affiliate_application_requested_at'] = now('America/Toronto')->toDateString();
+            }
+        }
+
         // Update CAD computed cache if payout changed
         if (isset($validated['payout_amount']) && $validated['payout_amount'] !== null) {
             $currency = $validated['payout_currency'] ?? $watchedProduct->payout_currency ?? 'USD';
@@ -559,34 +594,62 @@ class WatchedProductController extends Controller
 
         $watchedProduct->update($validated);
 
-        // Rescore product
-        $scoreResult = $this->scoreService->score($watchedProduct);
-        $watchedProduct->update([
-            'score' => $scoreResult['score'],
-            'score_breakdown' => $scoreResult['breakdown'],
-            'score_flags' => $scoreResult['flags'],
-            'scored_at' => now(),
-        ]);
+        $scoringFields = [
+            'bof_translation',
+            'bof_vpn_serp',
+            'bof_image_match_pct',
+            'bof_qualifier',
+            'bof_homonym',
+            'trends_trend',
+            'trends_7d',
+            'trends_30d',
+            'trends_90d',
+            'flowspy_traffic_trend',
+            'payout_amount',
+            'payout_currency',
+            'payout_model',
+            'page_type',
+            'brand_bidding',
+            'advertiser_count',
+            'vendor_bids_brand',
+            'kp_volume',
+            'cancel_rate',
+            'listing_status',
+            'restricted_category',
+            'approval_required',
+            'approval_status',
+        ];
 
-        ProductScoreHistory::query()->create([
-            'product_id' => $watchedProduct->id,
-            'score' => $scoreResult['score'],
-            'breakdown' => $scoreResult['breakdown'],
-            'flags' => $scoreResult['flags'],
-            'inputs_snapshot' => [
-                'name' => $watchedProduct->name,
-                'payout_amount' => $watchedProduct->payout_amount,
-                'payout_currency' => $watchedProduct->payout_currency,
-                'page_type' => $watchedProduct->page_type,
-                'strategy' => $watchedProduct->strategy?->value,
-                'bof_translation' => (bool) $watchedProduct->bof_translation,
-                'bof_vpn_serp' => (bool) $watchedProduct->bof_vpn_serp,
-                'bof_image_match_pct' => (int) ($watchedProduct->bof_image_match_pct ?? 0),
-            ],
-            'created_at' => now(),
-        ]);
+        if ($watchedProduct->wasChanged($scoringFields)) {
+            // Rescore product
+            $scoreResult = $this->scoreService->score($watchedProduct);
+            $watchedProduct->update([
+                'score' => $scoreResult['score'],
+                'score_breakdown' => $scoreResult['breakdown'],
+                'score_flags' => $scoreResult['flags'],
+                'scored_at' => now(),
+            ]);
 
-        $this->rankService->recalculateRanks();
+            ProductScoreHistory::query()->create([
+                'product_id' => $watchedProduct->id,
+                'score' => $scoreResult['score'],
+                'breakdown' => $scoreResult['breakdown'],
+                'flags' => $scoreResult['flags'],
+                'inputs_snapshot' => [
+                    'name' => $watchedProduct->name,
+                    'payout_amount' => $watchedProduct->payout_amount,
+                    'payout_currency' => $watchedProduct->payout_currency,
+                    'page_type' => $watchedProduct->page_type,
+                    'strategy' => $watchedProduct->strategy?->value,
+                    'bof_translation' => (bool) $watchedProduct->bof_translation,
+                    'bof_vpn_serp' => (bool) $watchedProduct->bof_vpn_serp,
+                    'bof_image_match_pct' => (int) ($watchedProduct->bof_image_match_pct ?? 0),
+                ],
+                'created_at' => now(),
+            ]);
+
+            $this->rankService->recalculateRanks();
+        }
 
         if ($request->header('Referer') && str_contains((string) $request->header('Referer'), '/watching-products/')) {
             return redirect()->back()
@@ -863,6 +926,8 @@ class WatchedProductController extends Controller
             'approval_required' => ['nullable', 'boolean'],
             'approval_status' => ['nullable', Rule::enum(ApprovalStatus::class)],
             'network_approval_status' => ['nullable', Rule::enum(ApprovalStatus::class)],
+            'affiliate_application_status' => ['nullable', Rule::enum(AffiliateApplicationStatus::class)],
+            'affiliate_application_requested_at' => ['nullable', 'date'],
             'strategy_phase2' => ['nullable', Rule::enum(Strategy::class)],
             'strategy_switch_trigger' => ['nullable', 'string', 'max:5000'],
             'recheck_at' => ['nullable', 'date'],

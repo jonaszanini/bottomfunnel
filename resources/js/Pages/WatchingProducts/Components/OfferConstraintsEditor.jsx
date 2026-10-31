@@ -39,6 +39,7 @@ export default function OfferConstraintsEditor({
 }) {
     const [customGeoInput, setCustomGeoInput] = useState('');
     const [showApprovalInfo, setShowApprovalInfo] = useState(false);
+    const [showAffiliateAppInfo, setShowAffiliateAppInfo] = useState(false);
     const [showPromotionInfo, setShowPromotionInfo] = useState(false);
     const [showVolumeKeywordInfo, setShowVolumeKeywordInfo] = useState(false);
 
@@ -260,6 +261,65 @@ export default function OfferConstraintsEditor({
                     </select>
                 </Field>
             </div>
+
+            {/* Affiliate Application Status & Date */}
+            <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-theme/60">
+                <Field
+                    label={
+                        <span className="flex items-center justify-between">
+                            <span>Affiliate Application Status</span>
+                            <button
+                                type="button"
+                                onClick={() => setShowAffiliateAppInfo(!showAffiliateAppInfo)}
+                                className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-theme text-[10px] text-theme-muted hover:text-theme-accent cursor-pointer"
+                                title="Click for info on Affiliate Application Status"
+                            >
+                                ⓘ
+                            </button>
+                        </span>
+                    }
+                    error={errors.affiliate_application_status}
+                >
+                    <select
+                        className={control}
+                        value={data.affiliate_application_status || 'not_requested'}
+                        onChange={(e) => setData('affiliate_application_status', e.target.value)}
+                    >
+                        <option value="not_requested">Não solicitado</option>
+                        <option value="pending">Pendente</option>
+                        <option value="approved">Aprovado</option>
+                        <option value="rejected">Rejeitado</option>
+                    </select>
+                </Field>
+
+                <Field label="Application Date" error={errors.affiliate_application_requested_at}>
+                    <input
+                        type="date"
+                        className={control}
+                        value={data.affiliate_application_requested_at || ''}
+                        onChange={(e) => setData('affiliate_application_requested_at', e.target.value || null)}
+                    />
+                </Field>
+            </div>
+
+            {/* Click-to-open ⓘ Popover for Affiliate Application Status */}
+            {showAffiliateAppInfo && (
+                <div className="rounded-lg border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-sm space-y-1">
+                    <div className="font-semibold text-theme-primary flex items-center justify-between">
+                        <span>Affiliate Application Status</span>
+                        <button
+                            type="button"
+                            onClick={() => setShowAffiliateAppInfo(false)}
+                            className="text-theme-muted hover:text-theme-primary cursor-pointer"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <p className="text-[11px] text-theme-muted">
+                        Status do SEU pedido de afiliação na network. Diferente de Network Approval Status, que só indica se a oferta exige aprovação.
+                    </p>
+                </div>
+            )}
 
             {/* Click-to-open ⓘ Popover for Tri-state approval */}
             {showApprovalInfo && (

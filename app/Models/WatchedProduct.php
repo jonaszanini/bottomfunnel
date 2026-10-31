@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AffiliateApplicationStatus;
 use App\Enums\ApprovalStatus;
 use App\Enums\BrandBiddingStatus;
 use App\Enums\ComplianceRisk;
@@ -26,6 +27,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class WatchedProduct extends Model
 {
     use HasFactory;
+
+    protected $attributes = [
+        'affiliate_application_status' => 'not_requested',
+    ];
 
     protected $fillable = [
         'name',
@@ -110,6 +115,8 @@ class WatchedProduct extends Model
         'search_volume_checked_at',
         'search_volume_error',
         'search_volume_error_at',
+        'affiliate_application_status',
+        'affiliate_application_requested_at',
     ];
 
     /**
@@ -178,6 +185,8 @@ class WatchedProduct extends Model
             'search_volume_is_range' => 'boolean',
             'search_volume_checked_at' => 'datetime',
             'search_volume_error_at' => 'datetime',
+            'affiliate_application_status' => AffiliateApplicationStatus::class,
+            'affiliate_application_requested_at' => 'date',
         ];
     }
 
@@ -189,6 +198,17 @@ class WatchedProduct extends Model
             }
             if ($product->isDirty('network_approval_status') && $product->network_approval_status !== null) {
                 $product->network_approval_required = ($product->network_approval_status === ApprovalStatus::Yes);
+            }
+            if (
+                $product->isDirty('affiliate_application_status') &&
+                in_array($product->affiliate_application_status, [
+                    AffiliateApplicationStatus::Pending,
+                    AffiliateApplicationStatus::Approved,
+                    AffiliateApplicationStatus::Rejected,
+                ], true) &&
+                empty($product->affiliate_application_requested_at)
+            ) {
+                $product->affiliate_application_requested_at = now('America/Toronto')->toDateString();
             }
         });
     }
@@ -538,6 +558,12 @@ class WatchedProduct extends Model
         $query->when(! empty($filters['recheck_overdue']), function (Builder $query) {
             $query->whereNotNull('recheck_at')
                 ->where('recheck_at', '<=', now()->toDateString());
+        });
+
+        $query->when($filters['affiliate_application_status'] ?? null, function (Builder $query, string $status) {
+            if ($status !== 'all') {
+                $query->where('affiliate_application_status', $status);
+            }
         });
 
         $query->when($filters['volume'] ?? null, function (Builder $query, string $volume) {

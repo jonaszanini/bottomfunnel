@@ -59,6 +59,33 @@ export function getComplianceRiskBadge(risk, label) {
     );
 }
 
+export function getAffiliateAppBadge(status) {
+    const s = status || 'not_requested';
+    switch (s) {
+        case 'pending':
+            return {
+                label: 'Pendente',
+                style: 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30',
+            };
+        case 'approved':
+            return {
+                label: 'Aprovado',
+                style: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30',
+            };
+        case 'rejected':
+            return {
+                label: 'Rejeitado',
+                style: 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30',
+            };
+        case 'not_requested':
+        default:
+            return {
+                label: 'Não solicitado',
+                style: 'bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30',
+            };
+    }
+}
+
 export default function Index({ products, filters, metrics, options }) {
     const [search, setSearch] = useState(filters.search || '');
     const [openVolumeInfo, setOpenVolumeInfo] = useState(null);
@@ -85,6 +112,7 @@ export default function Index({ products, filters, metrics, options }) {
     const [selectedTrueBof, setSelectedTrueBof] = useState(filters.true_bof || 'all');
     const [selectedPlatform, setSelectedPlatform] = useState(filters.platform || 'all');
     const [selectedVolume, setSelectedVolume] = useState(filters.volume || 'all');
+    const [selectedAffiliateApp, setSelectedAffiliateApp] = useState(filters.affiliate_application_status || 'all');
     const [selectedRecheckOverdue, setSelectedRecheckOverdue] = useState(
         filters.recheck_overdue === 'true' || filters.recheck_overdue === true || filters.recheck_overdue === '1'
     );
@@ -272,6 +300,8 @@ export default function Index({ products, filters, metrics, options }) {
         approval_status: 'unknown',
         network_approval_status: 'unknown',
         network_approval_required: false,
+        affiliate_application_status: 'not_requested',
+        affiliate_application_requested_at: '',
         payouts_by_platform: [],
         negatives: '',
         approval_required: false,
@@ -344,6 +374,8 @@ export default function Index({ products, filters, metrics, options }) {
             approval_status: 'unknown',
             network_approval_status: 'unknown',
             network_approval_required: false,
+            affiliate_application_status: 'not_requested',
+            affiliate_application_requested_at: '',
             payouts_by_platform: [],
             negatives: '',
             approval_required: false,
@@ -391,6 +423,8 @@ export default function Index({ products, filters, metrics, options }) {
             approval_status: product.approval_status || (product.approval_required ? 'yes' : 'unknown'),
             network_approval_status: product.network_approval_status || (product.network_approval_required ? 'yes' : 'unknown'),
             network_approval_required: Boolean(product.network_approval_required),
+            affiliate_application_status: product.affiliate_application_status || 'not_requested',
+            affiliate_application_requested_at: product.affiliate_application_requested_at || '',
             payouts_by_platform: Array.isArray(product.payouts_by_platform) ? product.payouts_by_platform : [],
             negatives: product.negatives || '',
             approval_required: Boolean(product.approval_required),
@@ -465,6 +499,9 @@ export default function Index({ products, filters, metrics, options }) {
             true_bof: newFilters.true_bof !== undefined ? newFilters.true_bof : selectedTrueBof,
             platform: newFilters.platform !== undefined ? newFilters.platform : selectedPlatform,
             volume: newFilters.volume !== undefined ? newFilters.volume : selectedVolume,
+            affiliate_application_status: newFilters.affiliate_application_status !== undefined
+                ? newFilters.affiliate_application_status
+                : selectedAffiliateApp,
             recheck_overdue: newFilters.recheck_overdue !== undefined
                 ? (newFilters.recheck_overdue ? 'true' : undefined)
                 : (selectedRecheckOverdue ? 'true' : undefined),
@@ -511,6 +548,7 @@ export default function Index({ products, filters, metrics, options }) {
         setSelectedTrueBof('all');
         setSelectedPlatform('all');
         setSelectedVolume('all');
+        setSelectedAffiliateApp('all');
         setSelectedRecheckOverdue(false);
 
         router.get('/watching-products', {}, {
@@ -528,6 +566,7 @@ export default function Index({ products, filters, metrics, options }) {
         selectedTrueBof !== 'all' ||
         selectedPlatform !== 'all' ||
         selectedVolume !== 'all' ||
+        selectedAffiliateApp !== 'all' ||
         selectedRecheckOverdue
     );
 
@@ -956,6 +995,34 @@ export default function Index({ products, filters, metrics, options }) {
                             <option value="unknown">Unknown</option>
                         </select>
                     </div>
+
+                    {/* Affiliate App Filter */}
+                    <div>
+                        <select
+                            className={control}
+                            value={selectedAffiliateApp}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setSelectedAffiliateApp(val);
+                                applyFilters({ affiliate_application_status: val });
+                            }}
+                            aria-label="Filter by Affiliate App Status"
+                        >
+                            <option value="all">All Affiliate Apps</option>
+                            {options.affiliate_application_statuses?.length ? (
+                                options.affiliate_application_statuses.map((s) => (
+                                    <option key={s.value} value={s.value}>{s.label}</option>
+                                ))
+                            ) : (
+                                <>
+                                    <option value="not_requested">Não solicitado</option>
+                                    <option value="pending">Pendente</option>
+                                    <option value="approved">Aprovado</option>
+                                    <option value="rejected">Rejeitado</option>
+                                </>
+                            )}
+                        </select>
+                    </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-theme pt-3">
@@ -1293,6 +1360,20 @@ export default function Index({ products, filters, metrics, options }) {
                                                             {String(product.recheck_at_formatted || product.recheck_at).replace(/,\s*\d{4}$/, '')}
                                                         </div>
                                                     )}
+                                                    {(() => {
+                                                        const badge = getAffiliateAppBadge(product.affiliate_application_status);
+                                                        const titleText = `Affiliate App: ${product.affiliate_application_status_label || badge.label}${product.affiliate_application_requested_at ? ` (${product.affiliate_application_requested_at_formatted || product.affiliate_application_requested_at})` : ''}`;
+                                                        return (
+                                                            <div className="mt-1 flex justify-center">
+                                                                <span
+                                                                    className={`inline-block truncate max-w-[88px] rounded px-1.5 py-0.5 text-[9px] font-semibold border ${badge.style}`}
+                                                                    title={titleText}
+                                                                >
+                                                                    {product.affiliate_application_status_label || badge.label}
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </td>
 
                                                 {/* Actions */}
@@ -1507,24 +1588,37 @@ export default function Index({ products, filters, metrics, options }) {
                                                 )}
                                             </div>
 
-                                            <div className="flex items-center gap-2">
-                                                <select
-                                                    value={product.status}
-                                                    onChange={(e) => handleQuickStatusChange(product, e.target.value)}
-                                                    className={`rounded-md border px-2 py-1 text-xs font-semibold cursor-pointer ${getStatusBadge(product.status)}`}
-                                                    aria-label={`Change status for ${product.name}`}
-                                                >
-                                                    <option value="test">Test</option>
-                                                    <option value="watch">Watch</option>
-                                                    <option value="rejected">Rejected</option>
-                                                </select>
+                                            <div className="flex flex-col items-end gap-1">
+                                                <div className="flex items-center gap-2">
+                                                    <select
+                                                        value={product.status}
+                                                        onChange={(e) => handleQuickStatusChange(product, e.target.value)}
+                                                        className={`rounded-md border px-2 py-1 text-xs font-semibold cursor-pointer ${getStatusBadge(product.status)}`}
+                                                        aria-label={`Change status for ${product.name}`}
+                                                    >
+                                                        <option value="test">Test</option>
+                                                        <option value="watch">Watch</option>
+                                                        <option value="rejected">Rejected</option>
+                                                    </select>
 
-                                                <Link
-                                                    href={`/watching-products/${product.id}`}
-                                                    className="text-xs font-semibold text-theme-accent hover:underline whitespace-nowrap"
-                                                >
-                                                    Details &rarr;
-                                                </Link>
+                                                    <Link
+                                                        href={`/watching-products/${product.id}`}
+                                                        className="text-xs font-semibold text-theme-accent hover:underline whitespace-nowrap"
+                                                    >
+                                                        Details &rarr;
+                                                    </Link>
+                                                </div>
+                                                {(() => {
+                                                    const badge = getAffiliateAppBadge(product.affiliate_application_status);
+                                                    return (
+                                                        <span
+                                                            className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-semibold border ${badge.style}`}
+                                                            title={`Affiliate App: ${product.affiliate_application_status_label || badge.label}`}
+                                                        >
+                                                            {product.affiliate_application_status_label || badge.label}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                     </div>

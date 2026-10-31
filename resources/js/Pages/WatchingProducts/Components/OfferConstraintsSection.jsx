@@ -139,6 +139,36 @@ export default function OfferConstraintsSection({ product }) {
         }
     };
 
+    const getAffiliateAppBadge = (status, label) => {
+        const s = status || 'not_requested';
+        let style = 'border-slate-500/30 bg-slate-500/10 text-slate-500 dark:text-slate-400';
+        let dot = 'bg-slate-400';
+        let defaultLabel = 'Não solicitado';
+
+        if (s === 'pending') {
+            style = 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400';
+            dot = 'bg-amber-500';
+            defaultLabel = 'Pendente';
+        } else if (s === 'approved') {
+            style = 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+            dot = 'bg-emerald-500';
+            defaultLabel = 'Aprovado';
+        } else if (s === 'rejected') {
+            style = 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400';
+            dot = 'bg-rose-500';
+            defaultLabel = 'Rejeitado';
+        }
+
+        const text = label || defaultLabel;
+
+        return (
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border ${style}`}>
+                <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
+                <span>Affiliate App: {text}</span>
+            </span>
+        );
+    };
+
     return (
         <section
             aria-label="Offer constraints and go no-go decision"
@@ -177,6 +207,7 @@ export default function OfferConstraintsSection({ product }) {
 
                     {getApprovalStatusBadge(approvalStatus, 'Vendor')}
                     {getApprovalStatusBadge(networkApprovalStatus, 'Network')}
+                    {getAffiliateAppBadge(product.affiliate_application_status, product.affiliate_application_status_label)}
 
                     {product.recheck_at && (
                         <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border ${
@@ -287,6 +318,30 @@ export default function OfferConstraintsSection({ product }) {
                                 <span className="font-semibold text-theme-primary capitalize">
                                     {product.network_approval_status_label || networkApprovalStatus}
                                 </span>
+                            </div>
+                            <div className="pt-2 border-t border-theme/60 space-y-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-theme-secondary">Affiliate Application:</span>
+                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                                        product.affiliate_application_status === 'pending'
+                                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                                            : product.affiliate_application_status === 'approved'
+                                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                                            : product.affiliate_application_status === 'rejected'
+                                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30'
+                                            : 'bg-slate-500/15 text-slate-500 dark:text-slate-400 border-slate-500/30'
+                                    }`}>
+                                        {product.affiliate_application_status_label || 'Não solicitado'}
+                                    </span>
+                                </div>
+                                {product.affiliate_application_requested_at && (
+                                    <div className="flex items-center justify-between text-[11px]">
+                                        <span className="text-theme-muted">Application Date:</span>
+                                        <span className="font-mono text-theme-secondary">
+                                            {product.affiliate_application_requested_at_formatted || product.affiliate_application_requested_at}
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
