@@ -94,6 +94,7 @@ class WatchedProduct extends Model
         'refresh_priority',
         'sales_page_url',
         'affiliate_link',
+        'network_offer_url',
         'notes',
         'last_reviewed_at',
         'allowed_geos',

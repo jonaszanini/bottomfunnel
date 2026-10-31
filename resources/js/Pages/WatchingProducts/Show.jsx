@@ -114,6 +114,59 @@ export function getComponentScoreColor(score, max = 20) {
     };
 }
 
+function ProductLinks({ product }) {
+    const [copied, setCopied] = useState(null);
+    const [showInfo, setShowInfo] = useState(false);
+    const links = [
+        { key: 'affiliate_link', label: 'Affiliate Link', url: product.affiliate_link },
+        { key: 'sales_page_url', label: 'Sales Page', url: product.sales_page_url },
+        { key: 'network_offer_url', label: 'Network Offer', url: product.network_offer_url },
+    ].filter((l) => l.url && String(l.url).trim() !== '');
+
+    if (links.length === 0) return null;
+
+    const copy = async (l) => {
+        try {
+            await navigator.clipboard.writeText(l.url);
+        } catch {
+            const ta = document.createElement('textarea');
+            ta.value = l.url;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+        }
+        setCopied(l.key);
+        setTimeout(() => setCopied(null), 1500);
+    };
+
+    return (
+        <div className="rounded-xl border border-theme bg-theme-surface p-4">
+            <div className="relative flex items-center gap-1 mb-3">
+                <h3 className="text-xs font-bold uppercase tracking-wide text-theme-secondary">Links</h3>
+                <button type="button" aria-label="About links" aria-expanded={showInfo} onClick={() => setShowInfo((v) => !v)} className="text-theme-muted hover:text-theme-primary text-sm leading-none cursor-pointer">ⓘ</button>
+                {showInfo && (
+                    <div className="absolute left-0 top-full mt-2 z-30 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-theme bg-theme-surface p-3 text-xs text-theme-secondary shadow-lg">
+                        Opens each link in a new tab. The copy icon copies the URL. Links with an empty field are hidden; edit them in Edit Product.
+                    </div>
+                )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+                {links.map((l) => (
+                    <div key={l.key} className="flex items-center rounded-lg border border-theme overflow-hidden">
+                        <a href={l.url} target="_blank" rel="noopener noreferrer" title={l.url} className="px-3 py-1.5 text-xs font-semibold text-theme-primary hover:bg-theme-subtle">
+                            {l.label} ↗
+                        </a>
+                        <button type="button" onClick={() => copy(l)} aria-label={`Copy ${l.label}`} title={`Copy ${l.label}`} className="px-2 py-1.5 border-l border-theme text-xs text-theme-secondary hover:bg-theme-subtle cursor-pointer">
+                            {copied === l.key ? '✓' : '⧉'}
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
 export default function Show({
     product,
     tracks = [],
@@ -246,6 +299,9 @@ export default function Show({
         listing_url: product.listing_url || '',
         sales_page_url: product.sales_page_url || '',
         affiliate_link: product.affiliate_link || '',
+        network_offer_url: product.network_offer_url || '',
+        affiliate_application_status: product.affiliate_application_status || 'not_requested',
+        affiliate_application_requested_at: product.affiliate_application_requested_at || '',
         notes: product.notes || '',
         approval_required: Boolean(product.approval_required),
         approval_status: product.approval_status || (product.approval_required ? 'yes' : 'unknown'),
@@ -882,6 +938,15 @@ export default function Show({
                                     onPaste={(e) => handleUrlPaste('affiliate_link', e)}
                                 />
                             </Field>
+                            <Field label="Network Offer URL" error={editForm.errors.network_offer_url}>
+                                <input
+                                    type="url"
+                                    className={control}
+                                    placeholder="https://portal.network.com/offers/12345"
+                                    value={editForm.data.network_offer_url}
+                                    onChange={(e) => editForm.setData('network_offer_url', e.target.value)}
+                                />
+                            </Field>
                         </div>
 
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -1070,6 +1135,8 @@ export default function Show({
             {/* TAB 1: OVERVIEW & BREAKDOWN */}
             {activeTab === 'overview' && (
                 <div className="space-y-6">
+                    <ProductLinks product={product} />
+
                     {/* Offer Constraints & Go / No-Go Decision Card */}
                     <OfferConstraintsSection product={product} />
 

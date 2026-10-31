@@ -180,6 +180,7 @@ class WatchedProductController extends Controller
                 'demand_notes' => $product->demand_notes,
                 'sales_page_url' => $product->sales_page_url,
                 'affiliate_link' => $product->affiliate_link,
+                'network_offer_url' => $product->network_offer_url,
                 'notes' => $product->notes,
                 'tracks_count' => $product->tracks->count(),
                 'tracks' => $product->tracks->map(fn (Track $track): array => [
@@ -447,6 +448,7 @@ class WatchedProductController extends Controller
             'demand_notes' => $watchedProduct->demand_notes,
             'sales_page_url' => $watchedProduct->sales_page_url,
             'affiliate_link' => $watchedProduct->affiliate_link,
+            'network_offer_url' => $watchedProduct->network_offer_url,
             'notes' => $watchedProduct->notes,
             'tracks_count' => $watchedProduct->tracks->count(),
             'tracks' => $watchedProduct->tracks->map(fn (Track $track): array => [
@@ -958,6 +960,7 @@ class WatchedProductController extends Controller
             'commission_earned' => ['nullable', 'numeric', 'min:0'],
             'sales_page_url' => ['nullable', 'string', 'max:2048'],
             'affiliate_link' => ['nullable', 'string', 'max:2048'],
+            'network_offer_url' => ['nullable', 'url:http,https', 'max:2048'],
             'notes' => ['nullable', 'string', 'max:10000'],
             'last_reviewed_at' => ['nullable', 'date'],
         ]);
