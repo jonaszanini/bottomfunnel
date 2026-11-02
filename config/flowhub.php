@@ -105,5 +105,7 @@ return [
 
     'cron_token' => env('CRON_TOKEN', 'hgytrsd543T4564FGHf7tgfs635GGf'),
     'cron_url' => env('CRON_URL', 'https://bottomfunnel.app/cron/run?token='.env('CRON_TOKEN', 'hgytrsd543T4564FGHf7tgfs635GGf')),
+    'seo_provider' => env('SEO_PROVIDER', 'dataforseo'),
+    'dataforseo_cache_ttl_hours' => (int) env('DATAFORSEO_CACHE_TTL_HOURS', 12),
     'serpapi_cache_ttl_hours' => (int) env('SERPAPI_CACHE_TTL_HOURS', 12),
 ];

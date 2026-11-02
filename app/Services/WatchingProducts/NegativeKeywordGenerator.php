@@ -8,6 +8,7 @@ use App\Enums\Strategy;
 use App\Models\NegativeKeywordSeed;
 use App\Models\ProductNegativeKeyword;
 use App\Models\WatchedProduct;
+use App\Services\Seo\SeoClientContract;
 use Database\Seeders\NegativeKeywordSeedSeeder;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -15,13 +16,19 @@ use Illuminate\Support\Facades\Log;
 class NegativeKeywordGenerator
 {
     public function __construct(
-        protected ?SerpApiClient $serpClient = null,
-        protected ?QuotaBudget $budget = null
+        protected ?SeoClientContract $seoClient = null,
+        protected ?QuotaBudget $budget = null,
+        protected ?SerpApiClient $serpClient = null
     ) {}
 
-    protected function getSerpClient(): SerpApiClient
+    protected function getSeoClient(): SeoClientContract
     {
-        return $this->serpClient ??= app(SerpApiClient::class);
+        return $this->seoClient ??= ($this->serpClient ?? app(SeoClientContract::class));
+    }
+
+    protected function getSerpClient(): SeoClientContract
+    {
+        return $this->getSeoClient();
     }
 
     protected function getBudget(): QuotaBudget
@@ -64,15 +71,17 @@ class NegativeKeywordGenerator
         // 2. Resolve SERP data if not passed explicitly
         if (empty($serpData)) {
             $query = $product->name;
-            $gl = (string) config('watching.serpapi_gl', 'ca');
-            $cacheKey = $this->getSerpClient()->buildCacheKey('search', $query, $gl);
+            $gl = (string) (config('watching.seo.provider', 'dataforseo') === 'dataforseo'
+                ? config('watching.dataforseo.location_name', config('watching.serpapi_gl', 'ca'))
+                : config('watching.serpapi_gl', 'ca'));
+            $cacheKey = $this->getSeoClient()->buildCacheKey('search', $query, $gl);
             $legacyKey = 'serpapi_search_'.md5(strtolower(trim($query)).'_'.$gl);
 
             $cached = Cache::get($cacheKey) ?? Cache::get($legacyKey);
             if (! empty($cached) && is_array($cached)) {
                 $serpData = $cached;
             } elseif ($allowExternalHttp && $this->getBudget()->canSpendManual(1)) {
-                $serpData = $this->getSerpClient()->fetchGoogleSerp($product->name, forceFresh: false);
+                $serpData = $this->getSeoClient()->fetchGoogleSerp($product->name, forceFresh: false);
             } else {
                 Log::info("NegativeKeywordGenerator: Skipping external HTTP fetch for product {$product->id} (allowExternalHttp: ".($allowExternalHttp ? 'true' : 'false').').');
             }

@@ -8,6 +8,7 @@ use App\Enums\WatchedProductStatus;
 use App\Models\ProductScoreHistory;
 use App\Models\WatchedProduct;
 use App\Services\Google\CampaignSafetyService;
+use App\Services\Seo\SeoClientContract;
 use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\Fx\FrankfurterFx;
 use App\Services\WatchingProducts\ListingChecker;
@@ -15,7 +16,6 @@ use App\Services\WatchingProducts\NegativeKeywordGenerator;
 use App\Services\WatchingProducts\PotentialScoreService;
 use App\Services\WatchingProducts\QuotaBudget;
 use App\Services\WatchingProducts\RankService;
-use App\Services\WatchingProducts\SerpApiClient;
 use App\Services\WatchingProducts\StrategyRecommender;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -37,7 +37,7 @@ class RefreshWatchingProducts extends Command
      *
      * @var string
      */
-    protected $description = 'Weekly automated refresh for Watched Products within SerpApi free-tier budget';
+    protected $description = 'Weekly automated refresh for Watched Products within SEO provider budget';
 
     /**
      * Execute the console command.
@@ -46,7 +46,7 @@ class RefreshWatchingProducts extends Command
         QuotaBudget $budget,
         FrankfurterFx $fx,
         ListingChecker $listingChecker,
-        SerpApiClient $serpClient,
+        SeoClientContract $serpClient,
         PotentialScoreService $scoreService,
         StrategyRecommender $strategyRecommender,
         NegativeKeywordGenerator $negativeGenerator,
@@ -149,14 +149,15 @@ class RefreshWatchingProducts extends Command
             }
         }
 
-        // 3. Budgeted SerpApi calls
+        // 3. Budgeted SEO calls
         $serpCallsMade = 0;
+        $providerName = $budget->currentProvider() === 'serpapi' ? 'SerpApi' : 'DataForSEO';
         if (! $noSerp) {
-            $this->line('Step 3/7: Running budgeted SerpApi calls...');
+            $this->line("Step 3/7: Running budgeted {$providerName} calls...");
             foreach ($productsToRefresh as $product) {
                 // Confirm budget safety
                 if (! $budget->canSpendManual(2)) {
-                    $this->warn('SerpApi budget ceiling reached. Stopping further API calls.');
+                    $this->warn("{$providerName} budget ceiling reached. Stopping further API calls.");
                     break;
                 }
 

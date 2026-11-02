@@ -26,7 +26,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | SerpApi Configuration & Monthly Free-Tier Quota
+    | SEO Provider & DataForSEO Configuration
+    |--------------------------------------------------------------------------
+    */
+    'seo' => [
+        'provider' => env('SEO_PROVIDER', 'dataforseo'),
+    ],
+
+    'dataforseo' => [
+        'login' => env('DATAFORSEO_LOGIN'),
+        'password' => env('DATAFORSEO_PASSWORD'),
+        'api_key' => env('DATAFORSEO_API_KEY'),
+        'monthly_cap' => (int) env('DATAFORSEO_MONTHLY_CAP', 230),
+        'total_limit' => (int) env('DATAFORSEO_TOTAL_LIMIT', 250),
+        'reserve' => 20,
+        'location_code' => (int) env('DATAFORSEO_LOCATION_CODE', 2124),
+        'location_name' => env('DATAFORSEO_LOCATION_NAME', 'Canada'),
+        'language_code' => env('DATAFORSEO_LANGUAGE_CODE', 'en'),
+        'cache_ttl_hours' => (int) env('DATAFORSEO_CACHE_TTL_HOURS', 12),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | SerpApi Configuration & Monthly Free-Tier Quota (Fallback / Legacy)
     |--------------------------------------------------------------------------
     |
     | SerpApi free tier provides 250 calls/month.

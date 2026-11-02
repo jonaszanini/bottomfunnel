@@ -223,8 +223,9 @@ class WatchedProductController extends Controller
             'ecom_pct' => $totalCount > 0 ? (int) round(($ecomCount / $totalCount) * 100) : 40,
             'overdue_recheck_count' => WatchedProduct::query()->whereNotNull('recheck_at')->where('recheck_at', '<=', now()->toDateString())->count(),
             'serpapi_used' => $this->budget->callsUsedThisMonth(),
-            'serpapi_cap' => (int) config('watching.serpapi_monthly_cap', 230),
-            'serpapi_limit' => (int) config('watching.serpapi_total_limit', 250),
+            'serpapi_cap' => $this->budget->monthlyCap(),
+            'serpapi_limit' => $this->budget->totalLimit(),
+            'seo_provider' => $this->budget->currentProvider(),
         ];
 
         // Gather centralized platforms merged with distinct existing values
@@ -492,9 +493,11 @@ class WatchedProductController extends Controller
             'default_account_id' => GoogleAdsAccount::getDefault($request->user())?->id,
             'serpapi_usage' => [
                 'used_this_month' => $this->budget->callsUsedThisMonth(),
-                'monthly_cap' => (int) config('watching.serpapi_monthly_cap', 230),
-                'total_limit' => (int) config('watching.serpapi_total_limit', 250),
+                'monthly_cap' => $this->budget->monthlyCap(),
+                'total_limit' => $this->budget->totalLimit(),
+                'provider' => $this->budget->currentProvider(),
             ],
+            'seo_provider' => $this->budget->currentProvider(),
             'options' => [
                 'statuses' => array_map(fn (WatchedProductStatus $s) => ['value' => $s->value, 'label' => $s->label()], WatchedProductStatus::cases()),
                 'strategies' => array_map(fn (Strategy $st) => ['value' => $st->value, 'label' => $st->label()], Strategy::cases()),
@@ -706,8 +709,11 @@ class WatchedProductController extends Controller
      */
     public function refreshNow(WatchedProduct $watchedProduct): RedirectResponse
     {
+        $limit = $this->budget->totalLimit();
+        $providerName = $this->budget->currentProvider() === 'serpapi' ? 'SerpApi' : 'DataForSEO';
+
         if (! $this->budget->canSpendManual(2)) {
-            return redirect()->back()->with('error', 'SerpApi monthly quota limit (250 calls) has been reached.');
+            return redirect()->back()->with('error', "{$providerName} monthly quota limit ({$limit} calls) has been reached.");
         }
 
         RefreshSingleWatchedProductJob::dispatch($watchedProduct->id);
@@ -715,7 +721,7 @@ class WatchedProductController extends Controller
         $used = $this->budget->callsUsedThisMonth();
 
         return redirect()->back()
-            ->with('success', "Product data refreshed via SerpApi. Total calls used this month: {$used}/250.");
+            ->with('success', "Product data refreshed via {$providerName}. Total calls used this month: {$used}/{$limit}.");
     }
 
     /**

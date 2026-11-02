@@ -4,17 +4,25 @@ namespace App\Services\WatchingProducts;
 
 use App\Enums\TrendsTrend;
 use App\Models\WatchedProduct;
+use App\Services\Seo\DataForSeoClient;
+use App\Services\Seo\SeoClientContract;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
-class SerpApiClient
+class SerpApiClient implements SeoClientContract
 {
     public function __construct(
         protected QuotaBudget $budget = new QuotaBudget,
-        protected BofChecker $bofChecker = new BofChecker
+        protected BofChecker $bofChecker = new BofChecker,
+        protected ?DataForSeoClient $dataForSeoClient = null
     ) {}
+
+    protected function getDataForSeoClient(): DataForSeoClient
+    {
+        return $this->dataForSeoClient ??= app(DataForSeoClient::class);
+    }
 
     /**
      * Build a deterministic cache key for a SerpApi query.
@@ -26,6 +34,10 @@ class SerpApiClient
         ?string $hl = null,
         ?string $device = null
     ): string {
+        if (config('watching.seo.provider', 'dataforseo') === 'dataforseo') {
+            return $this->getDataForSeoClient()->buildCacheKey($type, $query, $gl, $hl, $device);
+        }
+
         $cleanQuery = strtolower(trim($query));
         $cleanGl = strtolower(trim($gl ?? (string) config('watching.serpapi_gl', 'ca')));
         $cleanHl = strtolower(trim($hl ?? 'en'));
@@ -44,6 +56,10 @@ class SerpApiClient
      */
     public function fetchProductData(WatchedProduct $product, bool $forceFresh = false, bool $isManual = false): array
     {
+        if (config('watching.seo.provider', 'dataforseo') === 'dataforseo') {
+            return $this->getDataForSeoClient()->fetchProductData($product, $forceFresh, $isManual);
+        }
+
         $apiKey = config('watching.serpapi_key');
         if (empty($apiKey)) {
             Log::info("SerpApiClient: No SERPAPI_KEY configured. Skipping API call for product {$product->id}.");
@@ -102,6 +118,10 @@ class SerpApiClient
         bool $forceFresh = false,
         bool $isManual = false
     ): array {
+        if (config('watching.seo.provider', 'dataforseo') === 'dataforseo') {
+            return $this->getDataForSeoClient()->fetchGoogleTrends($query, $apiKey, $gl, $hl, $device, $forceFresh, $isManual);
+        }
+
         $apiKey ??= config('watching.serpapi_key');
         if (empty($apiKey)) {
             return [];
@@ -116,7 +136,7 @@ class SerpApiClient
 
         return Cache::remember($cacheKey, now()->addHours($ttlHours), function () use ($query, $apiKey, $isManual) {
             try {
-                if (! $this->budget->atomicSpend(1, $isManual)) {
+                if (! $this->budget->atomicSpend(1, $isManual, 'serpapi')) {
                     Log::warning("SerpApiClient: SerpApi quota reached. Skipping Trends call for '{$query}'.");
 
                     return [];
@@ -165,6 +185,10 @@ class SerpApiClient
         bool $forceFresh = false,
         bool $isManual = false
     ): array {
+        if (config('watching.seo.provider', 'dataforseo') === 'dataforseo') {
+            return $this->getDataForSeoClient()->fetchGoogleSerp($query, $apiKey, $gl, $hl, $device, $forceFresh, $isManual);
+        }
+
         $apiKey ??= config('watching.serpapi_key');
         if (empty($apiKey)) {
             return [];
@@ -180,7 +204,7 @@ class SerpApiClient
 
         return Cache::remember($cacheKey, now()->addHours($ttlHours), function () use ($query, $apiKey, $gl, $isManual) {
             try {
-                if (! $this->budget->atomicSpend(1, $isManual)) {
+                if (! $this->budget->atomicSpend(1, $isManual, 'serpapi')) {
                     Log::warning("SerpApiClient: SerpApi quota reached. Skipping Search call for '{$query}'.");
 
                     return [];

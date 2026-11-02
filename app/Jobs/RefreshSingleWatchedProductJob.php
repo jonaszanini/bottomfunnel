@@ -4,12 +4,12 @@ namespace App\Jobs;
 
 use App\Models\ProductScoreHistory;
 use App\Models\WatchedProduct;
+use App\Services\Seo\SeoClientContract;
 use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\NegativeKeywordGenerator;
 use App\Services\WatchingProducts\PotentialScoreService;
 use App\Services\WatchingProducts\QuotaBudget;
 use App\Services\WatchingProducts\RankService;
-use App\Services\WatchingProducts\SerpApiClient;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -48,7 +48,7 @@ class RefreshSingleWatchedProductJob implements ShouldQueue
     }
 
     public function handle(
-        SerpApiClient $serpClient,
+        SeoClientContract $serpClient,
         BofChecker $bofChecker,
         NegativeKeywordGenerator $negativeGenerator,
         PotentialScoreService $scoreService,
@@ -71,7 +71,8 @@ class RefreshSingleWatchedProductJob implements ShouldQueue
 
         if (! $budget->canSpendManual(2)) {
             $lock->release();
-            Log::warning("RefreshSingleWatchedProductJob: SerpApi monthly quota reached for product {$this->productId}.");
+            $provider = $budget->currentProvider();
+            Log::warning("RefreshSingleWatchedProductJob: {$provider} monthly quota reached for product {$this->productId}.");
 
             return;
         }

@@ -21,12 +21,46 @@ class QuotaBudget
     }
 
     /**
-     * Get calls used this month.
+     * Get the active SEO provider name (serpapi or dataforseo).
      */
-    public function callsUsedThisMonth(): int
+    public function currentProvider(): string
     {
+        return (string) config('watching.seo.provider', 'dataforseo');
+    }
+
+    /**
+     * Get configured monthly automated cap for active provider.
+     */
+    public function monthlyCap(?string $provider = null): int
+    {
+        $provider ??= $this->currentProvider();
+
+        return $provider === 'serpapi'
+            ? (int) config('watching.serpapi_monthly_cap', 230)
+            : (int) config('watching.dataforseo.monthly_cap', config('watching.serpapi_monthly_cap', 230));
+    }
+
+    /**
+     * Get configured total limit (including manual reserve) for active provider.
+     */
+    public function totalLimit(?string $provider = null): int
+    {
+        $provider ??= $this->currentProvider();
+
+        return $provider === 'serpapi'
+            ? (int) config('watching.serpapi_total_limit', 250)
+            : (int) config('watching.dataforseo.total_limit', config('watching.serpapi_total_limit', 250));
+    }
+
+    /**
+     * Get calls used this month for the specified (or active) provider.
+     */
+    public function callsUsedThisMonth(?string $provider = null): int
+    {
+        $provider ??= $this->currentProvider();
+
         $usage = ApiUsage::query()
-            ->where('provider', 'serpapi')
+            ->where('provider', $provider)
             ->where('period', $this->currentPeriod())
             ->first();
 
@@ -34,18 +68,20 @@ class QuotaBudget
     }
 
     /**
-     * Increment the SerpApi call counter atomically within a distributed lock.
+     * Increment the call counter atomically within a distributed lock.
      */
-    public function recordCall(int $count = 1): int
+    public function recordCall(int $count = 1, ?string $provider = null): int
     {
         $period = $this->currentPeriod();
+        $provider ??= $this->currentProvider();
+        $lockKey = "{$provider}_quota_lock";
 
-        return Cache::lock('serpapi_quota_lock', 10)->block(5, function () use ($period, $count) {
-            return DB::transaction(function () use ($period, $count) {
+        return Cache::lock($lockKey, 10)->block(5, function () use ($period, $count, $provider) {
+            return DB::transaction(function () use ($period, $count, $provider) {
                 $usage = ApiUsage::query()
                     ->lockForUpdate()
                     ->firstOrCreate(
-                        ['provider' => 'serpapi', 'period' => $period],
+                        ['provider' => $provider, 'period' => $period],
                         ['calls' => 0]
                     );
 
@@ -60,20 +96,23 @@ class QuotaBudget
      * Atomically check if calls are available and deduct them under a distributed lock.
      * Prevents race conditions from exceeding monthly or manual limits across queue workers.
      */
-    public function atomicSpend(int $neededCalls = 1, bool $isManual = false): bool
+    public function atomicSpend(int $neededCalls = 1, bool $isManual = false, ?string $provider = null): bool
     {
-        return Cache::lock('serpapi_quota_lock', 10)->block(5, function () use ($neededCalls, $isManual) {
+        $provider ??= $this->currentProvider();
+        $lockKey = "{$provider}_quota_lock";
+
+        return Cache::lock($lockKey, 10)->block(5, function () use ($neededCalls, $isManual, $provider) {
             $cap = $isManual
-                ? (int) config('watching.serpapi_total_limit', 250)
-                : (int) config('watching.serpapi_monthly_cap', 230);
+                ? $this->totalLimit($provider)
+                : $this->monthlyCap($provider);
 
             $period = $this->currentPeriod();
 
-            return DB::transaction(function () use ($period, $neededCalls, $cap) {
+            return DB::transaction(function () use ($period, $neededCalls, $cap, $provider) {
                 $usage = ApiUsage::query()
                     ->lockForUpdate()
                     ->firstOrCreate(
-                        ['provider' => 'serpapi', 'period' => $period],
+                        ['provider' => $provider, 'period' => $period],
                         ['calls' => 0]
                     );
 
@@ -93,18 +132,18 @@ class QuotaBudget
      */
     public function canSpendWeekly(int $neededCalls = 2): bool
     {
-        $cap = (int) config('watching.serpapi_monthly_cap', 230);
+        $cap = $this->monthlyCap();
         $used = $this->callsUsedThisMonth();
 
         return ($used + $neededCalls) <= $cap;
     }
 
     /**
-     * Check if a manual refresh can spend calls (up to total limit of 250).
+     * Check if a manual refresh can spend calls.
      */
     public function canSpendManual(int $neededCalls = 2): bool
     {
-        $limit = (int) config('watching.serpapi_total_limit', 250);
+        $limit = $this->totalLimit();
         $used = $this->callsUsedThisMonth();
 
         return ($used + $neededCalls) <= $limit;
@@ -116,7 +155,7 @@ class QuotaBudget
     public function isQuotaHigh(?float $thresholdPct = null): bool
     {
         $thresholdPct ??= (float) config('watching.serpapi_quota_high_threshold', 0.85);
-        $cap = (int) config('watching.serpapi_monthly_cap', 230);
+        $cap = $this->monthlyCap();
         if ($cap <= 0) {
             return false;
         }
@@ -130,7 +169,7 @@ class QuotaBudget
      */
     public function weeklyCallAllowance(): int
     {
-        $cap = (int) config('watching.serpapi_monthly_cap', 230);
+        $cap = $this->monthlyCap();
         $used = $this->callsUsedThisMonth();
         $remaining = max(0, $cap - $used);
 
