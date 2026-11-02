@@ -277,7 +277,7 @@ export default function OfferConstraintsSection({ product }) {
                         </p>
 
                         {complianceNotes && (
-                            <div className="mt-2.5 rounded-lg border border-theme bg-theme-surface/80 p-2 text-[11px] text-theme-primary whitespace-pre-wrap">
+                            <div className="mt-2.5 rounded-lg border border-theme bg-theme-surface/80 p-2 text-[11px] text-theme-primary whitespace-pre-wrap break-words [overflow-wrap:anywhere] min-w-0">
                                 <strong className="text-theme-secondary block text-[10px] uppercase font-bold mb-0.5">Policy Notes:</strong>
                                 {complianceNotes}
                             </div>
@@ -424,7 +424,7 @@ export default function OfferConstraintsSection({ product }) {
                         </button>
                     </div>
 
-                    <p className="text-xs text-theme-primary whitespace-pre-wrap mt-2">
+                    <p className="text-xs text-theme-primary whitespace-pre-wrap break-words [overflow-wrap:anywhere] min-w-0 mt-2">
                         {product.promotion_criteria}
                     </p>
 
