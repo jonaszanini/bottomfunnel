@@ -752,11 +752,10 @@ export default function Index({
                 {compact && <span className="sr-only">{label}</span>}
                 {hasDelta && (
                     <span
-                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                            deltaNum > 0
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                        }`}
+                        className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${deltaNum > 0
+                            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                            }`}
                     >
                         {deltaNum > 0 ? `+${deltaNum}` : deltaNum}
                     </span>
@@ -863,9 +862,8 @@ export default function Index({
                         setSelectedStatus('test');
                         applyFilters({ status: 'test' });
                     }}
-                    className={`cursor-pointer rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs transition-all hover:border-theme-hover ${
-                        selectedStatus === 'test' ? 'ring-1 ring-emerald-500' : ''
-                    }`}
+                    className={`cursor-pointer rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs transition-all hover:border-theme-hover ${selectedStatus === 'test' ? 'ring-1 ring-emerald-500' : ''
+                        }`}
                 >
                     <div className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Potential Test</div>
                     <div className="mt-1 text-2xl font-bold text-emerald-600 dark:text-emerald-400">{metrics.test}</div>
@@ -876,9 +874,8 @@ export default function Index({
                         setSelectedStatus('watch');
                         applyFilters({ status: 'watch' });
                     }}
-                    className={`cursor-pointer rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs transition-all hover:border-theme-hover ${
-                        selectedStatus === 'watch' ? 'ring-1 ring-amber-500' : ''
-                    }`}
+                    className={`cursor-pointer rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs transition-all hover:border-theme-hover ${selectedStatus === 'watch' ? 'ring-1 ring-amber-500' : ''
+                        }`}
                 >
                     <div className="text-xs font-medium text-amber-600 dark:text-amber-400">Under Watch</div>
                     <div className="mt-1 text-2xl font-bold text-amber-600 dark:text-amber-400">{metrics.watch}</div>
@@ -891,9 +888,8 @@ export default function Index({
                         setSelectedRecheckOverdue(next);
                         applyFilters({ recheck_overdue: next });
                     }}
-                    className={`cursor-pointer rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs transition-all hover:border-theme-hover ${
-                        selectedRecheckOverdue ? 'ring-2 ring-rose-500 border-rose-500' : ''
-                    } ${metrics.overdue_recheck_count > 0 ? 'bg-rose-500/5' : ''}`}
+                    className={`cursor-pointer rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs transition-all hover:border-theme-hover ${selectedRecheckOverdue ? 'ring-2 ring-rose-500 border-rose-500' : ''
+                        } ${metrics.overdue_recheck_count > 0 ? 'bg-rose-500/5' : ''}`}
                 >
                     <div className="flex justify-between items-center text-xs font-semibold">
                         <span className="text-theme-secondary">Recheck Overdue</span>
@@ -1147,11 +1143,10 @@ export default function Index({
                                         return (
                                             <tr
                                                 key={product.id}
-                                                className={`transition-colors ${
-                                                    product.is_recheck_overdue
-                                                        ? 'border-l-4 border-l-rose-500 bg-rose-500/5 hover:bg-rose-500/10'
-                                                        : 'hover:bg-theme-subtle/30'
-                                                }`}
+                                                className={`transition-colors ${product.is_recheck_overdue
+                                                    ? 'border-l-4 border-l-rose-500 bg-rose-500/5 hover:bg-rose-500/10'
+                                                    : 'hover:bg-theme-subtle/30'
+                                                    }`}
                                             >
                                                 {/* Rank */}
                                                 <td className="px-2 py-2 text-center whitespace-nowrap font-bold text-xs text-theme-secondary">
@@ -1255,24 +1250,24 @@ export default function Index({
                                                                     <span className="text-theme-muted font-medium cursor-help" title="Approval unknown">Appr. ?</span>
                                                                 </>
                                                             ) : null}
-                                                        {Array.isArray(product.allowed_geos) && product.allowed_geos.length > 0 && (
-                                                            <span className="ml-1 inline-flex shrink-0 items-center gap-0.5">
-                                                                {product.allowed_geos.slice(0, 3).map((geo) => (
-                                                                    <span
-                                                                        key={geo}
-                                                                        className="inline-block px-1 py-0.2 text-[10px] font-mono font-bold rounded bg-theme-subtle text-theme-secondary border border-theme"
-                                                                        title={`Allowed Geo: ${geo}`}
-                                                                    >
-                                                                        {geo}
-                                                                    </span>
-                                                                ))}
-                                                                {product.allowed_geos.length > 3 && (
-                                                                    <span className="text-[10px] text-theme-muted font-mono font-medium">
-                                                                        +{product.allowed_geos.length - 3}
-                                                                    </span>
-                                                                )}
-                                                            </span>
-                                                        )}
+                                                            {Array.isArray(product.allowed_geos) && product.allowed_geos.length > 0 && (
+                                                                <span className="ml-1 inline-flex shrink-0 items-center gap-0.5">
+                                                                    {product.allowed_geos.slice(0, 3).map((geo) => (
+                                                                        <span
+                                                                            key={geo}
+                                                                            className="inline-block px-1 py-0.2 text-[10px] font-mono font-bold rounded bg-theme-subtle text-theme-secondary border border-theme"
+                                                                            title={`Allowed Geo: ${geo}`}
+                                                                        >
+                                                                            {geo}
+                                                                        </span>
+                                                                    ))}
+                                                                    {product.allowed_geos.length > 3 && (
+                                                                        <span className="text-[10px] text-theme-muted font-mono font-medium">
+                                                                            +{product.allowed_geos.length - 3}
+                                                                        </span>
+                                                                    )}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </td>
@@ -1333,39 +1328,39 @@ export default function Index({
                                                         {(product.search_volume_total !== null && product.search_volume_total !== undefined
                                                             || product.search_volume_error
                                                             || (product.search_volume_by_geo && Object.keys(product.search_volume_by_geo).length > 0)) && (
-                                                            <>
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setOpenVolumeInfo((prev) => (prev === product.id ? null : product.id));
-                                                                    }}
-                                                                    className="inline-flex items-center text-theme-muted hover:text-theme-accent cursor-pointer text-[11px]"
-                                                                    aria-label="Search volume details"
-                                                                    aria-expanded={openVolumeInfo === product.id}
-                                                                >
-                                                                    ⓘ
-                                                                </button>
-                                                                {openVolumeInfo === product.id && (
-                                                                    <div
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        className={`absolute right-0 z-30 w-64 ${flipUp ? 'bottom-full mb-1' : 'top-full mt-1'} max-w-[calc(100vw-2rem)] whitespace-normal rounded-lg border border-theme bg-theme-surface p-2.5 text-left text-[11px] text-theme-secondary shadow-xl`}
+                                                                <>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setOpenVolumeInfo((prev) => (prev === product.id ? null : product.id));
+                                                                        }}
+                                                                        className="inline-flex items-center text-theme-muted hover:text-theme-accent cursor-pointer text-[11px]"
+                                                                        aria-label="Search volume details"
+                                                                        aria-expanded={openVolumeInfo === product.id}
                                                                     >
-                                                                        {product.search_volume_error && (
-                                                                            <div className="mb-1.5 text-rose-600 dark:text-rose-400 break-words">
-                                                                                ⚠ {product.search_volume_error}
-                                                                                {product.search_volume_error_at && (
-                                                                                    <span className="block text-theme-muted">Failed: {String(product.search_volume_error_at).slice(0, 10)}</span>
-                                                                                )}
-                                                                            </div>
-                                                                        )}
-                                                                        {formatVolumeTooltip({ ...product, search_volume_error: null }).split(' • ').map((line, i) => (
-                                                                            <div key={i}>{line}</div>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </>
-                                                        )}
+                                                                        ⓘ
+                                                                    </button>
+                                                                    {openVolumeInfo === product.id && (
+                                                                        <div
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            className={`absolute right-0 z-30 w-64 ${flipUp ? 'bottom-full mb-1' : 'top-full mt-1'} max-w-[calc(100vw-2rem)] whitespace-normal rounded-lg border border-theme bg-theme-surface p-2.5 text-left text-[11px] text-theme-secondary shadow-xl`}
+                                                                        >
+                                                                            {product.search_volume_error && (
+                                                                                <div className="mb-1.5 text-rose-600 dark:text-rose-400 break-words">
+                                                                                    ⚠ {product.search_volume_error}
+                                                                                    {product.search_volume_error_at && (
+                                                                                        <span className="block text-theme-muted">Failed: {String(product.search_volume_error_at).slice(0, 10)}</span>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                            {formatVolumeTooltip({ ...product, search_volume_error: null }).split(' • ').map((line, i) => (
+                                                                                <div key={i}>{line}</div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </>
+                                                            )}
                                                     </div>
                                                 </td>
 
@@ -1426,61 +1421,61 @@ export default function Index({
                                                         </Link>
                                                         <div className="flex items-center gap-0.5">
 
-                                                        {product.sales_page_url ? (
-                                                            product.affiliate_link ? (
-                                                                <Link
-                                                                    href={`/pages?tab=cloner&clone_url=${encodeURIComponent(product.sales_page_url)}&affiliate_link=${encodeURIComponent(product.affiliate_link)}&product_name=${encodeURIComponent(product.name)}`}
-                                                                    className="p-1 rounded text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                                                                    title="Clone Sales Page"
-                                                                >
-                                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                                                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                                                        <path d="M3 3v5h5" />
-                                                                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                                                                        <path d="M16 21h5v-5" />
-                                                                    </svg>
-                                                                </Link>
-                                                            ) : (
-                                                                <button
-                                                                    type="button"
-                                                                    disabled
-                                                                    className="p-1 rounded text-theme-muted/40 cursor-not-allowed opacity-50"
-                                                                    title="Add an affiliate link first"
-                                                                    aria-label="Add an affiliate link first"
-                                                                >
-                                                                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                                                        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                                                                        <path d="M3 3v5h5" />
-                                                                        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-                                                                        <path d="M16 21h5v-5" />
-                                                                    </svg>
-                                                                </button>
-                                                            )
-                                                        ) : null}
+                                                            {product.sales_page_url ? (
+                                                                product.affiliate_link ? (
+                                                                    <Link
+                                                                        href={`/pages?tab=cloner&clone_url=${encodeURIComponent(product.sales_page_url)}&affiliate_link=${encodeURIComponent(product.affiliate_link)}&product_name=${encodeURIComponent(product.name)}`}
+                                                                        className="p-1 rounded text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                                                                        title="Clone Sales Page"
+                                                                    >
+                                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                                            <path d="M3 3v5h5" />
+                                                                            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                                                            <path d="M16 21h5v-5" />
+                                                                        </svg>
+                                                                    </Link>
+                                                                ) : (
+                                                                    <button
+                                                                        type="button"
+                                                                        disabled
+                                                                        className="p-1 rounded text-theme-muted/40 cursor-not-allowed opacity-50"
+                                                                        title="Add an affiliate link first"
+                                                                        aria-label="Add an affiliate link first"
+                                                                    >
+                                                                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                                                            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                                                                            <path d="M3 3v5h5" />
+                                                                            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                                                                            <path d="M16 21h5v-5" />
+                                                                        </svg>
+                                                                    </button>
+                                                                )
+                                                            ) : null}
 
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => openEditDrawer(product)}
-                                                            className="p-1 rounded text-theme-secondary hover:text-theme-primary transition-colors cursor-pointer"
-                                                            title="Edit parameters"
-                                                        >
-                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                                <path d="M12 20h9" />
-                                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                                                            </svg>
-                                                        </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => openEditDrawer(product)}
+                                                                className="p-1 rounded text-theme-secondary hover:text-theme-primary transition-colors cursor-pointer"
+                                                                title="Edit parameters"
+                                                            >
+                                                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                    <path d="M12 20h9" />
+                                                                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                                                </svg>
+                                                            </button>
 
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => confirmDelete(product)}
-                                                            className="p-1 rounded text-theme-secondary hover:text-rose-600 transition-colors cursor-pointer"
-                                                            title="Delete product"
-                                                        >
-                                                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                                                <polyline points="3 6 5 6 21 6" />
-                                                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                                            </svg>
-                                                        </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => confirmDelete(product)}
+                                                                className="p-1 rounded text-theme-secondary hover:text-rose-600 transition-colors cursor-pointer"
+                                                                title="Delete product"
+                                                            >
+                                                                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                    <polyline points="3 6 5 6 21 6" />
+                                                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                                                </svg>
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -1498,11 +1493,10 @@ export default function Index({
                                 return (
                                     <div
                                         key={product.id}
-                                        className={`p-4 space-y-3 transition-colors ${
-                                            product.is_recheck_overdue
-                                                ? 'border-l-4 border-l-rose-500 bg-rose-500/5'
-                                                : 'hover:bg-theme-subtle/20'
-                                        }`}
+                                        className={`p-4 space-y-3 transition-colors ${product.is_recheck_overdue
+                                            ? 'border-l-4 border-l-rose-500 bg-rose-500/5'
+                                            : 'hover:bg-theme-subtle/20'
+                                            }`}
                                     >
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="flex-1 min-w-0">
@@ -1616,11 +1610,10 @@ export default function Index({
                                                 {getCompliancePill(product)}
                                                 {getComplianceRiskBadge(product.compliance_risk, product.compliance_risk_label)}
                                                 {product.recheck_at && (
-                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-                                                        product.is_recheck_overdue
-                                                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold'
-                                                            : 'bg-theme-subtle text-theme-secondary border-theme'
-                                                    }`}>
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${product.is_recheck_overdue
+                                                        ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 border-rose-500/30 font-bold'
+                                                        : 'bg-theme-subtle text-theme-secondary border-theme'
+                                                        }`}>
                                                         {product.is_recheck_overdue ? 'Recheck Overdue' : `Recheck: ${product.recheck_at_formatted || product.recheck_at}`}
                                                     </span>
                                                 )}

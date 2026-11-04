@@ -1126,22 +1126,20 @@ export default function Show({
                 <button
                     type="button"
                     onClick={() => setActiveTab('overview')}
-                    className={`pb-3 px-4 border-b-2 transition-colors cursor-pointer ${
-                        activeTab === 'overview'
-                            ? 'border-theme-accent text-theme-accent'
-                            : 'border-transparent text-theme-muted hover:text-theme-primary'
-                    }`}
+                    className={`pb-3 px-4 border-b-2 transition-colors cursor-pointer ${activeTab === 'overview'
+                        ? 'border-theme-accent text-theme-accent'
+                        : 'border-transparent text-theme-muted hover:text-theme-primary'
+                        }`}
                 >
                     Score Breakdown & Raw Inputs
                 </button>
                 <button
                     type="button"
                     onClick={() => setActiveTab('negatives')}
-                    className={`pb-3 px-4 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${
-                        activeTab === 'negatives'
-                            ? 'border-theme-accent text-theme-accent'
-                            : 'border-transparent text-theme-muted hover:text-theme-primary'
-                    }`}
+                    className={`pb-3 px-4 border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 ${activeTab === 'negatives'
+                        ? 'border-theme-accent text-theme-accent'
+                        : 'border-transparent text-theme-muted hover:text-theme-primary'
+                        }`}
                 >
                     <span>Negative Keywords</span>
                     <span className="rounded-full bg-theme-subtle px-1.5 py-0.2 text-[11px] font-mono">
@@ -1160,22 +1158,20 @@ export default function Show({
                 <button
                     type="button"
                     onClick={() => setActiveTab('guidance')}
-                    className={`pb-3 px-4 border-b-2 transition-colors cursor-pointer ${
-                        activeTab === 'guidance'
-                            ? 'border-theme-accent text-theme-accent'
-                            : 'border-transparent text-theme-muted hover:text-theme-primary'
-                    }`}
+                    className={`pb-3 px-4 border-b-2 transition-colors cursor-pointer ${activeTab === 'guidance'
+                        ? 'border-theme-accent text-theme-accent'
+                        : 'border-transparent text-theme-muted hover:text-theme-primary'
+                        }`}
                 >
                     Campaign Guidance & Stop-Loss
                 </button>
                 <button
                     type="button"
                     onClick={() => setActiveTab('history')}
-                    className={`pb-3 px-4 border-b-2 transition-colors cursor-pointer ${
-                        activeTab === 'history'
-                            ? 'border-theme-accent text-theme-accent'
-                            : 'border-transparent text-theme-muted hover:text-theme-primary'
-                    }`}
+                    className={`pb-3 px-4 border-b-2 transition-colors cursor-pointer ${activeTab === 'history'
+                        ? 'border-theme-accent text-theme-accent'
+                        : 'border-transparent text-theme-muted hover:text-theme-primary'
+                        }`}
                 >
                     Score History ({score_history.length})
                 </button>
@@ -1696,11 +1692,10 @@ export default function Show({
                                 type="button"
                                 onClick={handleGenerateCampaignNegatives}
                                 disabled={isGeneratingCampaign || quotaExceeded}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs ${
-                                    quotaExceeded
-                                        ? 'border border-rose-500/30 bg-rose-500/10 text-rose-400 cursor-not-allowed opacity-60'
-                                        : 'border border-amber-500/40 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 active:scale-95 cursor-pointer'
-                                }`}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs ${quotaExceeded
+                                    ? 'border border-rose-500/30 bg-rose-500/10 text-rose-400 cursor-not-allowed opacity-60'
+                                    : 'border border-amber-500/40 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 active:scale-95 cursor-pointer'
+                                    }`}
                                 title={
                                     quotaExceeded
                                         ? (isDataForSeo
@@ -1826,15 +1821,13 @@ export default function Show({
                                                 <button
                                                     type="button"
                                                     onClick={() => handleToggleNegative(kw)}
-                                                    className={`w-8 h-4 rounded-full transition-colors relative cursor-pointer ${
-                                                        kw.enabled ? 'bg-emerald-500' : 'bg-stone-400 dark:bg-stone-700'
-                                                    }`}
+                                                    className={`w-8 h-4 rounded-full transition-colors relative cursor-pointer ${kw.enabled ? 'bg-emerald-500' : 'bg-stone-400 dark:bg-stone-700'
+                                                        }`}
                                                     title={kw.enabled ? 'Enabled' : 'Disabled'}
                                                 >
                                                     <span
-                                                        className={`w-3 h-3 rounded-full bg-white absolute top-0.5 transition-transform ${
-                                                            kw.enabled ? 'left-4.5' : 'left-0.5'
-                                                        }`}
+                                                        className={`w-3 h-3 rounded-full bg-white absolute top-0.5 transition-transform ${kw.enabled ? 'left-4.5' : 'left-0.5'
+                                                            }`}
                                                     />
                                                 </button>
                                             </td>
@@ -1934,11 +1927,10 @@ export default function Show({
                         <div className="rounded-xl border border-theme p-4 space-y-2 bg-theme-subtle/20">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-semibold text-theme-secondary">Current Stop-Loss Status</span>
-                                <span className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${
-                                    campaign_guidance?.stop_loss?.status === 'stop_loss_breached'
-                                        ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30'
-                                        : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
-                                }`}>
+                                <span className={`rounded-md px-2 py-0.5 text-xs font-bold uppercase ${campaign_guidance?.stop_loss?.status === 'stop_loss_breached'
+                                    ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30'
+                                    : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                                    }`}>
                                     {campaign_guidance?.stop_loss?.status?.replace(/_/g, ' ') || 'ACTIVE'}
                                 </span>
                             </div>
