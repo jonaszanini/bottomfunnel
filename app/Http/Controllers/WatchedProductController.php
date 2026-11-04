@@ -24,6 +24,7 @@ use App\Models\ProductScoreHistory;
 use App\Models\Track;
 use App\Models\WatchedProduct;
 use App\Services\Google\GoogleAdsQuotaException;
+use App\Services\Seo\DataForSeoClient;
 use App\Services\WatchingProducts\BofChecker;
 use App\Services\WatchingProducts\CampaignGuidance;
 use App\Services\WatchingProducts\Fx\FrankfurterFx;
@@ -52,8 +53,11 @@ class WatchedProductController extends Controller
         protected QuotaBudget $budget = new QuotaBudget,
         protected NegativeKeywordGenerator $negativeGenerator = new NegativeKeywordGenerator,
         protected RankService $rankService = new RankService,
-        protected BofChecker $bofChecker = new BofChecker
-    ) {}
+        protected BofChecker $bofChecker = new BofChecker,
+        protected ?DataForSeoClient $dataForSeoClient = null
+    ) {
+        $this->dataForSeoClient = $dataForSeoClient ?? app(DataForSeoClient::class);
+    }
 
     /**
      * Display a listing of watched products with filtering, search, scores, and rankings.
@@ -223,11 +227,26 @@ class WatchedProductController extends Controller
             'nutra_pct' => $totalCount > 0 ? (int) round(($nutraCount / $totalCount) * 100) : 60,
             'ecom_pct' => $totalCount > 0 ? (int) round(($ecomCount / $totalCount) * 100) : 40,
             'overdue_recheck_count' => WatchedProduct::query()->whereNotNull('recheck_at')->where('recheck_at', '<=', now()->toDateString())->count(),
-            'serpapi_used' => $this->budget->callsUsedThisMonth(),
-            'serpapi_cap' => $this->budget->monthlyCap(),
-            'serpapi_limit' => $this->budget->totalLimit(),
-            'seo_provider' => $this->budget->currentProvider(),
         ];
+
+        $seoProvider = (string) config('watching.seo.provider', 'dataforseo');
+        $dataforseoBalance = null;
+        $dataforseoUsageSummary = null;
+
+        if ($seoProvider === 'dataforseo') {
+            $userData = $this->dataForSeoClient->userData();
+            $dataforseoBalance = $userData['balance'] ?? null;
+            $dataforseoUsageSummary = $userData;
+
+            $metrics['seo_provider'] = 'dataforseo';
+            $metrics['dataforseo_balance'] = $dataforseoBalance;
+            $metrics['dataforseo_usage_summary'] = $dataforseoUsageSummary;
+        } else {
+            $metrics['seo_provider'] = 'serpapi';
+            $metrics['serpapi_used'] = $this->budget->callsUsedThisMonth('serpapi');
+            $metrics['serpapi_cap'] = $this->budget->monthlyCap('serpapi');
+            $metrics['serpapi_limit'] = $this->budget->totalLimit('serpapi');
+        }
 
         // Gather centralized platforms merged with distinct existing values
         $availablePlatforms = $this->getAvailablePlatforms();
@@ -236,6 +255,9 @@ class WatchedProductController extends Controller
             'products' => $products,
             'filters' => $filters,
             'metrics' => $metrics,
+            'seo_provider' => $seoProvider,
+            'dataforseo_balance' => $dataforseoBalance,
+            'dataforseo_usage_summary' => $dataforseoUsageSummary,
             'options' => [
                 'statuses' => array_map(fn (WatchedProductStatus $s) => [
                     'value' => $s->value,
@@ -475,6 +497,16 @@ class WatchedProductController extends Controller
             ])->all(),
         ];
 
+        $seoProvider = (string) config('watching.seo.provider', 'dataforseo');
+        $dataforseoBalance = null;
+        $dataforseoUsageSummary = null;
+
+        if ($seoProvider === 'dataforseo') {
+            $userData = $this->dataForSeoClient->userData();
+            $dataforseoBalance = $userData['balance'] ?? null;
+            $dataforseoUsageSummary = $userData;
+        }
+
         return Inertia::render('WatchingProducts/Show', [
             'product' => $productData,
             'tracks' => $productData['tracks'],
@@ -494,12 +526,14 @@ class WatchedProductController extends Controller
                 ->all(),
             'default_account_id' => GoogleAdsAccount::getDefault($request->user())?->id,
             'serpapi_usage' => [
-                'used_this_month' => $this->budget->callsUsedThisMonth(),
-                'monthly_cap' => $this->budget->monthlyCap(),
-                'total_limit' => $this->budget->totalLimit(),
-                'provider' => $this->budget->currentProvider(),
+                'used_this_month' => $this->budget->callsUsedThisMonth('serpapi'),
+                'monthly_cap' => $this->budget->monthlyCap('serpapi'),
+                'total_limit' => $this->budget->totalLimit('serpapi'),
+                'provider' => $seoProvider,
             ],
-            'seo_provider' => $this->budget->currentProvider(),
+            'seo_provider' => $seoProvider,
+            'dataforseo_balance' => $dataforseoBalance,
+            'dataforseo_usage_summary' => $dataforseoUsageSummary,
             'options' => [
                 'statuses' => array_map(fn (WatchedProductStatus $s) => ['value' => $s->value, 'label' => $s->label()], WatchedProductStatus::cases()),
                 'strategies' => array_map(fn (Strategy $st) => ['value' => $st->value, 'label' => $st->label()], Strategy::cases()),

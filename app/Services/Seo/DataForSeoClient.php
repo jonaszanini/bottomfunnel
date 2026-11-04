@@ -81,6 +81,159 @@ class DataForSeoClient implements SeoClientContract
     }
 
     /**
+     * Fetch current DataForSEO account balance, statistics, and limits.
+     * Cached for 5-10 minutes to avoid hitting the endpoint on every page load.
+     *
+     * @return array{balance: ?float, total_deposited: ?float, statistics: mixed, limits: mixed, today_spend: ?float, total_spent: ?float}
+     */
+    public function userData(bool $forceFresh = false): array
+    {
+        $cacheKey = 'dataforseo_user_data';
+
+        if (! $forceFresh && Cache::has($cacheKey)) {
+            $cached = Cache::get($cacheKey);
+            if (is_array($cached)) {
+                return $cached;
+            }
+        }
+
+        $creds = $this->getAuthCredentials();
+        if (! $creds) {
+            Log::warning('DataForSeoClient: No credentials configured to fetch user data.');
+
+            return [
+                'balance' => null,
+                'total_deposited' => null,
+                'statistics' => null,
+                'limits' => null,
+                'today_spend' => null,
+                'total_spent' => null,
+            ];
+        }
+
+        $endpoint = 'https://api.dataforseo.com/v3/appendix/user_data';
+
+        try {
+            $response = Http::withBasicAuth($creds[0], $creds[1])
+                ->timeout(15)
+                ->get($endpoint);
+
+            if (! $response->successful()) {
+                Log::warning("DataForSeoClient: user_data call failed ({$response->status()}): {$response->body()}");
+
+                return [
+                    'balance' => null,
+                    'total_deposited' => null,
+                    'statistics' => null,
+                    'limits' => null,
+                    'today_spend' => null,
+                    'total_spent' => null,
+                ];
+            }
+
+            $json = $response->json();
+            if (! is_array($json)) {
+                Log::warning('DataForSeoClient: user_data returned non-array JSON response.');
+
+                return [
+                    'balance' => null,
+                    'total_deposited' => null,
+                    'statistics' => null,
+                    'limits' => null,
+                    'today_spend' => null,
+                    'total_spent' => null,
+                ];
+            }
+
+            if (isset($json['status_code']) && (int) $json['status_code'] !== 20000) {
+                $statusMsg = (string) ($json['status_message'] ?? 'Unknown error');
+                Log::warning("DataForSeoClient: user_data returned error status ({$json['status_code']}): {$statusMsg}");
+
+                return [
+                    'balance' => null,
+                    'total_deposited' => null,
+                    'statistics' => null,
+                    'limits' => null,
+                    'today_spend' => null,
+                    'total_spent' => null,
+                ];
+            }
+
+            $task = $json['tasks'][0] ?? null;
+            $result = is_array($task) && isset($task['result'][0])
+                ? $task['result'][0]
+                : ($json['result'][0] ?? $json);
+
+            $money = is_array($result) && isset($result['money']) && is_array($result['money'])
+                ? $result['money']
+                : (isset($json['money']) && is_array($json['money']) ? $json['money'] : []);
+
+            $balance = isset($money['balance']) && is_numeric($money['balance'])
+                ? (float) $money['balance']
+                : (isset($json['balance']) && is_numeric($json['balance']) ? (float) $json['balance'] : null);
+
+            $totalDeposited = isset($money['total']) && is_numeric($money['total'])
+                ? (float) $money['total']
+                : (isset($json['total_deposited']) && is_numeric($json['total_deposited']) ? (float) $json['total_deposited'] : null);
+
+            $statistics = is_array($result) && array_key_exists('statistics', $result)
+                ? $result['statistics']
+                : ($json['statistics'] ?? null);
+
+            $limits = is_array($result) && array_key_exists('limits', $result)
+                ? $result['limits']
+                : ($json['limits'] ?? null);
+
+            $todaySpend = null;
+            if (is_array($statistics) && isset($statistics['day'])) {
+                if (is_numeric($statistics['day'])) {
+                    $todaySpend = (float) $statistics['day'];
+                } elseif (is_array($statistics['day'])) {
+                    $sum = 0.0;
+                    $hasCost = false;
+                    array_walk_recursive($statistics['day'], function ($value, $key) use (&$sum, &$hasCost) {
+                        if ($key === 'cost' && is_numeric($value)) {
+                            $sum += (float) $value;
+                            $hasCost = true;
+                        }
+                    });
+                    if ($hasCost) {
+                        $todaySpend = round($sum, 4);
+                    }
+                }
+            }
+
+            $totalSpent = ($totalDeposited !== null && $balance !== null)
+                ? round(max(0, $totalDeposited - $balance), 2)
+                : null;
+
+            $normalized = [
+                'balance' => $balance,
+                'total_deposited' => $totalDeposited,
+                'statistics' => $statistics,
+                'limits' => $limits,
+                'today_spend' => $todaySpend,
+                'total_spent' => $totalSpent,
+            ];
+
+            Cache::put($cacheKey, $normalized, now()->addMinutes(10));
+
+            return $normalized;
+        } catch (Throwable $e) {
+            Log::warning("DataForSeoClient: Exception fetching user_data: {$e->getMessage()}");
+
+            return [
+                'balance' => null,
+                'total_deposited' => null,
+                'statistics' => null,
+                'limits' => null,
+                'today_spend' => null,
+                'total_spent' => null,
+            ];
+        }
+    }
+
+    /**
      * Build a deterministic cache key for a DataForSEO query.
      */
     public function buildCacheKey(

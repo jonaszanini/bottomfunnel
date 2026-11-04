@@ -86,7 +86,20 @@ export function getAffiliateAppBadge(status) {
     }
 }
 
-export default function Index({ products, filters, metrics, options }) {
+export default function Index({
+    products,
+    filters,
+    metrics,
+    options,
+    seo_provider = 'dataforseo',
+    dataforseo_balance = null,
+    dataforseo_usage_summary = null,
+}) {
+    const activeProvider = seo_provider || metrics?.seo_provider || 'dataforseo';
+    const isDataForSeo = activeProvider === 'dataforseo';
+    const balance = dataforseo_balance ?? metrics?.dataforseo_balance ?? null;
+    const usageSummary = dataforseo_usage_summary ?? metrics?.dataforseo_usage_summary ?? null;
+
     const [search, setSearch] = useState(filters.search || '');
     const [openVolumeInfo, setOpenVolumeInfo] = useState(null);
     useEffect(() => {
@@ -763,7 +776,7 @@ export default function Index({ products, filters, metrics, options }) {
                         Watching Products
                     </h1>
                     <p className="mt-1 text-xs text-theme-secondary">
-                        Ranked bottom-of-funnel research catalog with deterministic scoring and automated SerpApi tracking.
+                        Ranked bottom-of-funnel research catalog with deterministic scoring and automated {isDataForSeo ? 'DataForSEO' : 'SerpApi'} tracking.
                     </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -777,7 +790,7 @@ export default function Index({ products, filters, metrics, options }) {
                 </div>
             </div>
 
-            {/* Portfolio Split & SerpApi Header Cards */}
+            {/* Portfolio Split & SEO Quota/Balance Header Cards */}
             <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
                 {/* Nutra / E-com Portfolio Split against 60/40 Target */}
                 <div className="rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs">
@@ -803,21 +816,46 @@ export default function Index({ products, filters, metrics, options }) {
                     </div>
                 </div>
 
-                {/* SerpApi Free Tier Usage */}
-                <div className="rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs">
-                    <div className="flex justify-between items-center text-xs font-semibold">
-                        <span className="text-theme-secondary">SerpApi Quota (Month)</span>
-                        <span className="rounded bg-theme-subtle px-1.5 py-0.2 text-[10px] font-mono text-theme-muted">
-                            Cap: {metrics.serpapi_cap}
-                        </span>
+                {/* SEO Provider Quota / Balance Card */}
+                {isDataForSeo ? (
+                    <div className="rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs">
+                        <div className="flex justify-between items-center text-xs font-semibold">
+                            <span className="text-theme-secondary">DataForSEO Balance</span>
+                            {usageSummary?.total_deposited != null && (
+                                <span className="rounded bg-theme-subtle px-1.5 py-0.2 text-[10px] font-mono text-theme-muted" title="Total Deposited">
+                                    Total: ${Number(usageSummary.total_deposited).toFixed(2)}
+                                </span>
+                            )}
+                        </div>
+                        <div className="mt-1 text-2xl font-bold text-theme-accent">
+                            {balance != null ? `$${Number(balance).toFixed(2)}` : '—'}
+                        </div>
+                        <div className="text-[11px] text-theme-muted mt-1">
+                            {usageSummary?.today_spend != null ? (
+                                <span>Today's spend: ${Number(usageSummary.today_spend).toFixed(2)}</span>
+                            ) : usageSummary?.total_spent != null ? (
+                                <span>Total spent: ${Number(usageSummary.total_spent).toFixed(2)}</span>
+                            ) : (
+                                <span>Live account balance</span>
+                            )}
+                        </div>
                     </div>
-                    <div className="mt-1 text-2xl font-bold text-theme-accent">
-                        {metrics.serpapi_used} <span className="text-xs font-normal text-theme-muted">/ {metrics.serpapi_limit}</span>
+                ) : (
+                    <div className="rounded-xl border border-theme bg-theme-surface p-3.5 shadow-2xs">
+                        <div className="flex justify-between items-center text-xs font-semibold">
+                            <span className="text-theme-secondary">SerpApi Quota (Month)</span>
+                            <span className="rounded bg-theme-subtle px-1.5 py-0.2 text-[10px] font-mono text-theme-muted">
+                                Cap: {metrics.serpapi_cap}
+                            </span>
+                        </div>
+                        <div className="mt-1 text-2xl font-bold text-theme-accent">
+                            {metrics.serpapi_used} <span className="text-xs font-normal text-theme-muted">/ {metrics.serpapi_limit}</span>
+                        </div>
+                        <div className="text-[11px] text-theme-muted mt-1">
+                            Weekly allowance strictly budgeted. No LLMs in cron.
+                        </div>
                     </div>
-                    <div className="text-[11px] text-theme-muted mt-1">
-                        Weekly allowance strictly budgeted. No LLMs in cron.
-                    </div>
-                </div>
+                )}
 
                 {/* Status metrics */}
                 <div

@@ -15,6 +15,7 @@ use App\Services\WatchingProducts\NegativeKeywordGenerator;
 use App\Services\WatchingProducts\QuotaBudget;
 use App\Services\WatchingProducts\SerpApiClient;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -601,5 +602,134 @@ class DataForSeoClientTest extends TestCase
         $this->assertTrue($bof['bof_vpn_serp']);
         $this->assertGreaterThanOrEqual(90, $bof['bof_image_match_pct']);
         $this->assertTrue($bof['bof_translation']);
+    }
+
+    public function test_user_data_success_returns_normalized_balance_and_statistics(): void
+    {
+        Cache::forget('dataforseo_user_data');
+
+        Http::fake([
+            'https://api.dataforseo.com/v3/appendix/user_data' => Http::response([
+                'version' => '0.1.20230623',
+                'status_code' => 20000,
+                'status_message' => 'Ok.',
+                'tasks' => [
+                    [
+                        'id' => '0101-user-data-task',
+                        'status_code' => 20000,
+                        'result' => [
+                            [
+                                'login' => 'test_dfs_login',
+                                'timezone' => 'UTC',
+                                'money' => [
+                                    'total' => 100.0,
+                                    'balance' => 12.45,
+                                ],
+                                'limits' => [
+                                    'day' => ['limit' => 1000, 'spent' => 5],
+                                ],
+                                'statistics' => [
+                                    'day' => [
+                                        'v3' => [
+                                            'cost' => 0.45,
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $client = app(DataForSeoClient::class);
+        $result = $client->userData();
+
+        $this->assertIsArray($result);
+        $this->assertEquals(12.45, $result['balance']);
+        $this->assertEquals(100.0, $result['total_deposited']);
+        $this->assertEquals(87.55, $result['total_spent']);
+        $this->assertEquals(0.45, $result['today_spend']);
+        $this->assertNotNull($result['limits']);
+        $this->assertNotNull($result['statistics']);
+
+        Http::assertSent(function ($request) {
+            return str_contains($request->url(), 'appendix/user_data')
+                && $request->method() === 'GET';
+        });
+    }
+
+    public function test_user_data_caches_result_and_prevents_duplicate_calls(): void
+    {
+        Cache::forget('dataforseo_user_data');
+
+        Http::fake([
+            'https://api.dataforseo.com/v3/appendix/user_data' => Http::response([
+                'version' => '0.1.20230623',
+                'status_code' => 20000,
+                'status_message' => 'Ok.',
+                'tasks' => [
+                    [
+                        'result' => [
+                            [
+                                'money' => ['balance' => 25.0, 'total' => 50.0],
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $client = app(DataForSeoClient::class);
+
+        // First call triggers HTTP request
+        $res1 = $client->userData();
+        $this->assertEquals(25.0, $res1['balance']);
+
+        // Second call should come from cache
+        $res2 = $client->userData();
+        $this->assertEquals(25.0, $res2['balance']);
+
+        Http::assertSentCount(1);
+
+        // Third call with forceFresh should bypass cache
+        $res3 = $client->userData(forceFresh: true);
+        $this->assertEquals(25.0, $res3['balance']);
+
+        Http::assertSentCount(2);
+    }
+
+    public function test_user_data_handles_errors_gracefully(): void
+    {
+        Cache::forget('dataforseo_user_data');
+
+        Http::fake([
+            'https://api.dataforseo.com/v3/appendix/user_data' => Http::response([
+                'status_code' => 40001,
+                'status_message' => 'Internal server error',
+            ], 500),
+        ]);
+
+        $client = app(DataForSeoClient::class);
+        $result = $client->userData(forceFresh: true);
+
+        $this->assertIsArray($result);
+        $this->assertNull($result['balance']);
+        $this->assertNull($result['total_deposited']);
+        $this->assertNull($result['statistics']);
+        $this->assertNull($result['limits']);
+    }
+
+    public function test_user_data_returns_nulls_when_not_configured(): void
+    {
+        Cache::forget('dataforseo_user_data');
+        Http::fake();
+
+        $client = new DataForSeoClient(login: '', password: '', apiKey: '');
+        $result = $client->userData(forceFresh: true);
+
+        $this->assertNull($result['balance']);
+        $this->assertNull($result['total_deposited']);
+        Http::assertNothingSent();
     }
 }

@@ -176,8 +176,14 @@ export default function Show({
     google_ads_accounts = [],
     default_account_id = null,
     serpapi_usage = {},
+    seo_provider = 'dataforseo',
+    dataforseo_balance = null,
+    dataforseo_usage_summary = null,
     options = {},
 }) {
+    const activeProvider = seo_provider || serpapi_usage?.provider || 'dataforseo';
+    const isDataForSeo = activeProvider === 'dataforseo';
+
     const [showReviewInfo, setShowReviewInfo] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const [toastType, setToastType] = useState('success');
@@ -373,7 +379,11 @@ export default function Show({
     };
 
     const handleRefreshNow = () => {
-        if (confirm(`Refresh SERP data and rescore ${product.name} now? (Uses 2 SerpApi calls)`)) {
+        const confirmMsg = isDataForSeo
+            ? `Refresh SERP & Trends data and rescore ${product.name} now? (Uses DataForSEO credits)`
+            : `Refresh SERP data and rescore ${product.name} now? (Uses 2 SerpApi calls)`;
+
+        if (confirm(confirmMsg)) {
             router.post(`/watching-products/${product.id}/refresh-now`, {}, {
                 preserveScroll: true,
                 onSuccess: () => showToast('SERP data refreshed successfully!'),
@@ -383,7 +393,11 @@ export default function Show({
 
     const handleGenerateCampaignNegatives = () => {
         if (quotaExceeded) {
-            showToast('SerpApi monthly quota exceeded (250/250). Cannot perform new SERP analysis.');
+            showToast(
+                isDataForSeo
+                    ? 'DataForSEO balance depleted. Cannot perform new SERP analysis.'
+                    : 'SerpApi monthly quota exceeded (250/250). Cannot perform new SERP analysis.'
+            );
             return;
         }
 
@@ -484,10 +498,13 @@ export default function Show({
     }, [negative_keywords]);
 
     const quotaExceeded = useMemo(() => {
+        if (isDataForSeo) {
+            return dataforseo_balance !== null && Number(dataforseo_balance) <= 0;
+        }
         const used = serpapi_usage?.used_this_month ?? 0;
         const total = serpapi_usage?.total_limit ?? 250;
         return used >= total;
-    }, [serpapi_usage]);
+    }, [isDataForSeo, dataforseo_balance, serpapi_usage]);
 
     const scoreHsl = getScoreHsl(product.score);
     const bofComp = getComponentScoreColor(product.score_breakdown?.bof_name, 20);
@@ -568,12 +585,22 @@ export default function Show({
                         type="button"
                         onClick={handleRefreshNow}
                         className="px-3 py-1.5 rounded-lg border border-theme bg-theme-surface hover:bg-theme-subtle text-xs font-semibold text-theme-primary transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                        title={`SerpApi calls used this month: ${serpapi_usage.used_this_month}/${serpapi_usage.total_limit}`}
+                        title={
+                            isDataForSeo
+                                ? (dataforseo_balance != null
+                                    ? `DataForSEO Balance: $${Number(dataforseo_balance).toFixed(2)}`
+                                    : 'Refresh SERP & Trends data via DataForSEO')
+                                : `SerpApi calls used this month: ${serpapi_usage?.used_this_month ?? 0}/${serpapi_usage?.total_limit ?? 250}`
+                        }
                     >
                         <svg className="w-3.5 h-3.5 text-theme-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
                         </svg>
-                        <span>Refresh now ({serpapi_usage.used_this_month}/{serpapi_usage.total_limit})</span>
+                        <span>
+                            Refresh now{isDataForSeo
+                                ? (dataforseo_balance != null ? ` ($${Number(dataforseo_balance).toFixed(2)})` : '')
+                                : ` (${serpapi_usage?.used_this_month ?? 0}/${serpapi_usage?.total_limit ?? 250})`}
+                        </span>
                     </button>
 
                     <div className="relative flex items-center gap-1">
@@ -678,6 +705,28 @@ export default function Show({
 
                     {/* Rank & Score Pill */}
                     <div className="flex items-center gap-3 shrink-0">
+                        {/* Quota / Balance Pill */}
+                        {isDataForSeo ? (
+                            <div className="text-center rounded-xl border border-theme bg-theme-subtle px-3 py-2 min-w-[90px]">
+                                <div className="text-[10px] uppercase font-bold tracking-wider text-theme-muted">DataForSEO Balance</div>
+                                <div className="text-base font-extrabold text-theme-accent">
+                                    {dataforseo_balance != null ? `$${Number(dataforseo_balance).toFixed(2)}` : '—'}
+                                </div>
+                                {dataforseo_usage_summary?.today_spend != null && (
+                                    <div className="text-[9px] text-theme-muted">
+                                        Today: ${Number(dataforseo_usage_summary.today_spend).toFixed(2)}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center rounded-xl border border-theme bg-theme-subtle px-3 py-2 min-w-[90px]">
+                                <div className="text-[10px] uppercase font-bold tracking-wider text-theme-muted">SerpApi Quota</div>
+                                <div className="text-base font-extrabold text-theme-accent">
+                                    {serpapi_usage?.used_this_month ?? 0} <span className="text-[10px] font-normal text-theme-muted">/ {serpapi_usage?.total_limit ?? 250}</span>
+                                </div>
+                            </div>
+                        )}
+
                         {product.rank !== null && (
                             <div className="text-center rounded-xl border border-theme bg-theme-subtle px-3 py-2">
                                 <div className="text-[10px] uppercase font-bold tracking-wider text-theme-muted">Rank</div>
@@ -1618,7 +1667,10 @@ export default function Show({
 
                         {quotaExceeded && (
                             <span className="text-xs font-medium text-rose-500 bg-rose-500/10 border border-rose-500/20 px-2.5 py-1 rounded-lg">
-                                ⚠️ SerpApi quota ceiling reached ({serpapi_usage?.used_this_month ?? 0}/{serpapi_usage?.total_limit ?? 250})
+                                {isDataForSeo
+                                    ? '⚠️ DataForSEO balance depleted ($0.00)'
+                                    : `⚠️ SerpApi quota ceiling reached (${serpapi_usage?.used_this_month ?? 0}/${serpapi_usage?.total_limit ?? 250})`
+                                }
                             </span>
                         )}
                     </div>
@@ -1649,7 +1701,13 @@ export default function Show({
                                         ? 'border border-rose-500/30 bg-rose-500/10 text-rose-400 cursor-not-allowed opacity-60'
                                         : 'border border-amber-500/40 bg-amber-500/15 text-amber-500 hover:bg-amber-500/25 active:scale-95 cursor-pointer'
                                 }`}
-                                title={quotaExceeded ? `SerpApi quota exceeded (${serpapi_usage?.used_this_month ?? 0}/${serpapi_usage?.total_limit ?? 250})` : 'Run full pass: extract competitor, homonym, and intruder negative keywords from Google SERP'}
+                                title={
+                                    quotaExceeded
+                                        ? (isDataForSeo
+                                            ? 'DataForSEO balance depleted ($0.00)'
+                                            : `SerpApi quota exceeded (${serpapi_usage?.used_this_month ?? 0}/${serpapi_usage?.total_limit ?? 250})`)
+                                        : 'Run full pass: extract competitor, homonym, and intruder negative keywords from Google SERP'
+                                }
                             >
                                 {isGeneratingCampaign ? (
                                     <>
