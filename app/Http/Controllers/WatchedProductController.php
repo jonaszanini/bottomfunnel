@@ -635,27 +635,9 @@ class WatchedProductController extends Controller
         $shouldRescore = $watchedProduct->isDirty(PotentialScoreService::SCORE_INPUT_FIELDS);
         $watchedProduct->save();
 
+        // The observer persistScore()s and writes history once (withoutEvents, no recursion).
+        // The controller only reranks so we do not double-save or duplicate history.
         if ($shouldRescore) {
-            $scoreResult = $this->scoreService->persistScore($watchedProduct);
-
-            ProductScoreHistory::query()->create([
-                'product_id' => $watchedProduct->id,
-                'score' => $scoreResult['score'],
-                'breakdown' => $scoreResult['breakdown'],
-                'flags' => $scoreResult['flags'],
-                'inputs_snapshot' => [
-                    'name' => $watchedProduct->name,
-                    'payout_amount' => $watchedProduct->payout_amount,
-                    'payout_currency' => $watchedProduct->payout_currency,
-                    'page_type' => $watchedProduct->page_type,
-                    'strategy' => $watchedProduct->strategy?->value,
-                    'bof_translation' => (bool) $watchedProduct->bof_translation,
-                    'bof_vpn_serp' => (bool) $watchedProduct->bof_vpn_serp,
-                    'bof_image_match_pct' => (int) ($watchedProduct->bof_image_match_pct ?? 0),
-                ],
-                'created_at' => now(),
-            ]);
-
             $this->rankService->recalculateRanks();
         }
 

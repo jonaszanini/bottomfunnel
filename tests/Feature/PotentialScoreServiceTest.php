@@ -10,6 +10,7 @@ use App\Enums\PayoutModel;
 use App\Enums\TrendsTrend;
 use App\Enums\TrueBofStatus;
 use App\Enums\WatchedProductStatus;
+use App\Models\ProductScoreHistory;
 use App\Models\User;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\PotentialScoreService;
@@ -669,6 +670,7 @@ class PotentialScoreServiceTest extends TestCase
         $product = $this->makeQualityProduct($this->confirmedVolume(5000));
         $initialScore = $product->fresh()->score;
         $status = $product->status;
+        $historyBefore = ProductScoreHistory::query()->where('product_id', $product->id)->count();
 
         $response = $this->actingAs($user)->put("/watching-products/{$product->id}", [
             'name' => $product->name,
@@ -684,6 +686,11 @@ class PotentialScoreServiceTest extends TestCase
         $this->assertNotSame($initialScore, $fresh->score);
         $this->assertSame($status, $fresh->status);
         $this->assertEqualsWithDelta(0.001, (float) $fresh->est_cvr, 0.0001);
+        $this->assertSame(
+            $historyBefore + 1,
+            ProductScoreHistory::query()->where('product_id', $product->id)->count(),
+            'Updating a scoring field should write exactly one new score history row',
+        );
     }
 
     public function test_updating_notes_or_affiliate_application_status_does_not_rescore(): void
