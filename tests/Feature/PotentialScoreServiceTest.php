@@ -2,14 +2,21 @@
 
 namespace Tests\Feature;
 
+use App\Enums\AffiliateApplicationStatus;
 use App\Enums\BrandBiddingStatus;
 use App\Enums\FlowspyTrafficTrend;
 use App\Enums\ListingStatus;
 use App\Enums\PayoutModel;
 use App\Enums\TrendsTrend;
+use App\Enums\TrueBofStatus;
+use App\Enums\WatchedProductStatus;
+use App\Models\ProductScoreHistory;
+use App\Models\User;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\PotentialScoreService;
+use App\Services\WatchingProducts\RankService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class PotentialScoreServiceTest extends TestCase
@@ -24,13 +31,18 @@ class PotentialScoreServiceTest extends TestCase
         $this->scoreService = app(PotentialScoreService::class);
     }
 
-    public function test_perfect_product_scores_high(): void
+    /**
+     * @param  array<string, mixed>  $overrides
+     */
+    private function makeQualityProduct(array $overrides = []): WatchedProduct
     {
-        $product = WatchedProduct::factory()->create([
+        return WatchedProduct::factory()->create(array_merge([
+            'status' => WatchedProductStatus::Watch,
             'bof_translation' => true,
             'bof_vpn_serp' => true,
             'bof_image_match_pct' => 95,
             'bof_homonym' => false,
+            'true_bof' => TrueBofStatus::True,
             'trends_7d' => 45.0,
             'trends_30d' => 50.0,
             'trends_90d' => 48.0,
@@ -39,14 +51,36 @@ class PotentialScoreServiceTest extends TestCase
             'payout_currency' => 'USD',
             'payout_model' => PayoutModel::CpaFixed,
             'page_type' => 'TSL',
+            'funnel_flags' => [],
             'brand_bidding' => BrandBiddingStatus::Allowed,
             'geos' => ['US', 'CA', 'AU'],
             'advertiser_count' => 1,
+            'vendor_bids_brand' => false,
             'approval_required' => false,
             'cancel_rate' => 5.0,
             'listing_status' => ListingStatus::Active,
             'restricted_category' => false,
-        ]);
+            'est_cvr' => 0.02,
+            'brand_cpc_amount' => 0.50,
+            'brand_cpc_currency' => 'USD',
+            'last_refreshed_at' => now(),
+        ], $overrides));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function confirmedVolume(int $total): array
+    {
+        return [
+            'search_volume_total' => $total,
+            'search_volume_checked_at' => now(),
+        ];
+    }
+
+    public function test_perfect_product_scores_high(): void
+    {
+        $product = $this->makeQualityProduct($this->confirmedVolume(5000));
 
         $result = $this->scoreService->score($product);
 
@@ -125,6 +159,7 @@ class PotentialScoreServiceTest extends TestCase
             'trends_30d' => 8.2,
             'trends_90d' => 52.0,
             'payout_amount' => 100.00,
+            ...$this->confirmedVolume(5000),
         ]);
 
         $result = $this->scoreService->score($product);
@@ -344,6 +379,7 @@ class PotentialScoreServiceTest extends TestCase
             'trends_30d' => 10.0,
             'trends_90d' => 80.0,
             'payout_amount' => 150.00,
+            ...$this->confirmedVolume(5000),
         ]);
 
         $result = $this->scoreService->score($product);
@@ -447,5 +483,285 @@ class PotentialScoreServiceTest extends TestCase
             'flowspy_traffic_trend' => FlowspyTrafficTrend::Rising,
         ]);
         $this->assertEquals(20, $this->scoreService->score($boostedProduct)['breakdown']['demand']);
+    }
+
+    /**
+     * @return array<string, array{0: int, 1: float}>
+     */
+    public static function volumeAnchorCases(): array
+    {
+        return [
+            'below_floor' => [9, 0.0],
+            'anchor_10' => [10, 0.0],
+            'anchor_150' => [150, 2.5],
+            'anchor_1000' => [1000, 8.0],
+            'anchor_2000' => [2000, 9.0],
+            'anchor_5000' => [5000, 10.0],
+            'above_ceiling' => [8000, 10.0],
+        ];
+    }
+
+    #[DataProvider('volumeAnchorCases')]
+    public function test_volume_subscore_matches_configured_anchors(int $volume, float $expectedV): void
+    {
+        $product = $this->makeQualityProduct($this->confirmedVolume($volume));
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertSame($expectedV, $result['breakdown']['v']);
+        $this->assertArrayNotHasKey('volume_no_data', $result['flags']);
+    }
+
+    public function test_volume_interpolation_midpoint_between_10_and_150(): void
+    {
+        $product = $this->makeQualityProduct($this->confirmedVolume(39));
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertEqualsWithDelta(1.26, $result['breakdown']['v'], 0.01);
+    }
+
+    public function test_missing_volume_data_flags_and_caps_score_at_69(): void
+    {
+        $product = $this->makeQualityProduct([
+            'search_volume_total' => null,
+            'search_volume_checked_at' => null,
+        ]);
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertSame(0.0, $result['breakdown']['v']);
+        $this->assertTrue($result['flags']['volume_no_data'] ?? false);
+        $this->assertSame(100, $result['breakdown']['q']);
+        $this->assertSame(69, $result['score']);
+        $this->assertLessThanOrEqual(69, $result['score']);
+    }
+
+    public function test_confirmed_zero_volume_is_real_data_without_no_data_flag(): void
+    {
+        $product = $this->makeQualityProduct($this->confirmedVolume(0));
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertSame(0.0, $result['breakdown']['v']);
+        $this->assertArrayNotHasKey('volume_no_data', $result['flags']);
+        $this->assertSame(100, $result['breakdown']['q']);
+        $this->assertSame(85, $result['score']);
+    }
+
+    public function test_volume_below_eight_caps_score_at_89(): void
+    {
+        $product = $this->makeQualityProduct($this->confirmedVolume(708));
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertLessThan(8.0, $result['breakdown']['v']);
+        $this->assertSame(100, $result['breakdown']['q']);
+        $this->assertSame(89, $result['score']);
+    }
+
+    public function test_hard_gates_still_bind_after_volume_blend(): void
+    {
+        $falseBof = $this->makeQualityProduct(array_merge($this->confirmedVolume(5000), [
+            'bof_homonym' => true,
+        ]));
+        $falseBofResult = $this->scoreService->score($falseBof);
+        $this->assertSame(0, $falseBofResult['score']);
+        $this->assertTrue($falseBofResult['flags']['false_bof'] ?? false);
+
+        $hardGate = $this->makeQualityProduct(array_merge($this->confirmedVolume(5000), [
+            'cancel_rate' => 40.0,
+        ]));
+        $hardGateResult = $this->scoreService->score($hardGate);
+        $this->assertSame(20, $hardGateResult['score']);
+        $this->assertTrue($hardGateResult['flags']['high_cancel_rate'] ?? false);
+
+        $restricted = $this->makeQualityProduct(array_merge($this->confirmedVolume(5000), [
+            'restricted_category' => true,
+        ]));
+        $restrictedResult = $this->scoreService->score($restricted);
+        $this->assertSame(50, $restrictedResult['score']);
+        $this->assertTrue($restrictedResult['flags']['restricted_category'] ?? false);
+    }
+
+    public function test_dentavive_like_fixture_with_q_100_and_volume_150_scores_83(): void
+    {
+        $product = $this->makeQualityProduct($this->confirmedVolume(150));
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertSame(100, $result['breakdown']['q']);
+        $this->assertSame(2.5, $result['breakdown']['v']);
+        $this->assertSame(83, $result['score']);
+        $this->assertLessThanOrEqual(89, $result['score']);
+    }
+
+    public function test_vivalis_like_fixture_with_q_near_94_and_volume_1000_scores_above_90(): void
+    {
+        $product = $this->makeQualityProduct(array_merge($this->confirmedVolume(1000), [
+            'trends_trend' => TrendsTrend::Stable,
+            'approval_required' => true,
+        ]));
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertSame(94, $result['breakdown']['q']);
+        $this->assertSame(8.0, $result['breakdown']['v']);
+        $this->assertGreaterThan(90, $result['score']);
+    }
+
+    public function test_herpafend_like_fixture_with_q_87_and_volume_4540_scores_above_90(): void
+    {
+        $product = $this->makeQualityProduct(array_merge($this->confirmedVolume(4540), [
+            'trends_trend' => TrendsTrend::Falling,
+            'geos' => ['US'],
+        ]));
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertSame(87, $result['breakdown']['q']);
+        $this->assertGreaterThan(90, $result['score']);
+    }
+
+    public function test_search_volume_is_not_fed_into_demand_component(): void
+    {
+        $product = WatchedProduct::factory()->create(array_merge($this->confirmedVolume(5000), [
+            'trends_trend' => null,
+            'kp_volume' => null,
+            'flowspy_traffic_trend' => null,
+        ]));
+
+        $result = $this->scoreService->score($product);
+
+        $this->assertSame(8, $result['breakdown']['demand']);
+        $this->assertSame(10.0, $result['breakdown']['v']);
+    }
+
+    public function test_score_input_fields_constant_lists_every_scoring_input(): void
+    {
+        $fields = PotentialScoreService::SCORE_INPUT_FIELDS;
+
+        foreach ([
+            'search_volume_total',
+            'search_volume_checked_at',
+            'est_cvr',
+            'kp_yoy',
+            'kp_3m',
+            'kp_cpc_amount',
+            'kp_cpc_currency',
+            'brand_cpc_amount',
+            'brand_cpc_currency',
+            'funnel_flags',
+            'geos',
+            'payout_cad',
+            'true_bof',
+        ] as $field) {
+            $this->assertContains($field, $fields);
+        }
+
+        $this->assertNotContains('notes', $fields);
+        $this->assertNotContains('affiliate_application_status', $fields);
+        $this->assertNotContains('status', $fields);
+    }
+
+    public function test_updating_est_cvr_rescores_without_changing_status(): void
+    {
+        $user = User::factory()->create();
+        $product = $this->makeQualityProduct($this->confirmedVolume(5000));
+        $initialScore = $product->fresh()->score;
+        $status = $product->status;
+        $historyBefore = ProductScoreHistory::query()->where('product_id', $product->id)->count();
+
+        $response = $this->actingAs($user)->put("/watching-products/{$product->id}", [
+            'name' => $product->name,
+            'status' => $product->status->value,
+            'brand_bidding' => $product->brand_bidding->value,
+            'true_bof' => $product->true_bof->value,
+            'est_cvr' => 0.001,
+        ]);
+
+        $response->assertSessionHasNoErrors();
+        $fresh = $product->fresh();
+
+        $this->assertNotSame($initialScore, $fresh->score);
+        $this->assertSame($status, $fresh->status);
+        $this->assertEqualsWithDelta(0.001, (float) $fresh->est_cvr, 0.0001);
+        $this->assertSame(
+            $historyBefore + 1,
+            ProductScoreHistory::query()->where('product_id', $product->id)->count(),
+            'Updating a scoring field should write exactly one new score history row',
+        );
+    }
+
+    public function test_updating_notes_or_affiliate_application_status_does_not_rescore(): void
+    {
+        $user = User::factory()->create();
+        $product = $this->makeQualityProduct($this->confirmedVolume(150));
+        $initialScore = $product->fresh()->score;
+        $initialScoredAt = $product->fresh()->scored_at?->toIso8601String();
+        $status = $product->status;
+
+        $this->actingAs($user)->put("/watching-products/{$product->id}", [
+            'name' => $product->name,
+            'status' => $product->status->value,
+            'brand_bidding' => $product->brand_bidding->value,
+            'true_bof' => $product->true_bof->value,
+            'notes' => 'Operator notes only',
+        ])->assertSessionHasNoErrors();
+
+        $afterNotes = $product->fresh();
+        $this->assertSame($initialScore, $afterNotes->score);
+        $this->assertSame($initialScoredAt, $afterNotes->scored_at?->toIso8601String());
+        $this->assertSame($status, $afterNotes->status);
+        $this->assertSame('Operator notes only', $afterNotes->notes);
+
+        $this->actingAs($user)->put("/watching-products/{$product->id}", [
+            'name' => $product->name,
+            'status' => $product->status->value,
+            'brand_bidding' => $product->brand_bidding->value,
+            'true_bof' => $product->true_bof->value,
+            'affiliate_application_status' => AffiliateApplicationStatus::Pending->value,
+        ])->assertSessionHasNoErrors();
+
+        $afterApp = $product->fresh();
+        $this->assertSame($initialScore, $afterApp->score);
+        $this->assertSame($status, $afterApp->status);
+        $this->assertSame(AffiliateApplicationStatus::Pending, $afterApp->affiliate_application_status);
+    }
+
+    public function test_rescore_does_not_change_product_status(): void
+    {
+        $product = $this->makeQualityProduct(array_merge($this->confirmedVolume(150), [
+            'status' => WatchedProductStatus::Watch,
+        ]));
+        $originalStatus = $product->status;
+
+        $this->scoreService->persistScore($product);
+
+        $fresh = $product->fresh();
+        $this->assertSame($originalStatus, $fresh->status);
+        $this->assertSame(WatchedProductStatus::Watch, $fresh->status);
+        $this->assertSame(83, $fresh->score);
+    }
+
+    public function test_rank_tie_break_uses_search_volume_total(): void
+    {
+        $lowVolume = $this->makeQualityProduct(array_merge($this->confirmedVolume(150), [
+            'name' => 'Low Volume Tie',
+            'score' => 83,
+            'trends_30d' => null,
+        ]));
+        $highVolume = $this->makeQualityProduct(array_merge($this->confirmedVolume(5000), [
+            'name' => 'High Volume Tie',
+            'score' => 83,
+            'trends_30d' => null,
+        ]));
+
+        WatchedProduct::query()->whereKey([$lowVolume->id, $highVolume->id])->update(['score' => 83]);
+
+        app(RankService::class)->recalculateRanks();
+
+        $this->assertSame(1, $highVolume->fresh()->rank);
+        $this->assertSame(2, $lowVolume->fresh()->rank);
     }
 }

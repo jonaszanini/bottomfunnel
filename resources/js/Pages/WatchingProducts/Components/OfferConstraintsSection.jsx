@@ -441,7 +441,7 @@ export default function OfferConstraintsSection({ product }) {
                                 </button>
                             </div>
                             <ul className="text-[11px] text-theme-muted list-disc list-inside space-y-0.5">
-                                <li><strong>WATCH → TEST:</strong> Potential Score &gt; 70, verified offer page, and targeting set.</li>
+                                <li><strong>WATCH → TEST:</strong> Potential Score &gt; 90, verified offer page, and targeting set.</li>
                                 <li><strong>TEST → SCALE:</strong> Consistent profit across 2+ conversions with positive headroom.</li>
                                 <li><strong>KILL / PAUSE:</strong> 0 sales at 100% commission spend, sudden listing expiration, or policy violation.</li>
                             </ul>

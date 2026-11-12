@@ -10,6 +10,8 @@ on:
         options:
           - 'watching:refresh-volume --dry-run'
           - 'watching:refresh-volume'
+          - 'watching:rescore --dry-run'
+          - 'watching:rescore'
           - 'watching:backfill-compliance --dry-run'
           - 'watching:backfill-compliance'
           - 'optimize:clear'

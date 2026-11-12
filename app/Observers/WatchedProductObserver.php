@@ -98,38 +98,10 @@ class WatchedProductObserver
         }
 
         // When scoring fields change without an explicit score change, trigger rescore
-        $scoringFields = [
-            'bof_translation',
-            'bof_vpn_serp',
-            'bof_image_match_pct',
-            'bof_qualifier',
-            'bof_homonym',
-            'trends_trend',
-            'trends_7d',
-            'trends_30d',
-            'trends_90d',
-            'flowspy_traffic_trend',
-            'payout_amount',
-            'payout_currency',
-            'payout_model',
-            'page_type',
-            'brand_bidding',
-            'advertiser_count',
-            'vendor_bids_brand',
-            'kp_volume',
-            'cancel_rate',
-            'listing_status',
-            'restricted_category',
-            'approval_required',
-        ];
+        $scoringFields = PotentialScoreService::SCORE_INPUT_FIELDS;
 
         if ($product->wasChanged($scoringFields) && ! $product->wasChanged('score')) {
-            $scoreResult = $this->scoreService->score($product);
-            $product->score = $scoreResult['score'];
-            $product->score_breakdown = $scoreResult['breakdown'];
-            $product->score_flags = $scoreResult['flags'];
-            $product->scored_at = now();
-            $product->saveQuietly();
+            $scoreResult = $this->scoreService->persistScore($product);
 
             ProductScoreHistory::query()->create([
                 'product_id' => $product->id,

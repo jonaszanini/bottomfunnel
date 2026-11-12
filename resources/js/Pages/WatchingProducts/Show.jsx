@@ -15,6 +15,7 @@ import CampaignCreationModal from '../../Components/CampaignCreationModal';
 import OfferConstraintsSection from './Components/OfferConstraintsSection';
 import OfferConstraintsEditor from './Components/OfferConstraintsEditor';
 import SearchVolumeSection from './Components/SearchVolumeSection';
+import ScoreFormulaInfo, { VolumeNoDataBadge, formatVolumeSubscore, hasVolumeNoData } from './Components/ScoreVolumeUi';
 
 export function getScoreHsl(score) {
     if (score === null || score === undefined) {
@@ -519,6 +520,18 @@ export default function Show({
     const geoComp = getComponentScoreColor(product.score_breakdown?.geo, 5);
     const compComp = getComponentScoreColor(product.score_breakdown?.competition, 5);
     const freshComp = getComponentScoreColor(product.score_breakdown?.freshness, 5);
+    const volumeComp = getComponentScoreColor(product.score_breakdown?.v, 10);
+
+    const formatMonthlyVolume = (volume, isRange) => {
+        if (volume === null || volume === undefined || Number.isNaN(Number(volume))) {
+            return '—';
+        }
+        const num = Number(volume);
+        const prefix = isRange ? '~' : '';
+        if (num >= 1000000) return `${prefix}${(num / 1000000).toFixed(1).replace(/\.0$/, '')}M`;
+        if (num >= 1000) return `${prefix}${(num / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+        return `${prefix}${num.toLocaleString()}`;
+    };
 
     return (
         <Layout>
@@ -704,7 +717,7 @@ export default function Show({
                     </div>
 
                     {/* Rank & Score Pill */}
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex flex-wrap items-center gap-3 shrink-0 min-w-0">
                         {/* Quota / Balance Pill */}
                         {isDataForSeo ? (
                             <div className="text-center rounded-xl border border-theme bg-theme-subtle px-3 py-2 min-w-[90px]">
@@ -734,11 +747,26 @@ export default function Show({
                             </div>
                         )}
 
+                        <div className="text-center rounded-xl border border-theme bg-theme-subtle px-3 py-2 min-w-0 max-w-[140px]">
+                            <div className="text-[10px] uppercase font-bold tracking-wider text-theme-muted">Google /mo</div>
+                            <div className="text-base font-extrabold text-theme-primary tabular-nums">
+                                {formatMonthlyVolume(product.search_volume_total, product.search_volume_is_range)}
+                            </div>
+                            {hasVolumeNoData(product) && (
+                                <div className="mt-0.5 flex justify-center">
+                                    <VolumeNoDataBadge />
+                                </div>
+                            )}
+                        </div>
+
                         <div
                             style={scoreHsl.style}
                             className="text-center rounded-xl border px-4 py-2 shadow-sm min-w-[90px]"
                         >
-                            <div className="text-[10px] uppercase font-bold tracking-wider opacity-80">Potential</div>
+                            <div className="text-[10px] uppercase font-bold tracking-wider opacity-80 flex items-center justify-center gap-1">
+                                <span>Potential</span>
+                                <ScoreFormulaInfo align="right" />
+                            </div>
                             <div className="text-2xl font-black">
                                 {product.score !== null ? product.score : 'N/A'}
                             </div>
@@ -1190,9 +1218,12 @@ export default function Show({
 
                     {/* Score Component Bars Card */}
                     <div className="rounded-2xl border border-theme bg-theme-surface p-5 sm:p-6 shadow-xs">
-                        <h3 className="font-bold text-base text-theme-primary mb-4 flex items-center justify-between">
-                            <span>Score Component Breakdown (0-100)</span>
-                            <span className="text-xs text-theme-muted font-normal">Weights configured in config/watching.php</span>
+                        <h3 className="font-bold text-base text-theme-primary mb-4 flex flex-wrap items-center justify-between gap-2 min-w-0">
+                            <span className="flex items-center gap-1.5 min-w-0">
+                                <span>Score Component Breakdown (0-100)</span>
+                                <ScoreFormulaInfo />
+                            </span>
+                            <span className="text-xs text-theme-muted font-normal">Weights in config/watching.php</span>
                         </h3>
 
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1407,6 +1438,30 @@ export default function Show({
                                     Approval: {product.approval_required ? 'Required (-2)' : 'Instant'}
                                 </div>
                             </div>
+
+                            {/* Volume V */}
+                            <div className="rounded-xl border border-theme bg-theme-subtle/30 p-3.5 space-y-1.5 sm:col-span-2 lg:col-span-1 min-w-0">
+                                <div className="flex justify-between text-xs font-semibold gap-2 min-w-0">
+                                    <span className="text-theme-secondary flex items-center gap-1.5 min-w-0">
+                                        <span>Volume V</span>
+                                        {hasVolumeNoData(product) && <VolumeNoDataBadge />}
+                                    </span>
+                                    <span className={`font-mono font-bold ${volumeComp.textClass}`} style={volumeComp.textStyle}>
+                                        {formatVolumeSubscore(product.score_breakdown?.v)} / 10
+                                    </span>
+                                </div>
+                                <div className="w-full bg-theme-input rounded-full h-2 overflow-hidden">
+                                    <div
+                                        className={`h-2 rounded-full transition-all ${volumeComp.barClass}`}
+                                        style={volumeComp.barStyle}
+                                    />
+                                </div>
+                                <div className="text-[11px] text-theme-muted flex flex-wrap items-center gap-x-1 min-w-0">
+                                    <span>Google /mo: {formatMonthlyVolume(product.search_volume_total, product.search_volume_is_range)}</span>
+                                    <span>•</span>
+                                    <span>Q {product.score_breakdown?.q ?? '—'}</span>
+                                </div>
+                            </div>
                         </div>
 
                         {/* Flags and Gates Hit */}
@@ -1469,6 +1524,11 @@ export default function Show({
                                     {product.score_flags.audit_false_bof && (
                                         <span className="rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30 px-2.5 py-1 text-xs font-semibold">
                                             🔍 Audit False BoF (Low CPC)
+                                        </span>
+                                    )}
+                                    {product.score_flags.volume_no_data && (
+                                        <span className="rounded-lg bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30 px-2.5 py-1 text-xs font-bold">
+                                            No data (volume cap 69)
                                         </span>
                                     )}
                                 </div>

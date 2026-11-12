@@ -4,6 +4,7 @@ import Layout, { Field, button, control, quiet } from '../../Components/Layout';
 import { getComponentScoreColor } from './Show';
 import { getPlatformBadgeClass, inferPlatformFromUrl } from '../../utils/platform';
 import OfferConstraintsEditor from './Components/OfferConstraintsEditor';
+import ScoreFormulaInfo, { VolumeNoDataBadge, formatVolumeSubscore, hasVolumeNoData } from './Components/ScoreVolumeUi';
 
 export function getScoreHsl(score) {
     if (score === null || score === undefined) {
@@ -1129,7 +1130,7 @@ export default function Index({
                                         {renderSortTh('Product Name', 'name', '')}
                                         {renderSortTh('Platform', 'platform', 'w-36 hidden xl:table-cell')}
                                         {renderSortTh('Payout CAD', 'payout_cad', 'w-20 text-right hidden lg:table-cell')}
-                                        {renderSortTh('Trend', 'search_volume_total', 'w-24')}
+                                        {renderSortTh('Google /mo', 'search_volume_total', 'w-28')}
                                         {renderSortTh('Compliance', 'compliance', 'w-44 text-center hidden xl:table-cell')}
                                         {renderSortTh('Status', 'status', 'w-24 text-center')}
                                         <th scope="col" className="px-2 py-3 text-center select-none w-20">Actions</th>
@@ -1315,13 +1316,15 @@ export default function Index({
                                                     </span>
                                                 </td>
 
-                                                {/* Trend: momentum (line 1) + search volume (line 2) */}
-                                                <td className="px-2 py-2 whitespace-nowrap text-xs">
+                                                {/* Trend: momentum (line 1) + monthly Google search volume (line 2) */}
+                                                <td className="px-2 py-2 text-xs min-w-0">
                                                     {getMomentumIndicator(product, true)}
-                                                    <div className="relative mt-0.5 flex items-center gap-0.5" data-volume-popover>
-                                                        <span className="font-semibold text-xs text-theme-primary">
+                                                    <div className="relative mt-0.5 flex flex-wrap items-center gap-0.5 min-w-0" data-volume-popover>
+                                                        <span className="font-semibold text-xs text-theme-primary tabular-nums">
                                                             {formatSearchVolume(product.search_volume_total, product.search_volume_is_range)}
+                                                            <span className="ml-0.5 text-[10px] font-medium text-theme-muted">/mo</span>
                                                         </span>
+                                                        {hasVolumeNoData(product) && <VolumeNoDataBadge />}
                                                         {product.search_volume_error && (
                                                             <span role="img" className="text-amber-500 text-[11px]" aria-label="Volume refresh error">⚠</span>
                                                         )}
@@ -1563,11 +1566,14 @@ export default function Index({
                                                         </>
                                                     )}
                                                 </div>
-                                                <div className="text-xs text-theme-secondary font-medium mt-1">
-                                                    Vol: {formatSearchVolume(product.search_volume_total, product.search_volume_is_range)}
-                                                    {product.search_volume_by_geo && typeof product.search_volume_by_geo === 'object' && Object.keys(product.search_volume_by_geo).length > 0
-                                                        ? ` (${Object.keys(product.search_volume_by_geo).join('+')})`
-                                                        : ''}
+                                                <div className="text-xs text-theme-secondary font-medium mt-1 flex flex-wrap items-center gap-1 min-w-0">
+                                                    <span className="min-w-0 break-words">
+                                                        Google /mo: {formatSearchVolume(product.search_volume_total, product.search_volume_is_range)}
+                                                        {product.search_volume_by_geo && typeof product.search_volume_by_geo === 'object' && Object.keys(product.search_volume_by_geo).length > 0
+                                                            ? ` (${Object.keys(product.search_volume_by_geo).join('+')})`
+                                                            : ''}
+                                                    </span>
+                                                    {hasVolumeNoData(product) && <VolumeNoDataBadge />}
                                                 </div>
                                             </div>
 
@@ -1668,29 +1674,32 @@ export default function Index({
                     aria-modal="true"
                     aria-labelledby="score-modal-title"
                 >
-                    <div className="w-full max-w-lg rounded-2xl border border-theme bg-theme-surface p-6 shadow-2xl space-y-4">
-                        <div className="flex items-center justify-between border-b border-theme pb-3">
-                            <div className="flex items-center gap-2">
+                    <div className="w-full max-w-lg max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-theme bg-theme-surface p-4 sm:p-6 shadow-2xl space-y-4">
+                        <div className="flex items-center justify-between border-b border-theme pb-3 gap-2 min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
                                 <span
                                     style={getScoreHsl(scoreModalProduct.score).style}
-                                    className="rounded-lg border px-2.5 py-1 text-sm font-black"
+                                    className="rounded-lg border px-2.5 py-1 text-sm font-black shrink-0"
                                 >
                                     {scoreModalProduct.score ?? '—'}
                                 </span>
-                                <div>
-                                    <h3 id="score-modal-title" className="text-base font-bold text-theme-primary">
+                                <div className="min-w-0">
+                                    <h3 id="score-modal-title" className="text-base font-bold text-theme-primary truncate">
                                         {scoreModalProduct.name}
                                     </h3>
                                     <div className="text-[11px] text-theme-muted">Rank #{scoreModalProduct.rank || '—'}</div>
                                 </div>
                             </div>
-                            <button
-                                type="button"
-                                onClick={() => setScoreModalProduct(null)}
-                                className="text-theme-muted hover:text-theme-primary cursor-pointer p-1"
-                            >
-                                ✕
-                            </button>
+                            <div className="flex items-center gap-1 shrink-0">
+                                <ScoreFormulaInfo align="right" />
+                                <button
+                                    type="button"
+                                    onClick={() => setScoreModalProduct(null)}
+                                    className="text-theme-muted hover:text-theme-primary cursor-pointer p-1"
+                                >
+                                    ✕
+                                </button>
+                            </div>
                         </div>
 
                         {/* Component breakdown */}
@@ -1698,7 +1707,7 @@ export default function Index({
                             <div className="font-semibold text-theme-secondary uppercase tracking-wider text-[11px]">
                                 Sub-Score Component Breakdown
                             </div>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <div className="p-2 rounded bg-theme-subtle border border-theme flex flex-col gap-0.5">
                                     <div className="flex justify-between">
                                         <span>BoF Name Triad:</span>
@@ -1757,11 +1766,27 @@ export default function Index({
                                         {scoreModalProduct.score_breakdown?.competition ?? 0} / 5
                                     </strong>
                                 </div>
-                                <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between col-span-2">
+                                <div className="p-2 rounded bg-theme-subtle border border-theme flex justify-between sm:col-span-2">
                                     <span>Freshness & Approval:</span>
                                     <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.freshness, 5).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.freshness, 5).textStyle}>
                                         {scoreModalProduct.score_breakdown?.freshness ?? 0} / 5
                                     </strong>
+                                </div>
+                                <div className="p-2 rounded bg-theme-subtle border border-theme flex flex-col gap-0.5 sm:col-span-2 min-w-0">
+                                    <div className="flex justify-between items-center gap-2 min-w-0">
+                                        <span className="flex items-center gap-1.5 min-w-0">
+                                            <span>Volume V</span>
+                                            {hasVolumeNoData(scoreModalProduct) && <VolumeNoDataBadge />}
+                                        </span>
+                                        <strong className={`font-mono ${getComponentScoreColor(scoreModalProduct.score_breakdown?.v, 10).textClass}`} style={getComponentScoreColor(scoreModalProduct.score_breakdown?.v, 10).textStyle}>
+                                            {formatVolumeSubscore(scoreModalProduct.score_breakdown?.v)} / 10
+                                        </strong>
+                                    </div>
+                                    <div className="text-[10px] text-theme-muted flex flex-wrap items-center gap-x-1">
+                                        <span>Google /mo: {formatSearchVolume(scoreModalProduct.search_volume_total, scoreModalProduct.search_volume_is_range)}</span>
+                                        <span>•</span>
+                                        <span>Q {scoreModalProduct.score_breakdown?.q ?? '—'}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1796,6 +1821,11 @@ export default function Index({
                                     {scoreModalProduct.score_flags.compound_keyword_needed && (
                                         <span className="rounded bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30 px-2 py-0.5">
                                             Compound Keyword Needed
+                                        </span>
+                                    )}
+                                    {scoreModalProduct.score_flags.volume_no_data && (
+                                        <span className="rounded bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30 px-2 py-0.5 font-bold">
+                                            No data (volume cap 69)
                                         </span>
                                     )}
                                 </div>

@@ -13,6 +13,57 @@ use App\Services\WatchingProducts\Fx\FrankfurterFx;
 
 class PotentialScoreService
 {
+    /**
+     * Every WatchedProduct attribute that feeds score(). Editing any of these
+     * should rescore. notes and affiliate_application_status are intentionally omitted.
+     *
+     * @var list<string>
+     */
+    public const SCORE_INPUT_FIELDS = [
+        'bof_translation',
+        'bof_vpn_serp',
+        'bof_image_match_pct',
+        'bof_qualifier',
+        'bof_homonym',
+        'true_bof',
+        'trends_trend',
+        'trends_7d',
+        'trends_30d',
+        'trends_90d',
+        'flowspy_traffic_trend',
+        'kp_volume',
+        'kp_yoy',
+        'kp_3m',
+        'kp_cpc_amount',
+        'kp_cpc_currency',
+        'brand_cpc_amount',
+        'brand_cpc_currency',
+        'est_cvr',
+        'payout_amount',
+        'payout_currency',
+        'payout_model',
+        'payout_cad',
+        'page_type',
+        'funnel_flags',
+        'brand_bidding',
+        'geos',
+        'advertiser_count',
+        'vendor_bids_brand',
+        'cancel_rate',
+        'listing_status',
+        'restricted_category',
+        'approval_required',
+        'approval_status',
+        'last_refreshed_at',
+        'search_volume_total',
+        'search_volume_by_geo',
+        'search_volume_is_range',
+        'search_volume_keyword',
+        'search_volume_checked_at',
+        'search_volume_error',
+        'search_volume_error_at',
+    ];
+
     public function __construct(
         protected FrankfurterFx $fx = new FrankfurterFx
     ) {}
@@ -20,7 +71,7 @@ class PotentialScoreService
     /**
      * Compute the deterministic 0-100 Potential Score, component breakdown, and flags.
      *
-     * @return array{score: int, breakdown: array<string, int>, flags: array<string, mixed>, raw_score: int}
+     * @return array{score: int, breakdown: array<string, int|float>, flags: array<string, mixed>, raw_score: int}
      */
     public function score(WatchedProduct $product): array
     {
@@ -107,17 +158,12 @@ class PotentialScoreService
             $flags['restricted_category'] = true;
         }
 
-        // Raw sum of components (0 - 100)
+        // Raw sum of the nine quality components (0 - 100). Do not include V/Q keys.
         $rawScore = (int) array_sum($breakdown);
-        $score = $rawScore;
 
-        // Hard gate evaluations
         $hardGatesHit = [];
-
-        // Homonym is a hard discard (score 0)
         if (! empty($flags['false_bof'])) {
             $hardGatesHit[] = 'false_bof';
-            $score = 0;
         } else {
             if (! empty($flags['payout_below_floor'])) {
                 $hardGatesHit[] = 'payout_below_floor';
@@ -137,28 +183,77 @@ class PotentialScoreService
             if (! empty($flags['pure_vsl_or_iframe'])) {
                 $hardGatesHit[] = 'pure_vsl_or_iframe';
             }
-
-            // Any hard gate caps the score at 20
-            if (! empty($hardGatesHit)) {
-                $score = min($score, 20);
-            }
-
-            // Restricted category caps at 50
-            if (! empty($flags['restricted_category'])) {
-                $score = min($score, 50);
-            }
         }
 
         if (! empty($hardGatesHit)) {
             $flags['hard_gates_hit'] = $hardGatesHit;
         }
 
+        $q = (int) round($this->applyHardCaps((float) $rawScore, $flags, includeVolumeCaps: false, volumeSubscore: 0.0));
+
+        $volume = $this->calculateVolumeSubscore($product);
+        $v = $volume['v'];
+        if ($volume['no_data']) {
+            $flags['volume_no_data'] = true;
+        }
+
+        $breakdown['v'] = $v;
+        $breakdown['q'] = $q;
+
+        $volumeCfg = config('watching.score.volume', []);
+        $weightBase = (float) ($volumeCfg['weight_base'] ?? 0.15);
+        $weightPerV = (float) ($volumeCfg['weight_per_v'] ?? 0.035);
+        $linearUntil = (float) ($volumeCfg['vi_linear_until'] ?? 8.0);
+        $linearFactor = (float) ($volumeCfg['vi_linear_factor'] ?? 11.25);
+        $highBase = (float) ($volumeCfg['vi_high_base'] ?? 90.0);
+        $highFactor = (float) ($volumeCfg['vi_high_factor'] ?? 5.0);
+
+        $w = $weightBase + ($weightPerV * $v);
+        $vi = $v <= $linearUntil
+            ? $linearFactor * $v
+            : $highBase + ($highFactor * ($v - $linearUntil));
+
+        $s = ((1 - $w) * $q) + ($w * $vi);
+        $s = $this->applyHardCaps($s, $flags, includeVolumeCaps: true, volumeSubscore: $v);
+
         return [
-            'score' => max(0, min(100, $score)),
+            'score' => max(0, min(100, (int) round($s))),
             'raw_score' => $rawScore,
             'breakdown' => $breakdown,
             'flags' => $flags,
         ];
+    }
+
+    /**
+     * Persist score, breakdown, flags, and scored_at only.
+     * Never mutates status or campaign-related columns.
+     *
+     * @return array{score: int, breakdown: array<string, int|float>, flags: array<string, mixed>, raw_score: int}
+     */
+    public function persistScore(WatchedProduct $product): array
+    {
+        $result = $this->score($product);
+        $scoredAt = now();
+
+        WatchedProduct::withoutEvents(function () use ($product, $result, $scoredAt): void {
+            $fresh = WatchedProduct::query()->find($product->id);
+            if ($fresh === null) {
+                return;
+            }
+
+            $fresh->score = $result['score'];
+            $fresh->score_breakdown = $result['breakdown'];
+            $fresh->score_flags = $result['flags'];
+            $fresh->scored_at = $scoredAt;
+            $fresh->save();
+        });
+
+        $product->score = $result['score'];
+        $product->score_breakdown = $result['breakdown'];
+        $product->score_flags = $result['flags'];
+        $product->scored_at = $scoredAt;
+
+        return $result;
     }
 
     /**
@@ -244,7 +339,8 @@ class PotentialScoreService
             default => null,
         };
 
-        // When trend direction is unknown / null, derive from KP volume tiers or use unknown baseline
+        // When trend direction is unknown / null, derive from kp_volume tiers or use unknown baseline.
+        // Do not use search_volume_* here — that volume is blended after Q to avoid double counting.
         if ($score === null) {
             $volume = (int) ($product->kp_volume ?? 0);
             $unknownBase = (int) ($demandPoints['unknown'] ?? 8);
@@ -500,5 +596,109 @@ class PotentialScoreService
         }
 
         return max(0, min(5, $score));
+    }
+
+    /**
+     * Volume subscore V (0–10) from Keyword Planner search_volume_total.
+     *
+     * @return array{v: float, no_data: bool}
+     */
+    protected function calculateVolumeSubscore(WatchedProduct $product): array
+    {
+        $checkedAt = $product->search_volume_checked_at;
+        $total = $product->search_volume_total;
+
+        if ($checkedAt === null || $total === null) {
+            return ['v' => 0.0, 'no_data' => true];
+        }
+
+        return [
+            'v' => round($this->interpolateVolumeScore((int) $total), 2),
+            'no_data' => false,
+        ];
+    }
+
+    /**
+     * Piecewise log interpolation of monthly search volume onto 0–10.
+     */
+    protected function interpolateVolumeScore(int $volume): float
+    {
+        $anchors = config('watching.score.volume.anchors', []);
+        usort($anchors, fn (array $a, array $b): int => ((int) $a['volume']) <=> ((int) $b['volume']));
+
+        if ($anchors === []) {
+            return 0.0;
+        }
+
+        $first = $anchors[0];
+        $last = $anchors[array_key_last($anchors)];
+
+        if ($volume < (int) $first['volume']) {
+            return 0.0;
+        }
+
+        if ($volume >= (int) $last['volume']) {
+            return (float) $last['score'];
+        }
+
+        for ($i = 0, $count = count($anchors) - 1; $i < $count; $i++) {
+            $x0 = (int) $anchors[$i]['volume'];
+            $y0 = (float) $anchors[$i]['score'];
+            $x1 = (int) $anchors[$i + 1]['volume'];
+            $y1 = (float) $anchors[$i + 1]['score'];
+
+            if ($volume > $x1) {
+                continue;
+            }
+
+            if ($volume === $x0 || $x0 <= 0 || $x1 <= $x0) {
+                return $y0;
+            }
+
+            return $y0 + (($y1 - $y0) * log($volume / $x0) / log($x1 / $x0));
+        }
+
+        return (float) $last['score'];
+    }
+
+    /**
+     * Apply hard caps to a quality or blended score.
+     */
+    protected function applyHardCaps(float $score, array $flags, bool $includeVolumeCaps, float $volumeSubscore): float
+    {
+        $caps = config('watching.score.caps', []);
+        $legacy = config('watching.thresholds', []);
+
+        $falseBofCap = (float) ($caps['false_bof'] ?? 0);
+        $hardGateCap = (float) ($caps['hard_gate'] ?? $legacy['hard_gate_cap'] ?? 20);
+        $restrictedCap = (float) ($caps['restricted_category'] ?? $legacy['restricted_category_cap'] ?? 50);
+        $noDataCap = (float) ($caps['volume_no_data'] ?? 69);
+        $belowLinearCap = (float) ($caps['volume_below_vi_linear'] ?? 89);
+        $linearUntil = (float) config('watching.score.volume.vi_linear_until', 8.0);
+
+        if (! empty($flags['false_bof'])) {
+            return $falseBofCap;
+        }
+
+        $hardGates = $flags['hard_gates_hit'] ?? [];
+        if (is_array($hardGates) && $hardGates !== []) {
+            $score = min($score, $hardGateCap);
+        }
+
+        if (! empty($flags['restricted_category'])) {
+            $score = min($score, $restrictedCap);
+        }
+
+        if ($includeVolumeCaps) {
+            if (! empty($flags['volume_no_data'])) {
+                $score = min($score, $noDataCap);
+            }
+
+            if ($volumeSubscore < $linearUntil) {
+                $score = min($score, $belowLinearCap);
+            }
+        }
+
+        return $score;
     }
 }
