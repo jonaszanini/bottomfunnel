@@ -17,9 +17,9 @@ class RankService
     {
         $products = WatchedProduct::query()
             ->where('status', '!=', WatchedProductStatus::Rejected)
-            ->get(['id', 'score', 'trends_30d', 'kp_volume', 'payout_amount', 'payout_cad', 'rank']);
+            ->get(['id', 'score', 'trends_30d', 'search_volume_total', 'payout_amount', 'payout_cad', 'rank']);
 
-        // Sort descending: score, then demand (trends_30d or kp_volume), then payout_amount
+        // Sort descending: score, then demand (trends_30d or search_volume_total), then payout_amount
         $sorted = $products->sort(function (WatchedProduct $a, WatchedProduct $b) {
             $scoreA = $a->score ?? -1;
             $scoreB = $b->score ?? -1;
@@ -27,8 +27,8 @@ class RankService
                 return $scoreB <=> $scoreA;
             }
 
-            $demandA = (float) ($a->trends_30d ?? $a->kp_volume ?? 0);
-            $demandB = (float) ($b->trends_30d ?? $b->kp_volume ?? 0);
+            $demandA = (float) ($a->trends_30d ?? $a->search_volume_total ?? 0);
+            $demandB = (float) ($b->trends_30d ?? $b->search_volume_total ?? 0);
             if ($demandA !== $demandB) {
                 return $demandB <=> $demandA;
             }

@@ -231,11 +231,16 @@ export default function SearchVolumeSection({ product, onToast }) {
                     <div className="text-[10px] uppercase font-bold tracking-wider text-theme-muted mb-0.5">
                         Total Monthly Volume
                     </div>
-                    <div className="text-xl font-black text-theme-primary flex items-baseline gap-1">
+                    <div className="text-xl font-black text-theme-primary flex flex-wrap items-baseline gap-1 min-w-0">
                         <span>{formatVol(product.search_volume_total, product.search_volume_is_range)}</span>
                         {product.search_volume_is_range && (
                             <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                                 (range)
+                            </span>
+                        )}
+                        {product.score_flags?.volume_no_data && (
+                            <span className="inline-flex items-center rounded-md border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                                No data
                             </span>
                         )}
                     </div>

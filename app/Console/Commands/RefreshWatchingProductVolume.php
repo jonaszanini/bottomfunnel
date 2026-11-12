@@ -5,6 +5,8 @@ namespace App\Console\Commands;
 use App\Enums\WatchedProductStatus;
 use App\Models\WatchedProduct;
 use App\Services\WatchingProducts\KeywordVolumeService;
+use App\Services\WatchingProducts\PotentialScoreService;
+use App\Services\WatchingProducts\RankService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -31,7 +33,7 @@ class RefreshWatchingProductVolume extends Command
     /**
      * Execute the console command.
      */
-    public function handle(KeywordVolumeService $volumeService): int
+    public function handle(KeywordVolumeService $volumeService, PotentialScoreService $scoreService, RankService $rankService): int
     {
         $ids = array_values(array_filter((array) $this->option('id')));
         $staleDays = (int) $this->option('stale-days');
@@ -105,6 +107,14 @@ class RefreshWatchingProductVolume extends Command
         $summary = "Volume refresh completed: {$result['updated']} updated, {$result['nulls']} nulls, {$result['ranges']} ranges, {$result['errors']} errors.";
         $this->info($summary);
         Log::info('watching:refresh-volume: '.$summary);
+
+        $this->line('Rescoring products after volume update...');
+        $processed = WatchedProduct::query()->whereIn('id', $products->pluck('id'))->get();
+        foreach ($processed as $product) {
+            $scoreService->persistScore($product);
+        }
+        $rankService->recalculateRanks();
+        $this->info('Rescore and rerank completed.');
 
         if ($result['errors'] > 0) {
             $distinct = WatchedProduct::query()

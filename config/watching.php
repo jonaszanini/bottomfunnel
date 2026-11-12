@@ -94,6 +94,43 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Volume Blend (V, w, VI) and Final Caps
+    |--------------------------------------------------------------------------
+    |
+    | After the nine-component quality score Q is computed (and hard-capped),
+    | it is blended with a Keyword Planner volume subscore V (0–10).
+    | search_volume_* is intentionally NOT fed into the Demand component.
+    |
+    */
+    'score' => [
+        'volume' => [
+            'max' => 10,
+            'anchors' => [
+                ['volume' => 10, 'score' => 0.0],
+                ['volume' => 150, 'score' => 2.5],
+                ['volume' => 1000, 'score' => 8.0],
+                ['volume' => 2000, 'score' => 9.0],
+                ['volume' => 5000, 'score' => 10.0],
+            ],
+            'weight_base' => 0.15,
+            'weight_per_v' => 0.035,
+            'vi_linear_until' => 8.0,
+            'vi_linear_factor' => 11.25,
+            'vi_high_base' => 90.0,
+            'vi_high_factor' => 5.0,
+        ],
+        'caps' => [
+            'false_bof' => 0,
+            'hard_gate' => 20,
+            'restricted_category' => 50,
+            'volume_no_data' => 69,
+            'volume_below_vi_linear' => 89,
+        ],
+        'test_candidate_min_score' => 90,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Demand Component Scoring Points (Max 20)
     |--------------------------------------------------------------------------
     |

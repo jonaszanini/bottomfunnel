@@ -631,43 +631,12 @@ class WatchedProductController extends Controller
             $validated['payout_cad'] = Money::make($validated['payout_amount'], $currency)->toCad($this->fx);
         }
 
-        $watchedProduct->update($validated);
+        $watchedProduct->fill($validated);
+        $shouldRescore = $watchedProduct->isDirty(PotentialScoreService::SCORE_INPUT_FIELDS);
+        $watchedProduct->save();
 
-        $scoringFields = [
-            'bof_translation',
-            'bof_vpn_serp',
-            'bof_image_match_pct',
-            'bof_qualifier',
-            'bof_homonym',
-            'trends_trend',
-            'trends_7d',
-            'trends_30d',
-            'trends_90d',
-            'flowspy_traffic_trend',
-            'payout_amount',
-            'payout_currency',
-            'payout_model',
-            'page_type',
-            'brand_bidding',
-            'advertiser_count',
-            'vendor_bids_brand',
-            'kp_volume',
-            'cancel_rate',
-            'listing_status',
-            'restricted_category',
-            'approval_required',
-            'approval_status',
-        ];
-
-        if ($watchedProduct->wasChanged($scoringFields)) {
-            // Rescore product
-            $scoreResult = $this->scoreService->score($watchedProduct);
-            $watchedProduct->update([
-                'score' => $scoreResult['score'],
-                'score_breakdown' => $scoreResult['breakdown'],
-                'score_flags' => $scoreResult['flags'],
-                'scored_at' => now(),
-            ]);
+        if ($shouldRescore) {
+            $scoreResult = $this->scoreService->persistScore($watchedProduct);
 
             ProductScoreHistory::query()->create([
                 'product_id' => $watchedProduct->id,
@@ -785,6 +754,9 @@ class WatchedProductController extends Controller
         }
 
         $watchedProduct->refresh();
+        $this->scoreService->persistScore($watchedProduct);
+        $this->rankService->recalculateRanks();
+
         $totalFormatted = $watchedProduct->search_volume_total !== null
             ? number_format($watchedProduct->search_volume_total)
             : 'N/A';
@@ -813,14 +785,7 @@ class WatchedProductController extends Controller
         // Recompute negative keywords according to strategy rules, respecting manual overrides
         $this->negativeGenerator->syncStrategyRules($watchedProduct, $newStrategy);
 
-        // Rescore
-        $scoreResult = $this->scoreService->score($watchedProduct);
-        $watchedProduct->update([
-            'score' => $scoreResult['score'],
-            'score_breakdown' => $scoreResult['breakdown'],
-            'score_flags' => $scoreResult['flags'],
-            'scored_at' => now(),
-        ]);
+        $this->scoreService->persistScore($watchedProduct);
 
         $this->rankService->recalculateRanks();
 

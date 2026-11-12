@@ -2,6 +2,11 @@
 
 namespace Tests\Feature;
 
+use App\Enums\BrandBiddingStatus;
+use App\Enums\ListingStatus;
+use App\Enums\PayoutModel;
+use App\Enums\TrendsTrend;
+use App\Enums\TrueBofStatus;
 use App\Enums\WatchedProductStatus;
 use App\Models\GoogleAdsAccount;
 use App\Models\User;
@@ -660,6 +665,73 @@ class KeywordPlannerSearchVolumeTest extends TestCase
 
         $response->assertRedirect();
         $response->assertSessionHas('error');
+    }
+
+    public function test_volume_refresh_rescores_and_does_not_change_status(): void
+    {
+        $product = WatchedProduct::factory()->create([
+            'name' => 'Volume Rescore Product',
+            'status' => WatchedProductStatus::Watch,
+            'allowed_geos' => ['US'],
+            'bof_translation' => true,
+            'bof_vpn_serp' => true,
+            'bof_image_match_pct' => 95,
+            'bof_homonym' => false,
+            'true_bof' => TrueBofStatus::True,
+            'trends_trend' => TrendsTrend::Rising,
+            'trends_7d' => 45.0,
+            'trends_30d' => 50.0,
+            'trends_90d' => 48.0,
+            'payout_amount' => 120.00,
+            'payout_currency' => 'USD',
+            'payout_model' => PayoutModel::CpaFixed,
+            'page_type' => 'TSL',
+            'funnel_flags' => [],
+            'brand_bidding' => BrandBiddingStatus::Allowed,
+            'geos' => ['US', 'CA', 'AU'],
+            'advertiser_count' => 1,
+            'vendor_bids_brand' => false,
+            'approval_required' => false,
+            'cancel_rate' => 5.0,
+            'listing_status' => ListingStatus::Active,
+            'restricted_category' => false,
+            'est_cvr' => 0.02,
+            'brand_cpc_amount' => 0.50,
+            'brand_cpc_currency' => 'USD',
+            'last_refreshed_at' => now(),
+            'search_volume_total' => null,
+            'search_volume_checked_at' => null,
+        ]);
+
+        $this->assertSame(WatchedProductStatus::Watch, $product->fresh()->status);
+        $this->assertSame(69, $product->fresh()->score);
+
+        $this->fakeTokenAnd(Http::response([
+            'results' => [
+                [
+                    'text' => 'Volume Rescore Product',
+                    'keywordMetrics' => [
+                        'avgMonthlySearches' => '150',
+                        'competition' => 'LOW',
+                    ],
+                ],
+            ],
+        ], 200));
+
+        $this->artisan('watching:refresh-volume', [
+            '--id' => [$product->id],
+            '--stale-days' => 0,
+        ])->assertSuccessful();
+
+        $fresh = $product->fresh();
+
+        $this->assertSame(150, $fresh->search_volume_total);
+        $this->assertSame(83, $fresh->score);
+        $this->assertSame(100, $fresh->score_breakdown['q']);
+        $this->assertSame(2.5, $fresh->score_breakdown['v']);
+        $this->assertArrayNotHasKey('volume_no_data', $fresh->score_flags ?? []);
+        $this->assertSame(WatchedProductStatus::Watch, $fresh->status);
+        $this->assertNotNull($fresh->rank);
     }
 
     public function test_schedule_is_registered_in_console(): void

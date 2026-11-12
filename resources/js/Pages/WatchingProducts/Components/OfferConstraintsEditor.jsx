@@ -427,7 +427,7 @@ export default function OfferConstraintsEditor({
                         </button>
                     </div>
                     <ul className="text-[11px] text-theme-muted list-disc list-inside space-y-0.5">
-                        <li><strong>WATCH → TEST:</strong> Potential Score &gt; 70, no hard gates, affiliate link active, and approved geos defined.</li>
+                        <li><strong>WATCH → TEST:</strong> Potential Score &gt; 90, no hard gates, affiliate link active, and approved geos defined.</li>
                         <li><strong>TEST → SCALE:</strong> At least 2 verified sales with ROI &ge; 50% and stable CPA.</li>
                         <li><strong>DEMOTE / KILL:</strong> 0 sales at 100% commission spend (or 50% spend if 0 checkouts), listing down, or policy warning.</li>
                     </ul>
